@@ -1,0 +1,14 @@
+The similarity measure T should have the following interface:
+
+// Hashes used if none are specified.
+T::DefaultSketch
+T::DefaultHash
+
+// The format of stored data. See formats/.
+T::StorageFormat
+
+// A function computing the similarity of two stored values.
+// Both pointers point to arrays of length 'dimensions'.
+float T::compute_similarity(
+    StorageFormat::StorageType*, StorageFormat::StorageType*, unsigned int dimensions)
+

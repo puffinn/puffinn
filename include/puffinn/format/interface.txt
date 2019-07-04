@@ -1,0 +1,12 @@
+The format T should have the following interface:
+
+// Values are stored as an array of length 'dimensions' of this type.
+T::Type
+
+// The alignment that values should be stored with. A value of zero signifies that it is unimportant.
+T::ALIGNMENT
+
+// A function that stores an inserted value in an array of the specified storage type.
+// The array is of length dimensions.padded, which is greater or equal to the dimensions of the dataset.
+// This	function is implemented for each possible input value.
+void T::store(const U&, T::StorageType*, DatasetDimensions dimensions)

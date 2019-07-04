@@ -1,0 +1,25 @@
+sudo: required
+dist: xenial
+matrix:
+        include:
+              - language: python
+                virtualenv:
+                  system_site_packages: true
+                python:
+                - '3.5'
+                install:
+                - pip3 install numpy 
+                - python3 setup.py build
+                - python3 setup.py install
+                script:
+                - python3 examples/random.py
+              - language: cpp
+                install:
+                - sudo apt-get install -y doxygen python3-pip python3-setuptools
+                - pip3 install sphinx sphinx_rtd_theme breathe
+                - mkdir bin && cd bin
+                - cmake .. && make
+                script:
+                - ./Test
+
+

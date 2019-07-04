@@ -1,0 +1,31 @@
+The lsh T should have the following interface:
+
+// The format that the hash function expects vectors to be stored in.
+T::Format
+
+// Arguments needed to construct the hashes. Must be default constructible.
+T::Args
+
+// Any data structure that can be shared between hash functions.
+// Can be used to reduce the number of allocations.
+// Must be default constructible
+T::SharedData
+
+// Construct a data structure that can be shared between n hash functions.
+// What this structure is used for differs between hash functions.
+static T::SharedData T::construct_shared_data(DatasetDimensions, T::Args, unsigned int n);
+
+// Constructs n hash functions using some shared arguments.
+static std::vector<T> T::construct_n(DatasetDimensions, T::Args, T::SharedData&, unsigned int n);
+
+// Retrieve the number of bits that a hash function will use given a vector of a specific size.
+static unsigned int bits_per_function(unsigned int dimensions)
+
+// Hash the given vector.
+T::OutputType operator(T::Format::Type* vector)
+
+// Compute the collision probability at a specific distance.
+float T::collision_probability(
+    float similarity, T::SharedData&, int_fast8_t num_bits);
+
+
