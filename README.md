@@ -64,5 +64,11 @@ query = ...
 result = index.search(query, 10, 0.8) 
 ```
 
+# Authors
 
+PUFFINN is mainly developed by Michael Vesterli. It grew out of a research project with Martin Aumüller, Tobias Christiani, and Rasmus Pagh. If you want to cite PUFFINN in your publication, please use the following reference.
+
+> PUFFINN: Parameterless and Universal Fast FInding of Nearest Neighbors, M. Aumüller, T. Christiani, R. Pagh, and M. Vesterli. ESA 2019.
+
+An extended version of the paper is available at https://arxiv.org/abs/1906.12211.
 
