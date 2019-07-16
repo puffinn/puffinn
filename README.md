@@ -68,7 +68,7 @@ result = index.search(query, 10, 0.8)
 
 # Benchmark
 
-PUFFINN provides fast query times with considerable space usage. It's reliable (see bottom left plot) and doesn't require parameter tuning. 
+PUFFINN provides fast query times with considerable space usage. It's reliable (see bottom right plot) and doesn't require parameter tuning. 
 ![Benchmark](https://user-images.githubusercontent.com/6311646/61288829-40903080-a7c8-11e9-9eb0-effc6beb808e.png)
 
 We plan to integrate PUFFINN into https://github.com/erikbern/ann-benchmarks soon. 
