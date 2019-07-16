@@ -1,5 +1,3 @@
-# This example 
-
 from puffinn import *
 import numpy
 import time
@@ -41,7 +39,7 @@ print('Searching the index')
 t0 = time.time()
 for query in queries:
     # Search the index for the k closest points.
-    # Each of the k closest points have at least an 80% chance of being found. 
+    # Each of the k closest points have at least an 80% chance of being found.
     results.append(index.search(query, k, 0.8))
 
 print("Search the index took %.2f seconds." % (time.time() - t0))
@@ -52,7 +50,7 @@ for i, r in enumerate(results):
 
 print('Average recall: %f' % (found / (k * n_queries)))
 
-    
+
 
 
 
