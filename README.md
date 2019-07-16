@@ -66,6 +66,13 @@ query = ...
 result = index.search(query, 10, 0.8) 
 ```
 
+# Benchmark
+
+PUFFINN provides fast query times with considerable space usage. It's reliable (see bottom left plot) and doesn't require parameter tuning. 
+![Benchmark](https://user-images.githubusercontent.com/6311646/61288829-40903080-a7c8-11e9-9eb0-effc6beb808e.png)
+
+We plan to integrate PUFFINN into https://github.com/erikbern/ann-benchmarks soon. 
+
 # Authors
 
 PUFFINN is mainly developed by Michael Vesterli. It grew out of a research project with Martin Aumüller, Tobias Christiani, and Rasmus Pagh. If you want to cite PUFFINN in your publication, please use the following reference.
