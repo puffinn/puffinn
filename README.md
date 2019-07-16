@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/puffinn/puffinn.svg?branch=master)](https://travis-ci.com/puffinn/puffinn)
+
 # PUFFINN - Parameterless and Universal Fast FInding of Nearest Neighbors
 PUFFINN is an easily configurable library for finding the approximate nearest neighbors of arbitrary points.
 The only necessary parameters are the allowed space usage and the recall.
