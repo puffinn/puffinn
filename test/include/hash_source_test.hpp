@@ -99,7 +99,7 @@ namespace hash_source {
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
             HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, 100, 0, HASH_LENGTH),
-            40,
+            100,
             HASH_LENGTH);
     }
 
