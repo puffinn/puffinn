@@ -42,8 +42,8 @@ namespace puffinn {
         LshDatatype operator()(std::vector<uint32_t>* vec) const {
             uint64_t min_hash = 0xFFFFFFFFFFFFFFFF; // 2^64-1
             uint32_t min_token = 0;
-            for (auto i : *vec) {
-                auto h = hash(i);
+            for (uint32_t i : *vec) {
+                uint64_t h = hash(i);
                 if (h < min_hash) {
                     min_hash = h;
                     min_token = i;
@@ -90,8 +90,8 @@ namespace puffinn {
             // Number of hashes that would collide with the given number of bits.
             float num_possible_hashes =
                 static_cast<float>(set_size)/std::min(1u << num_bits, set_size)-1.0;
-            // Collision probability when the lowest index is not in the intersection.
-            float miss_collision_prob = num_possible_hashes/set_size;
+            // Probability of selecting one of the colliding hashes.
+            float miss_collision_prob = num_possible_hashes/(set_size-1);
             return similarity+(1-similarity)*miss_collision_prob;
         }
     };

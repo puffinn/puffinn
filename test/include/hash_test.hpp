@@ -63,7 +63,8 @@ namespace hash {
     template <typename T, typename TSim>
     void test_hash_collision_probability(
         unsigned int dimensions,
-        unsigned int num_samples = 10000
+        unsigned int num_samples = 10000,
+        unsigned int num_bits = 0
     ) {
         const float ACCEPTED_DEVIATION = 0.02;
 
@@ -71,12 +72,12 @@ namespace hash {
 
         typename T::Args args;
         auto family = T(dataset.get_dimensions(), dimensions, args);
-        auto hasher = family.sample();
-        auto hash_bits = family.bits_per_function();
+        auto hash_bits = num_bits == 0 ? family.bits_per_function() : num_bits;
 
         float prob_sum = 0;
         float actual_sum = 0;
         for (unsigned int i=0; i < num_samples; i++) {
+            auto hasher = family.sample();
             auto vec_a = T::Format::generate_random(dimensions);
             auto vec_b = T::Format::generate_random(dimensions);
 
@@ -84,12 +85,11 @@ namespace hash {
                 vec_a, dataset.get_dimensions());
             auto stored_b = to_stored_type<typename T::Format>(
                 vec_b, dataset.get_dimensions());
-            auto hash_a = hasher(stored_a.get());
-            auto hash_b = hasher(stored_b.get());
+            auto hash_a = hasher(stored_a.get()) % (1 << hash_bits);
+            auto hash_b = hasher(stored_b.get()) % (1 << hash_bits);
             auto sim = TSim::compute_similarity(
                 stored_a.get(), stored_b.get(), dataset.get_dimensions().actual);
             float prob = family.collision_probability(sim, hash_bits);
-
             prob_sum += prob;
             if (hash_a == hash_b) {
                 actual_sum++;
@@ -132,7 +132,8 @@ namespace hash {
         REQUIRE(minhash.collision_probability(0.5, 1)-(0.5+0.5*(49.0/99.0)) < 1e-6);
 
         test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000);
-//        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(128, 20000);
+        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3);
+        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000);
     }
 
     TEST_CASE("bits_per_function") {
