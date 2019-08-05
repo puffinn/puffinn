@@ -29,14 +29,46 @@ namespace puffinn {
         }
     };
 
+    class BitPermutation {
+        std::vector<uint32_t> perm;
+    public:
+        BitPermutation() {}
+
+        BitPermutation(std::mt19937_64& rng, unsigned int universe_size) {
+            for (unsigned int i=0; i < universe_size; i++) {
+                perm.push_back(i);
+            }
+            std::shuffle(perm.begin(), perm.end(), rng);
+        }
+
+        LshDatatype operator()(LshDatatype v) const {
+            if (v < perm.size()) {
+                return perm[v];
+            } else {
+                return v;
+            }
+        }
+    };
+
     /// ``MinHash`` does not take any arguments.
-    struct MinHashArgs {};
+    struct MinHashArgs {
+        /// Give each token a different unique value in each function.
+        /// Without this, some near neighbors are very unlikely to be found.
+        /// However doing so requires additional memory and preprocessing.
+        bool randomize_tokens;
+
+        constexpr MinHashArgs()
+          : randomize_tokens(true)
+        {
+        }
+    };
 
     class MinHashFunction {
         TabulationHash hash;
+        BitPermutation permutation;
 
     public:
-        MinHashFunction(TabulationHash hash) : hash(hash) {
+        MinHashFunction(TabulationHash hash, BitPermutation perm) : hash(hash), permutation(perm) {
         }
 
         LshDatatype operator()(std::vector<uint32_t>* vec) const {
@@ -49,7 +81,7 @@ namespace puffinn {
                     min_token = i;
                 }
             }
-            return min_token;
+            return permutation(min_token);
         }
     };
 
@@ -66,20 +98,26 @@ namespace puffinn {
         using Function = MinHashFunction;
 
     private:
+        Args args;
         std::mt19937_64 rng;
         unsigned int set_size;
 
     public:
-        MinHash(DatasetDimensions, unsigned int original_dimensions, Args)
+        MinHash(DatasetDimensions, unsigned int original_dimensions, Args args)
+          : args(args),
             // Needs to hash to at least one bit, for which the
             // minimum set size is 2.
-          : set_size(std::max(original_dimensions, 2u))
+            set_size(std::max(original_dimensions, 2u))
         {
             rng.seed(get_default_random_generator()());
         }
 
         Function sample() {
-            return Function(TabulationHash(rng));
+            BitPermutation perm;
+            if (args.randomize_tokens) {
+                perm = BitPermutation(rng, set_size);
+            }
+            return Function(TabulationHash(rng), perm);
         }
 
         unsigned int bits_per_function() {

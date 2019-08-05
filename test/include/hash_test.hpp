@@ -64,13 +64,13 @@ namespace hash {
     void test_hash_collision_probability(
         unsigned int dimensions,
         unsigned int num_samples = 10000,
-        unsigned int num_bits = 0
+        unsigned int num_bits = 0,
+        typename T::Args args = typename T::Args()
     ) {
         const float ACCEPTED_DEVIATION = 0.02;
 
         Dataset<typename T::Format> dataset(dimensions);
 
-        typename T::Args args;
         auto family = T(dataset.get_dimensions(), dimensions, args);
         auto hash_bits = num_bits == 0 ? family.bits_per_function() : num_bits;
 
@@ -131,9 +131,16 @@ namespace hash {
         REQUIRE(minhash.collision_probability(1.0, 7) == 1.0);
         REQUIRE(minhash.collision_probability(0.5, 1)-(0.5+0.5*(49.0/99.0)) < 1e-6);
 
-        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000);
-        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3);
-        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000);
+        MinHashArgs args;
+        args.randomize_tokens = false;
+        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 7, args);
+        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3, args);
+        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000, 1, args);
+
+        args.randomize_tokens = true;
+        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 7, args);
+        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3, args);
+        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000, 1, args);
     }
 
     TEST_CASE("bits_per_function") {
@@ -154,5 +161,29 @@ namespace hash {
 
         MinHash1Bit minhash1bit = MinHash1Bit(dataset.get_dimensions(), dimensions, MinHashArgs());
         REQUIRE(minhash1bit.bits_per_function() == 1);
+    }
+
+    TEST_CASE("Corner case") {
+        unsigned int dimensions = 100;
+        Dataset<SetFormat> dataset(dimensions);
+
+        MinHashArgs args;
+        args.randomize_tokens = true;
+        auto family = MinHash1Bit(dataset.get_dimensions(), dimensions, args);
+
+        auto a = to_stored_type<SetFormat>(std::vector<uint32_t>{0}, dataset.get_dimensions());
+        auto b = to_stored_type<SetFormat>(
+            std::vector<uint32_t>{0, 1, 3, 5, 7}, 
+            dataset.get_dimensions());
+        auto sim = JaccardSimilarity::compute_similarity(a.get(), b.get(), 1);
+
+        int samples = 1000;
+        float collisions = 0;
+        for (int i=0; i < samples; i++) {
+            auto h = family.sample();
+            if (h(a.get()) == h(b.get())) { collisions++; }
+        }
+        float expected = samples*family.collision_probability(sim, 1);
+        REQUIRE(std::abs(collisions-expected) < 0.05*samples);
     }
 }

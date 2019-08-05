@@ -206,7 +206,8 @@ private:
         set(args.num_rotations, params, "num_rotations");
     }
 
-    void set_hash_args(MinHash::Args&, const py::dict&) {
+    void set_hash_args(MinHash::Args& args, const py::dict&) {
+        set(args.randomize_tokens, params, "randomize_tokens");
     }
 
     template <typename T>
