@@ -24,15 +24,14 @@ namespace puffinn {
     
     public:
         IndependentHashSource(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             typename T::Args args,
             // Number of hashers to create.
             unsigned int num_hashers,
             // Number of bits per hasher.
             unsigned int num_bits
         ) 
-          : hash_family(dimensions, original_dimensions, args)
+          : hash_family(desc, args)
         {
             bits_per_function = hash_family.bits_per_function();
             functions_per_hasher =
@@ -122,14 +121,12 @@ namespace puffinn {
         typename T::Args args;
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const {
             return std::make_unique<IndependentHashSource<T>> (
-                dimensions,
-                original_dimensions,
+                desc,
                 args,
                 num_tables,
                 num_bits

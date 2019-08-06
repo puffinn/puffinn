@@ -5,9 +5,10 @@
 namespace puffinn {
     // Both the dimensionality of the input vectors and the
     // size of the array they are actually stored in.
-    struct DatasetDimensions {
-        unsigned int actual;
-        unsigned int padded;
+    template <typename T>
+    struct DatasetDescription {
+        typename T::Args args;
+        unsigned int storage_len;
     };
 
     // Round up the given value to the first value that is a multiple of the second argument.
@@ -46,10 +47,10 @@ namespace puffinn {
     template <typename T, typename U>
     std::unique_ptr<typename T::Type, decltype(free)*> to_stored_type(
         const U& input,
-        DatasetDimensions dimensions
+        DatasetDescription<T> desc
     ) {
-        auto storage = allocate_storage<T>(1, dimensions.padded);
-        T::store(input, storage.get(), dimensions);
+        auto storage = allocate_storage<T>(1, desc.storage_len);
+        T::store(input, storage.get(), desc);
         return storage;
     }
 }

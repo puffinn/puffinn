@@ -72,7 +72,6 @@ namespace puffinn {
         // Construction of the hash source is delayed until the
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
-        unsigned int original_dimensions;
 
         constexpr static IndependentHashArgs<THash> DEFAULT_HASH_SOURCE
             = IndependentHashArgs<THash>();
@@ -82,10 +81,11 @@ namespace puffinn {
     public:
         /// Construct an empty index.
         ///
-        /// @param dimensions The required number of dimensions of the input.
-        /// When using ``CosineSimilarity``, all input vectors must have this length.
-        /// When using ``JaccardSimilarity``, all tokens in the input sets must be
-        /// integers between 0, inclusive, and ``dimensions``, exclusive.
+        /// @param dataset_args Arguments specifying how the dataset should be stored,
+        /// depending on the format of the similarity measure.
+        /// When using ``CosineSimilarity``, it specifies the dimension that all vectors must have.
+        /// When using ``JaccardSimilarity``, it specifies the universe size. All tokens must be
+        /// integers between 0, inclusive, and the paramter, exclusive.
         /// @param memory_limit The number of bytes of memory that the index is permitted to use.
         /// Using more memory almost always means that queries are more efficient.
         /// @param hash_args Arguments used to construct the source from which hashes are drawn.
@@ -94,23 +94,21 @@ namespace puffinn {
         /// @param sketch_args Similar to ``hash_args``, but for the hash family specified in ``TSketch``.
         /// It is recommended to use the default value.
         Index(
-            unsigned int dimensions,
+            typename TSim::Format::Args dataset_args,
             uint64_t memory_limit,
             const HashSourceArgs<THash>& hash_args = DEFAULT_HASH_SOURCE,
             const HashSourceArgs<TSketch>& sketch_args = DEFAULT_SKETCH_SOURCE
         )
-          : dataset(Dataset<typename TSim::Format>(dimensions)),
+          : dataset(Dataset<typename TSim::Format>(dataset_args)),
             filterer(
                 sketch_args.build(
-                    dataset.get_dimensions(),
-                    dimensions,
+                    dataset.get_description(),
                     NUM_SKETCHES,
                     NUM_FILTER_HASHBITS)),
-            to_hash(dimensions),
-            to_sketch(dimensions),
+            to_hash(dataset_args),
+            to_sketch(dataset_args),
             memory_limit(memory_limit),
-            hash_args(hash_args.copy()),
-            original_dimensions(dimensions)
+            hash_args(hash_args.copy())
         {
         }
 
@@ -145,7 +143,7 @@ namespace puffinn {
                 dataset.get_size() * (sizeof(uint32_t) + sizeof(LshDatatype))
                 + sizeof(PrefixMap<THash>);
             unsigned int dataset_bytes =
-                dataset.get_capacity() * dataset.get_dimensions().padded
+                dataset.get_capacity() * dataset.get_description().storage_len
                 * sizeof(typename TSim::Format::Type);
             auto necessary_bytes = dataset_bytes;
             // Not enough memory for at least one table
@@ -164,8 +162,7 @@ namespace puffinn {
                 }
             } else {
                 hash_source = hash_args->build(
-                    dataset.get_dimensions(),
-                    original_dimensions,
+                    dataset.get_description(),
                     num_tables,
                     MAX_HASHBITS);
                 // Construct the prefixmaps.
@@ -232,18 +229,18 @@ namespace puffinn {
             }
             g_performance_metrics.new_query();
             g_performance_metrics.start_timer(Computation::Total);
-            auto dimensions = dataset.get_dimensions();
+            auto desc = dataset.get_description();
 
             // Ensure that the vec is kept alive for the entire scope
-            auto stored_query = to_stored_type<typename TSim::Format>(query, dimensions);
+            auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
 
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash_query = to_stored_type<typename THash::Format>(query, dimensions);
+            auto hash_query = to_stored_type<typename THash::Format>(query, desc);
             hash_source->reset(hash_query.get());
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::Sketching);
-            auto sketch_query = to_stored_type<typename TSketch::Format>(query, dimensions);
+            auto sketch_query = to_stored_type<typename TSketch::Format>(query, desc);
             filterer.reset(sketch_query.get());
             g_performance_metrics.store_time(Computation::Sketching);
 
@@ -284,13 +281,13 @@ namespace puffinn {
             unsigned int k
         ) const {
             auto stored = to_stored_type<typename TSim::Format>(
-                query, dataset.get_dimensions());
+                query, dataset.get_description());
             MaxBuffer res(k);
             for (size_t i=0; i < dataset.get_size(); i++) {
                 float sim = TSim::compute_similarity(
                     stored.get(),
                     dataset[i],
-                    dataset.get_dimensions().actual);
+                    dataset.get_description());
                 res.insert(i, sim);
             }
             std::vector<uint32_t> res_indices;
@@ -303,11 +300,6 @@ namespace puffinn {
         // Retrieve the number of inserted vectors.
         unsigned int get_size() const {
             return dataset.get_size();
-        }
-
-        // Retrieve the number of dimensions of inserted vectors.
-        unsigned int get_dimensions() const {
-            return dataset.get_dimensions().actual;
         }
 
         // Retrieve the number of tables used internally.
@@ -391,7 +383,7 @@ namespace puffinn {
                         auto dist = TSim::compute_similarity(
                             query,
                             dataset[idx],
-                            dataset.get_dimensions().actual);
+                            dataset.get_description());
                         maxbuffer.insert(idx, dist);
                         range.first++;
                     }
@@ -435,7 +427,7 @@ namespace puffinn {
                             auto dist = TSim::compute_similarity(
                                 query,
                                 dataset[idx],
-                                dataset.get_dimensions().actual);
+                                dataset.get_description());
                             maxbuffer.insert(idx, dist);
                         }
                         range.first++;
@@ -604,7 +596,7 @@ namespace puffinn {
                         auto dist = TSim::compute_similarity(
                             query,
                             dataset[idx],
-                            dataset.get_dimensions().actual);
+                            dataset.get_description());
                         maxbuffer.insert(idx, dist);
                     }
                     g_performance_metrics.add_distance_computations(num_passing_filter);

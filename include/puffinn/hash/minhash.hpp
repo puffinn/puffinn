@@ -103,11 +103,11 @@ namespace puffinn {
         unsigned int set_size;
 
     public:
-        MinHash(DatasetDimensions, unsigned int original_dimensions, Args args)
+        MinHash(DatasetDescription<SetFormat> dataset, Args args)
           : args(args),
             // Needs to hash to at least one bit, for which the
             // minimum set size is 2.
-            set_size(std::max(original_dimensions, 2u))
+            set_size(std::max(dataset.args, 2u))
         {
             rng.seed(get_default_random_generator()());
         }
@@ -159,8 +159,8 @@ namespace puffinn {
         MinHash minhash;
 
     public:
-        MinHash1Bit(DatasetDimensions dimensions, unsigned int original_dimensions, Args args)
-          : minhash(dimensions, original_dimensions, args)
+        MinHash1Bit(DatasetDescription<SetFormat> dataset, Args args)
+          : minhash(dataset, args)
         {
         }
 

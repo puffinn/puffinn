@@ -98,7 +98,7 @@ namespace collection {
                 
                 float expected_correct = recall*adjusted_k*NUM_SAMPLES;
                 for (int sample=0; sample < NUM_SAMPLES; sample++) {
-                    auto query = UnitVectorFormat::generate_random(table.get_dimensions());
+                    auto query = UnitVectorFormat::generate_random(dimensions);
                     auto exact = table.search_bf(query, k);
                     auto res = table.search(query, k, recall);
 

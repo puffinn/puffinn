@@ -15,9 +15,9 @@ namespace puffinn {
         using DefaultHash = FHTCrossPolytopeHash;
         using DefaultSketch = SimHash;
 
-        static float compute_similarity(int16_t* lhs, int16_t* rhs, unsigned int dimensions) {
+        static float compute_similarity(int16_t* lhs, int16_t* rhs, DatasetDescription<Format> desc) {
             float dot = Format::from_16bit_fixed_point(
-                dot_product_i16_avx2(lhs, rhs, dimensions));
+                dot_product_i16_avx2(lhs, rhs, desc.args));
             return (dot+1)/2; // Ensure the similarity is between 0 and 1.
         }
     };

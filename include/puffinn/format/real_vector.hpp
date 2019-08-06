@@ -7,25 +7,26 @@
 namespace puffinn {
     struct RealVectorFormat {
         using Type = float;
+        using Args = unsigned int;
         // 256 bit vectors
         const static unsigned int ALIGNMENT = 256/8;
 
-        static unsigned int storage_dimensions(unsigned int dimensions) {
+        static unsigned int storage_dimensions(Args dimensions) {
             return dimensions;
         }
 
         static void store(
             const std::vector<float>& input,
             Type* storage,
-            DatasetDimensions dimensions
+            DatasetDescription<RealVectorFormat> dataset
         ) {
-            if (input.size() != dimensions.actual) {
+            if (input.size() != dataset.args) {
                 throw std::invalid_argument("input.size()");
             }
-            for (size_t i=0; i < dimensions.actual; i++) {
+            for (size_t i=0; i < dataset.args; i++) {
                 storage[i] = input[i];
             }
-            for (size_t i=dimensions.actual; i < dimensions.padded; i++) {
+            for (size_t i=dataset.args; i < dataset.storage_len; i++) {
                 storage[i] = 0.0;
             }
         }

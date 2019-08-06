@@ -11,19 +11,21 @@ namespace puffinn {
     struct SetFormat {
         // Stored in sorted order.
         using Type = std::vector<uint32_t>;
+        /// Size of the universe.
+        using Args = unsigned int;
         const static unsigned int ALIGNMENT = 0;
 
-        static unsigned int storage_dimensions(unsigned int) {
+        static unsigned int storage_dimensions(Args) {
             return 1;
         }
 
         static void store(
             const std::vector<uint32_t>& set,
             std::vector<uint32_t>* storage,
-            DatasetDimensions dimensions
+            DatasetDescription<SetFormat> dataset
         ) {
             for (auto v : set) {
-                if (v >= dimensions.actual) {
+                if (v >= dataset.args) {
                     throw std::invalid_argument("invalid token");
                 }
             }

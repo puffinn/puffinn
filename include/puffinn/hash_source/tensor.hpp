@@ -48,8 +48,7 @@ namespace puffinn {
 
     public:
         TensoredHashSource(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> dimensions,
             typename T::Args args,
             // Number of hashers to create.
             unsigned int num_hashers,
@@ -58,7 +57,6 @@ namespace puffinn {
         ) 
           : independent_hash_source(
                 dimensions,
-                original_dimensions,
                 args,
                 2*std::ceil(std::sqrt(static_cast<float>(num_hashers))),
                 (num_bits+1)/2),
@@ -188,14 +186,12 @@ namespace puffinn {
         typename T::Args args;
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const {
             return std::make_unique<TensoredHashSource<T>> (
-                dimensions,
-                original_dimensions,
+                desc,
                 args,
                 num_tables,
                 num_bits

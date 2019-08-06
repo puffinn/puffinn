@@ -15,8 +15,8 @@ namespace dataset {
         const unsigned int CAPACITY = 1000;
 
         Dataset<UnitVectorFormat> dataset(DIMENSIONS, CAPACITY);
-        REQUIRE(dataset.get_dimensions().actual == 3);
-        REQUIRE(dataset.get_dimensions().padded == 16);
+        REQUIRE(dataset.get_description().args == 3);
+        REQUIRE(dataset.get_description().storage_len == 16);
         REQUIRE(dataset.get_size() == 0);
         REQUIRE(dataset.get_capacity() == CAPACITY);
         std::vector<std::vector<float>> vectors = {

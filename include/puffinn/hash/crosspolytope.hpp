@@ -116,10 +116,10 @@ namespace puffinn {
         // Create a cross polytope hasher using the given number of pseudorandom rotations
         // using hadamard transforms.
         FHTCrossPolytopeHashFunction(
-            DatasetDimensions stored_dimensions,
+            DatasetDescription<UnitVectorFormat> dataset,
             unsigned int num_rotations
         )
-          : dimensions(stored_dimensions.actual),
+          : dimensions(dataset.args),
             num_rotations(num_rotations)
         {
             log_dimensions = ceil_log(dimensions);
@@ -192,31 +192,30 @@ namespace puffinn {
         using Function = FHTCrossPolytopeHashFunction;
 
     private:
-        DatasetDimensions dimensions;
+        DatasetDescription<UnitVectorFormat> dataset;
         Args args;
         CrossPolytopeCollisionEstimates estimates;
 
     public:
         FHTCrossPolytopeHash(
-            DatasetDimensions dimensions,
-            unsigned int /* original_dimensions */,
+            DatasetDescription<UnitVectorFormat> dataset,
             Args args
         )
-          : dimensions(dimensions),
+          : dataset(dataset),
             args(args),
             estimates(
-                (1 << ceil_log(dimensions.actual)),
+                (1 << ceil_log(dataset.args)),
                 args.estimation_repetitions,
                 args.estimation_eps)
         {
         }
 
         FHTCrossPolytopeHashFunction sample() {
-            return FHTCrossPolytopeHashFunction(dimensions, args.num_rotations);
+            return FHTCrossPolytopeHashFunction(dataset, args.num_rotations);
         }
 
         unsigned int bits_per_function() {
-            return ceil_log(dimensions.actual)+1;
+            return ceil_log(dataset.args)+1;
         }
  
         float collision_probability(
@@ -247,22 +246,22 @@ namespace puffinn {
         std::unique_ptr<int16_t, decltype(free)*> random_matrix;
 
     public:
-        CrossPolytopeHashFunction(DatasetDimensions dimensions)
-          : dimensions(dimensions.actual),
-            padded_dimensions(dimensions.padded),
+        CrossPolytopeHashFunction(DatasetDescription<UnitVectorFormat> dataset)
+          : dimensions(dataset.args),
+            padded_dimensions(dataset.storage_len),
             random_matrix(
                 allocate_storage<UnitVectorFormat>(
-                    1 << ceil_log(dimensions.actual), 
-                    dimensions.padded))
+                    1 << ceil_log(dimensions), 
+                    dataset.storage_len))
         {
-            unsigned int matrix_size = (1 << ceil_log(dimensions.actual));
+            unsigned int matrix_size = (1 << ceil_log(dimensions));
 
             for (unsigned int dim=0; dim < matrix_size; dim++) {
-                auto vec = UnitVectorFormat::generate_random(dimensions.actual);
+                auto vec = UnitVectorFormat::generate_random(dimensions);
                 UnitVectorFormat::store(
                     vec,
                     &random_matrix.get()[dim*padded_dimensions],
-                    dimensions);
+                    dataset);
             }
         }
 
@@ -300,31 +299,30 @@ namespace puffinn {
         using Function = CrossPolytopeHashFunction;
 
     private:
-        DatasetDimensions dimensions;
+        DatasetDescription<UnitVectorFormat> dataset;
         Args args;
         CrossPolytopeCollisionEstimates estimates;
 
     public:
         CrossPolytopeHash(
-            DatasetDimensions dimensions,
-            unsigned int /* original_dimensions */,
+            DatasetDescription<UnitVectorFormat> dataset,
             Args args
         )
-          : dimensions(dimensions),
+          : dataset(dataset),
             args(args),
             estimates(
-                (1 << ceil_log(dimensions.actual)),
+                (1 << ceil_log(dataset.args)),
                 args.estimation_repetitions,
                 args.estimation_eps)
         {
         }
 
         CrossPolytopeHashFunction sample() {
-            return CrossPolytopeHashFunction(dimensions);
+            return CrossPolytopeHashFunction(dataset);
         }
 
         unsigned int bits_per_function() {
-            return ceil_log(dimensions.actual)+1;
+            return ceil_log(dataset.args)+1;
         }
 
         float collision_probability(

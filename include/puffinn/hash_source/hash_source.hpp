@@ -61,10 +61,7 @@ namespace puffinn {
     template <typename T>
     struct HashSourceArgs {
         virtual std::unique_ptr<HashSource<T>> build(
-            DatasetDimensions dimensions,
-            // Some formats store the data with different dimensions
-            // but the hashes still need to know the original input
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const = 0;

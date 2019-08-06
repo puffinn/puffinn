@@ -10,12 +10,12 @@ namespace puffinn {
         unsigned int dimensions;
 
     public:
-        SimHashFunction(DatasetDimensions dimensions)
-          : hash_vec(allocate_storage<UnitVectorFormat>(1, dimensions.padded)),
-            dimensions(dimensions.actual)
+        SimHashFunction(DatasetDescription<UnitVectorFormat> dataset)
+          : hash_vec(allocate_storage<UnitVectorFormat>(1, dataset.storage_len)),
+            dimensions(dataset.args)
         {
-            auto vec = UnitVectorFormat::generate_random(dimensions.actual);
-            UnitVectorFormat::store(vec, hash_vec.get(), dimensions);
+            auto vec = UnitVectorFormat::generate_random(dimensions);
+            UnitVectorFormat::store(vec, hash_vec.get(), dataset);
         }
 
         // Hash the given vector.
@@ -37,16 +37,16 @@ namespace puffinn {
         using Function = SimHashFunction;
 
     private:
-        DatasetDimensions dimensions;
+        DatasetDescription<UnitVectorFormat> dataset;
 
     public:
-        SimHash(DatasetDimensions dimensions, unsigned int /* original_dimensions*/, Args)
-          : dimensions(dimensions)
+        SimHash(DatasetDescription<UnitVectorFormat> dataset, Args)
+          : dataset(dataset)
         {
         }
 
         SimHashFunction sample() {
-            return SimHashFunction(dimensions);
+            return SimHashFunction(dataset);
         }
 
         unsigned int bits_per_function() {

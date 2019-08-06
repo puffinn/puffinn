@@ -11,9 +11,9 @@ using namespace puffinn;
 
 namespace hash_source {
     template <typename T>
-    void test_reset(DatasetDimensions dimensions, std::unique_ptr<HashSource<T>> source) {
-        auto vec1 = UnitVectorFormat::generate_random(dimensions.actual);
-        auto vec2 = UnitVectorFormat::generate_random(dimensions.actual);
+    void test_reset(DatasetDescription<typename T::Format> dimensions, std::unique_ptr<HashSource<T>> source) {
+        auto vec1 = UnitVectorFormat::generate_random(dimensions.args);
+        auto vec2 = UnitVectorFormat::generate_random(dimensions.args);
         auto stored1 = to_stored_type<typename T::Format>(vec1, dimensions);
         auto stored2 = to_stored_type<typename T::Format>(vec2, dimensions);
 
@@ -27,12 +27,12 @@ namespace hash_source {
 
     template <typename T>
     void test_hashes(
-        DatasetDimensions dimensions,
+        DatasetDescription<typename T::Format> dimensions,
         std::unique_ptr<HashSource<T>> source,
         unsigned int num_hashes,
         unsigned int hash_length
     ) {
-        auto vec = UnitVectorFormat::generate_random(dimensions.actual);
+        auto vec = UnitVectorFormat::generate_random(dimensions.args);
         auto stored = to_stored_type<typename T::Format>(vec, dimensions);
         source->reset(stored.get());
         uint64_t max_hash = (((1 << (hash_length-1))-1) << 1)+1;
@@ -56,49 +56,49 @@ namespace hash_source {
 
     TEST_CASE("HashPool reset") {
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_reset<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(50).build(dimensions, 100, 0, 24));
+            HashPoolArgs<SimHash>(50).build(dimensions, 0, 24));
         test_reset<FHTCrossPolytopeHash>(
             dimensions,
-            HashPoolArgs<FHTCrossPolytopeHash>(80).build(dimensions, 100, 0, 20));
+            HashPoolArgs<FHTCrossPolytopeHash>(80).build(dimensions, 0, 20));
     }
 
     TEST_CASE("IndependentSource reset") {
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_reset<SimHash>(
             dimensions,
-            IndependentHashArgs<SimHash>().build(dimensions, 100, 2, 20));
+            IndependentHashArgs<SimHash>().build(dimensions, 2, 20));
         test_reset<FHTCrossPolytopeHash>(
             dimensions,
-            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, 100, 2, 20));
+            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, 2, 20));
     }
 
     TEST_CASE("TensoredHash reset") {
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_reset<SimHash>(
             dimensions,
-            TensoredHashArgs<SimHash>().build(dimensions, 100, 2, 20));
+            TensoredHashArgs<SimHash>().build(dimensions, 2, 20));
         test_reset<FHTCrossPolytopeHash>(
             dimensions,
-            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, 100, 2, 20));
+            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, 2, 20));
     }
 
     TEST_CASE("HashPool hashes") {
         const unsigned int HASH_LENGTH = 24;
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(60).build(dimensions, 100, 0, HASH_LENGTH),
+            HashPoolArgs<SimHash>(60).build(dimensions, 0, HASH_LENGTH),
             100,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, 100, 0, HASH_LENGTH),
+            HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, 0, HASH_LENGTH),
             100,
             HASH_LENGTH);
     }
@@ -106,10 +106,10 @@ namespace hash_source {
     TEST_CASE("HashPool sketches") {
         const unsigned int HASH_LENGTH = 64;
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(60).build(dimensions, 100, 0, HASH_LENGTH),
+            HashPoolArgs<SimHash>(60).build(dimensions, 0, HASH_LENGTH),
             100,
             HASH_LENGTH);
     }
@@ -120,15 +120,15 @@ namespace hash_source {
         const unsigned int NUM_HASHES = 100;
 
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            IndependentHashArgs<SimHash>().build(dimensions, 100, NUM_HASHES, HASH_LENGTH),
+            IndependentHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
             NUM_HASHES,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, 100, NUM_HASHES, HASH_LENGTH),
+            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
             NUM_HASHES,
             HASH_LENGTH);
     }
@@ -139,15 +139,15 @@ namespace hash_source {
         const unsigned int NUM_HASHES = 100;
 
         Dataset<UnitVectorFormat> dataset(100);
-        auto dimensions = dataset.get_dimensions();
+        auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            TensoredHashArgs<SimHash>().build(dimensions, 100, NUM_HASHES, HASH_LENGTH),
+            TensoredHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
             NUM_HASHES,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, 100, NUM_HASHES, HASH_LENGTH),
+            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
             NUM_HASHES,
             HASH_LENGTH);
     }

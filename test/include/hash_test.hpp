@@ -20,7 +20,7 @@ namespace hash {
         Dataset<typename T::Format> dataset(dimensions);
 
         typename T::Args args;
-        auto family = T(dataset.get_dimensions(), dimensions, args);
+        auto family = T(dataset.get_description(), args);
         typename T::Function hasher = family.sample();
 
         auto hash_bits = family.bits_per_function();
@@ -43,7 +43,7 @@ namespace hash {
         // Compute distribution for hashes
         for (unsigned int i=0; i < num_samples; i++) {
             auto vec = T::Format::generate_random(dimensions);
-            auto stored_vec = to_stored_type<typename T::Format>(vec, dataset.get_dimensions());
+            auto stored_vec = to_stored_type<typename T::Format>(vec, dataset.get_description());
             auto hash = hasher(stored_vec.get());
             REQUIRE(hash < possible_hashes);
             hash_counts[hash]++;
@@ -71,7 +71,7 @@ namespace hash {
 
         Dataset<typename T::Format> dataset(dimensions);
 
-        auto family = T(dataset.get_dimensions(), dimensions, args);
+        auto family = T(dataset.get_description(), args);
         auto hash_bits = num_bits == 0 ? family.bits_per_function() : num_bits;
 
         float prob_sum = 0;
@@ -82,13 +82,13 @@ namespace hash {
             auto vec_b = T::Format::generate_random(dimensions);
 
             auto stored_a = to_stored_type<typename T::Format>(
-                vec_a, dataset.get_dimensions());
+                vec_a, dataset.get_description());
             auto stored_b = to_stored_type<typename T::Format>(
-                vec_b, dataset.get_dimensions());
+                vec_b, dataset.get_description());
             auto hash_a = hasher(stored_a.get()) % (1 << hash_bits);
             auto hash_b = hasher(stored_b.get()) % (1 << hash_bits);
             auto sim = TSim::compute_similarity(
-                stored_a.get(), stored_b.get(), dataset.get_dimensions().actual);
+                stored_a.get(), stored_b.get(), dataset.get_description());
             float prob = family.collision_probability(sim, hash_bits);
             prob_sum += prob;
             if (hash_a == hash_b) {
@@ -125,7 +125,7 @@ namespace hash {
 
     TEST_CASE("MinHash collision probability") {
         Dataset<SetFormat> dataset(100);
-        MinHash minhash(dataset.get_dimensions(), 100, MinHashArgs());
+        MinHash minhash(dataset.get_description(), MinHashArgs());
         REQUIRE(minhash.collision_probability(0.0, 7) == 0.0);
         REQUIRE(minhash.collision_probability(0.5, 7) == 0.5);
         REQUIRE(minhash.collision_probability(1.0, 7) == 1.0);
@@ -147,19 +147,20 @@ namespace hash {
         unsigned int dimensions = 100;
         Dataset<UnitVectorFormat> dataset(dimensions);
 
-        FHTCrossPolytopeHash fht_hash(dataset.get_dimensions(), dimensions, FHTCrossPolytopeArgs());
+        FHTCrossPolytopeHash fht_hash(dataset.get_description(), FHTCrossPolytopeArgs());
         REQUIRE(fht_hash.bits_per_function() == 8);
 
-        CrossPolytopeHash cp_hash(dataset.get_dimensions(), dimensions, CrossPolytopeArgs());
+        CrossPolytopeHash cp_hash(dataset.get_description(), CrossPolytopeArgs());
         REQUIRE(cp_hash.bits_per_function() == 8);
 
-        SimHash simhash = SimHash(dataset.get_dimensions(), dimensions, SimHashArgs());
+        SimHash simhash = SimHash(dataset.get_description(), SimHashArgs());
         REQUIRE(simhash.bits_per_function() == 1);
 
-        MinHash minhash = MinHash(dataset.get_dimensions(), dimensions, MinHashArgs());
+        Dataset<SetFormat> set_dataset(dimensions);
+        MinHash minhash = MinHash(set_dataset.get_description(), MinHashArgs());
         REQUIRE(minhash.bits_per_function() == 7);
 
-        MinHash1Bit minhash1bit = MinHash1Bit(dataset.get_dimensions(), dimensions, MinHashArgs());
+        MinHash1Bit minhash1bit = MinHash1Bit(set_dataset.get_description(), MinHashArgs());
         REQUIRE(minhash1bit.bits_per_function() == 1);
     }
 
@@ -169,13 +170,13 @@ namespace hash {
 
         MinHashArgs args;
         args.randomize_tokens = true;
-        auto family = MinHash1Bit(dataset.get_dimensions(), dimensions, args);
+        auto family = MinHash1Bit(dataset.get_description(), args);
 
-        auto a = to_stored_type<SetFormat>(std::vector<uint32_t>{0}, dataset.get_dimensions());
+        auto a = to_stored_type<SetFormat>(std::vector<uint32_t>{0}, dataset.get_description());
         auto b = to_stored_type<SetFormat>(
             std::vector<uint32_t>{0, 1, 3, 5, 7}, 
-            dataset.get_dimensions());
-        auto sim = JaccardSimilarity::compute_similarity(a.get(), b.get(), 1);
+            dataset.get_description());
+        auto sim = JaccardSimilarity::compute_similarity(a.get(), b.get(), dataset.get_description());
 
         int samples = 1000;
         float collisions = 0;

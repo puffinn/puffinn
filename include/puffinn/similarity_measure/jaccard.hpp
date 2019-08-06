@@ -13,7 +13,7 @@ namespace puffinn {
         using DefaultSketch = MinHash1Bit;
         using DefaultHash = MinHash;
 
-        static float compute_similarity(Format::Type* lhs_ptr, Format::Type* rhs_ptr, unsigned int) {
+        static float compute_similarity(Format::Type* lhs_ptr, Format::Type* rhs_ptr, DatasetDescription<Format>) {
             auto& lhs = *lhs_ptr;
             auto& rhs = *rhs_ptr;
             int intersection_size = 0;

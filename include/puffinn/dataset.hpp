@@ -14,11 +14,11 @@ namespace puffinn {
     // The data is stored according to the given format.
     template <typename T>
     class Dataset {
-        // Number of dimensions of inserted vectors.
-        unsigned int dimensions;
+        // Arguments 
+        typename T::Args args;
         // Number of dimensions of stored vectors, which may be padded to
         // more easily map to simd instructions.
-        unsigned int padded_dimensions;
+        unsigned int storage_len;
         // Number of inserted vectors.
         unsigned int inserted_vectors;
         // Maximal number of inserted vectors.
@@ -28,32 +28,32 @@ namespace puffinn {
 
     public:
         // Create an empty storage for vectors with the given number of dimensions.
-        Dataset(unsigned int dimensions) : Dataset(dimensions, DEFAULT_CAPACITY)
+        Dataset(typename T::Args args) : Dataset(args, DEFAULT_CAPACITY)
         {
         }
 
         // Create an empty storage for vectors with the given number of dimensions.
         // Allocates enough space for the given number of vectors before needing to reallocate.
-        Dataset(unsigned int dimensions, unsigned int capacity)
-          : dimensions(dimensions),
-            padded_dimensions(pad_dimensions<T>(dimensions)),
+        Dataset(typename T::Args args, unsigned int capacity)
+          : args(args),
+            storage_len(pad_dimensions<T>(T::storage_dimensions(args))),
             inserted_vectors(0),
             capacity(capacity),
-            data(allocate_storage<T>(capacity, padded_dimensions))
+            data(allocate_storage<T>(capacity, storage_len))
         {
         }
 
         // Access the vector at the given position.
         typename T::Type* operator[](unsigned int idx) const {
-            return &data.get()[idx*padded_dimensions];
+            return &data.get()[idx*storage_len];
         }
 
         // Retrieve the number of dimensions of vectors inserted into this dataset,
         // as well as the number of dimensions they are stored with.
-        DatasetDimensions get_dimensions() const {
-            DatasetDimensions res;
-            res.actual = dimensions;
-            res.padded = padded_dimensions;
+        DatasetDescription<T> get_description() const {
+            DatasetDescription<T> res;
+            res.args = args;
+            res.storage_len = storage_len;
             return res;
         }
 
@@ -67,8 +67,8 @@ namespace puffinn {
         void insert(const U& vec) {
             if (inserted_vectors == capacity) {
                 unsigned int new_capacity = std::ceil(capacity*EXPANSION_FACTOR);
-                auto new_data = allocate_storage<T>(new_capacity, padded_dimensions);
-                for (size_t i=0; i < capacity*padded_dimensions; i++) {
+                auto new_data = allocate_storage<T>(new_capacity, storage_len);
+                for (size_t i=0; i < capacity*storage_len; i++) {
                     new_data.get()[i] = std::move(data.get()[i]);
                 }
                 data = std::move(new_data);
@@ -76,8 +76,8 @@ namespace puffinn {
             }
             T::store(
                 vec,
-                &data.get()[inserted_vectors*padded_dimensions],
-                get_dimensions());
+                &data.get()[inserted_vectors*storage_len],
+                get_description());
             inserted_vectors++;
         }
 

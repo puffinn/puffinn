@@ -16,8 +16,7 @@ namespace filterer_test {
 
         IndependentHashArgs<SimHash> hash_args;
         auto hash_source = hash_args.build(
-            dataset.get_dimensions(),
-            2,
+            dataset.get_description(),
             NUM_SKETCHES,
             NUM_FILTER_HASHBITS);
         Filterer<SimHash> filterer(std::move(hash_source));
@@ -25,7 +24,7 @@ namespace filterer_test {
         filterer.add_sketches(dataset);
 
         std::vector<float> query({1, 0});
-        auto stored = to_stored_type<UnitVectorFormat>(query, dataset.get_dimensions());
+        auto stored = to_stored_type<UnitVectorFormat>(query, dataset.get_description());
         filterer.reset(stored.get());
 
         // Anything initially passes
@@ -56,8 +55,7 @@ namespace filterer_test {
 
         IndependentHashArgs<SimHash> hash_args;
         auto hash_source = hash_args.build(
-            dataset.get_dimensions(),
-            DIMENSIONS,
+            dataset.get_description(),
             NUM_SKETCHES,
             NUM_FILTER_HASHBITS);
         Filterer<SimHash> filterer(std::move(hash_source));

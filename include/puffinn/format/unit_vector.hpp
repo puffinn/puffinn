@@ -26,6 +26,8 @@ namespace puffinn {
         // Done since the values are always in the range [-1, 1].
         // This is equivalent to what is used by `mulhrs`. However this cannot represent 1 exactly.
         using Type = int16_t;
+        /// Number of dimensions.
+        using Args = unsigned int;
 
         const static unsigned int ALIGNMENT = VECTOR256_ALIGNMENT;
 
@@ -48,16 +50,16 @@ namespace puffinn {
             return -((float)val)/INT16_MIN;
         }
 
-        static unsigned int storage_dimensions(unsigned int dimensions) {
+        static unsigned int storage_dimensions(Args dimensions) {
             return dimensions;
         }
 
         static void store(
             const std::vector<float>& input,
             Type* storage,
-            DatasetDimensions dimensions
+            DatasetDescription<UnitVectorFormat> dataset
         ) {
-            if (input.size() != dimensions.actual) {
+            if (input.size() != dataset.args) {
                 throw std::invalid_argument("input.size()");
             }
 
@@ -77,7 +79,7 @@ namespace puffinn {
             for (size_t i=0; i < copy.size(); i++) {
                 storage[i] = to_16bit_fixed_point(copy[i]);
             }
-            for (size_t i=copy.size(); i < dimensions.padded; i++) {
+            for (size_t i=copy.size(); i < dataset.storage_len; i++) {
                 storage[i] = to_16bit_fixed_point(0.0);
             }
         }

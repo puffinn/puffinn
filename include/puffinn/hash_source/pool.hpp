@@ -25,13 +25,12 @@ namespace puffinn {
 
     public:
         HashPool(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             typename T::Args args,
             unsigned int num_functions,
             unsigned int bits_per_hasher
         )
-          : hash_family(dimensions, original_dimensions, args),
+          : hash_family(desc, args),
             hashes(std::unique_ptr<LshDatatype>(
                 new LshDatatype[num_functions])),
             bits_per_function(hash_family.bits_per_function()),
@@ -151,14 +150,12 @@ namespace puffinn {
         }
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDimensions dimensions,
-            unsigned int original_dimensions,
+            DatasetDescription<typename T::Format> desc,
             unsigned int /* num_tables */,
             unsigned int num_bits_per_function
         ) const {
             return std::make_unique<HashPool<T>> (
-                dimensions,
-                original_dimensions,
+                desc,
                 args,
                 pool_size,
                 num_bits_per_function
