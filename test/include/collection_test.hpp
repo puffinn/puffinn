@@ -221,4 +221,18 @@ namespace collection {
             test_jaccard_search(500, d, std::move(args));
         }
     }
+
+    TEST_CASE("Insert unit vector of wrong dimensionality") {
+        Index<CosineSimilarity> index(2, 1*1024*1024);
+        REQUIRE_THROWS(index.insert(std::vector<float>{1}));
+        REQUIRE_NOTHROW(index.insert(std::vector<float>{1, 0}));
+        REQUIRE_THROWS(index.insert(std::vector<float>{0, 1, 0}));
+    }
+
+    TEST_CASE("Insert set containing token outside range") {
+        Index<JaccardSimilarity> index(5, 1*1024*1024);
+        REQUIRE_NOTHROW(index.insert(std::vector<unsigned int>{}));
+        REQUIRE_NOTHROW(index.insert(std::vector<unsigned int>{0, 4}));
+        REQUIRE_THROWS(index.insert(std::vector<unsigned int>{5}));
+    }
 }

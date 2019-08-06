@@ -20,8 +20,13 @@ namespace puffinn {
         static void store(
             const std::vector<uint32_t>& set,
             std::vector<uint32_t>* storage,
-            DatasetDimensions
+            DatasetDimensions dimensions
         ) {
+            for (auto v : set) {
+                if (v >= dimensions.actual) {
+                    throw std::invalid_argument("invalid token");
+                }
+            }
             // Placement-new
             auto vec = new(storage) std::vector<uint32_t>; 
             vec->reserve(set.size());

@@ -99,16 +99,15 @@ namespace puffinn {
             const HashSourceArgs<THash>& hash_args = DEFAULT_HASH_SOURCE,
             const HashSourceArgs<TSketch>& sketch_args = DEFAULT_SKETCH_SOURCE
         )
-          : dataset(Dataset<typename TSim::Format>(
-              TSim::Format::storage_dimensions(dimensions))),
+          : dataset(Dataset<typename TSim::Format>(dimensions)),
             filterer(
                 sketch_args.build(
                     dataset.get_dimensions(),
                     dimensions,
                     NUM_SKETCHES,
                     NUM_FILTER_HASHBITS)),
-            to_hash(THash::Format::storage_dimensions(dimensions)),
-            to_sketch(TSketch::Format::storage_dimensions(dimensions)),
+            to_hash(dimensions),
+            to_sketch(dimensions),
             memory_limit(memory_limit),
             hash_args(hash_args.copy()),
             original_dimensions(dimensions)
