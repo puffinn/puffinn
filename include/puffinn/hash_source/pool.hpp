@@ -25,7 +25,7 @@ namespace puffinn {
 
     public:
         HashPool(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             typename T::Args args,
             unsigned int num_functions,
             unsigned int bits_per_hasher
@@ -65,7 +65,7 @@ namespace puffinn {
         }
 
         // Recompute hashes for a new vector.
-        void reset(typename T::Format::Type* vec) {
+        void reset(typename T::Sim::Format::Type* vec) {
             #pragma omp parallel for
             for (size_t i=0; i<hash_functions.size(); i++) {
                 hashes.get()[i] = hash_functions[i](vec);
@@ -150,7 +150,7 @@ namespace puffinn {
         }
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             unsigned int /* num_tables */,
             unsigned int num_bits_per_function
         ) const {

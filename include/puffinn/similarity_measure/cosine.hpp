@@ -1,11 +1,12 @@
 #pragma once
 
 #include "puffinn/format/unit_vector.hpp"
-#include "puffinn/hash/simhash.hpp"
-#include "puffinn/hash/crosspolytope.hpp"
 #include "puffinn/math.hpp"
 
 namespace puffinn {
+    class FHTCrossPolytopeHash;
+    class SimHash;
+    
     /// Measures the cosine of the angle between two unit vectors.
     /// 
     /// This is also known as the angular distance.
@@ -22,3 +23,6 @@ namespace puffinn {
         }
     };
 }
+
+#include "puffinn/hash/simhash.hpp"
+#include "puffinn/hash/crosspolytope.hpp"

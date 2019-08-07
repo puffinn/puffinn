@@ -48,7 +48,7 @@ namespace puffinn {
 
     public:
         TensoredHashSource(
-            DatasetDescription<typename T::Format> dimensions,
+            DatasetDescription<typename T::Sim::Format> dimensions,
             typename T::Args args,
             // Number of hashers to create.
             unsigned int num_hashers,
@@ -77,7 +77,7 @@ namespace puffinn {
                 index_pair.second);
         }
 
-        void reset(typename T::Format::Type* vec) {
+        void reset(typename T::Sim::Format::Type* vec) {
             independent_hash_source.reset(vec);
             // Store the hashes so that the final hash can be created by simply bitwise or-ing them together.
             #pragma omp parallel for
@@ -186,7 +186,7 @@ namespace puffinn {
         typename T::Args args;
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const {

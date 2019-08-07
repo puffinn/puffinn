@@ -11,11 +11,11 @@ using namespace puffinn;
 
 namespace hash_source {
     template <typename T>
-    void test_reset(DatasetDescription<typename T::Format> dimensions, std::unique_ptr<HashSource<T>> source) {
+    void test_reset(DatasetDescription<typename T::Sim::Format> dimensions, std::unique_ptr<HashSource<T>> source) {
         auto vec1 = UnitVectorFormat::generate_random(dimensions.args);
         auto vec2 = UnitVectorFormat::generate_random(dimensions.args);
-        auto stored1 = to_stored_type<typename T::Format>(vec1, dimensions);
-        auto stored2 = to_stored_type<typename T::Format>(vec2, dimensions);
+        auto stored1 = to_stored_type<typename T::Sim::Format>(vec1, dimensions);
+        auto stored2 = to_stored_type<typename T::Sim::Format>(vec2, dimensions);
 
         auto hasher = source->sample();
         source->reset(stored1.get());
@@ -27,13 +27,13 @@ namespace hash_source {
 
     template <typename T>
     void test_hashes(
-        DatasetDescription<typename T::Format> dimensions,
+        DatasetDescription<typename T::Sim::Format> dimensions,
         std::unique_ptr<HashSource<T>> source,
         unsigned int num_hashes,
         unsigned int hash_length
     ) {
         auto vec = UnitVectorFormat::generate_random(dimensions.args);
-        auto stored = to_stored_type<typename T::Format>(vec, dimensions);
+        auto stored = to_stored_type<typename T::Sim::Format>(vec, dimensions);
         source->reset(stored.get());
         uint64_t max_hash = (((1 << (hash_length-1))-1) << 1)+1;
 

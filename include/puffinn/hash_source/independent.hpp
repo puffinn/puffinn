@@ -20,11 +20,11 @@ namespace puffinn {
         unsigned int next_function = 0;
         unsigned int bits_to_cut;
 
-        typename T::Format::Type* hashed_vec = nullptr;
+        typename T::Sim::Format::Type* hashed_vec = nullptr;
     
     public:
         IndependentHashSource(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             typename T::Args args,
             // Number of hashers to create.
             unsigned int num_hashers,
@@ -53,7 +53,7 @@ namespace puffinn {
             return (res >> bits_to_cut);
         }
 
-        void reset(typename T::Format::Type* vec) {
+        void reset(typename T::Sim::Format::Type* vec) {
             hashed_vec = vec;    
         }
 
@@ -121,7 +121,7 @@ namespace puffinn {
         typename T::Args args;
 
         std::unique_ptr<HashSource<T>> build(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const {

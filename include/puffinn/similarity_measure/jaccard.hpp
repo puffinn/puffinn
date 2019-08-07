@@ -1,9 +1,11 @@
 #pragma once
 
 #include "puffinn/format/set.hpp"
-#include "puffinn/hash/minhash.hpp"
 
 namespace puffinn {
+    class MinHash;
+    class MinHash1Bit;
+    
     /// Measures the Jaccard Similarity between two sets.
     ///
     /// This is defined as the size of the intersection divided by the size of the union.
@@ -40,3 +42,5 @@ namespace puffinn {
         }
     };
 }
+
+#include "puffinn/hash/minhash.hpp"

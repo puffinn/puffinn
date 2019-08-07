@@ -10,8 +10,8 @@
 namespace puffinn {
     struct L2Distance {
         using Format = RealVectorFormat;
-        using DefaultHash = FHTCrossPolytopeHash;
-        using DefaultSketch = SimHash;
+//        using DefaultHash = unimplemented;
+//        using DefaultSketch = unimplemented;
 
         static float compute_similarity(float* lhs, float* rhs, DatasetDescription<Format> desc) {
             auto dist = l2_distance_float_sse(lhs, rhs, desc.args);

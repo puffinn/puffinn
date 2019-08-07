@@ -36,19 +36,21 @@ namespace puffinn {
             }
         }
 
-        void add_sketches(const Dataset<typename T::Format>& dataset) {
-            sketches.reserve(sketches.size()+dataset.get_size()*NUM_SKETCHES);
-            auto insertion_start = sketches.size();
-            for (size_t idx = 0; idx < dataset.get_size(); idx++) {
+        void add_sketches(
+            const Dataset<typename T::Sim::Format>& dataset,
+            uint32_t first_index
+        ) {
+            sketches.reserve(dataset.get_size()*NUM_SKETCHES);
+
+            for (size_t idx = first_index; idx < dataset.get_size(); idx++) {
                 hash_source->reset(dataset[idx]);
                 for (size_t sketch_index = 0; sketch_index < NUM_SKETCHES; sketch_index++) {
-                    auto insertion_idx = insertion_start+idx*NUM_SKETCHES+sketch_index;
-                    sketches[insertion_idx] = (*hash_functions[sketch_index])();
+                    sketches.push_back((*hash_functions[sketch_index])());
                 }
             }
         }
 
-        void reset(typename T::Format::Type* vec) {
+        void reset(typename T::Sim::Format::Type* vec) {
             hash_source->reset(vec);
             query_sketches.clear();
             for (size_t sketch_index=0; sketch_index<NUM_SKETCHES; sketch_index++) {

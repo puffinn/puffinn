@@ -62,13 +62,11 @@ namespace puffinn {
         std::unique_ptr<HashSource<THash>> hash_source;
         // Container of sketches. Also needs to be reset.
         Filterer<TSketch> filterer;
-        // Dataset containing vectors that have been added since the last reset.
-        // They are stored in the proper format for hashing but have not been so yet. 
-        Dataset<typename THash::Format> to_hash;
-        Dataset<typename TSketch::Format> to_sketch;
 
         // Number of bytes allowed to be used.
         uint64_t memory_limit;
+        // Number of values inserted the last time rebuild was called.
+        uint32_t last_rebuild = 0;
         // Construction of the hash source is delayed until the
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
@@ -105,11 +103,12 @@ namespace puffinn {
                     dataset.get_description(),
                     NUM_SKETCHES,
                     NUM_FILTER_HASHBITS)),
-            to_hash(dataset_args),
-            to_sketch(dataset_args),
             memory_limit(memory_limit),
             hash_args(hash_args.copy())
         {
+            static_assert(
+                std::is_same<TSim, typename THash::Sim>::value
+                && std::is_same<TSim, typename TSketch::Sim>::value);
         }
 
         /// Insert a value into the index.
@@ -122,8 +121,6 @@ namespace puffinn {
         template <typename T>
         void insert(const T& value) {
             dataset.insert(value);
-            to_hash.insert(value);
-            to_sketch.insert(value);
             // Dont insert into the hash tables as it would be in linear time.
         }
 
@@ -172,31 +169,29 @@ namespace puffinn {
             }
 
             // Compute sketches for the new vectors.
-            filterer.add_sketches(to_sketch);
-            to_sketch.clear();
+            filterer.add_sketches(dataset, last_rebuild);
 
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
-            for (size_t idx=0; idx < to_hash.get_size(); idx++) {
-                this->hash_source->reset(to_hash[idx]);
-                auto insert_idx = dataset.get_size()-to_hash.get_size()+idx;
+            for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
+                this->hash_source->reset(dataset[idx]);
                 // Only parallelize if this step is computationally expensive.
                 if (hash_source->precomputed_hashes()) {
                     for (auto& map : lsh_maps) {
-                        map.insert(insert_idx);
+                        map.insert(idx);
                     }
                 } else {
                     #pragma omp parallel for
                     for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                        lsh_maps[map_idx].insert(insert_idx);
+                        lsh_maps[map_idx].insert(idx);
                     }
                 }
             }
-            to_hash.clear();
 
             for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
                 lsh_maps[map_idx].rebuild();
             }
+            last_rebuild = dataset.get_size();
         }
 
         /// Search for the approximate ``k`` nearest neighbors to a query.
@@ -236,11 +231,11 @@ namespace puffinn {
 
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash_query = to_stored_type<typename THash::Format>(query, desc);
+            auto hash_query = to_stored_type<typename THash::Sim::Format>(query, desc);
             hash_source->reset(hash_query.get());
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::Sketching);
-            auto sketch_query = to_stored_type<typename TSketch::Format>(query, desc);
+            auto sketch_query = to_stored_type<typename TSketch::Sim::Format>(query, desc);
             filterer.reset(sketch_query.get());
             g_performance_metrics.store_time(Computation::Sketching);
 

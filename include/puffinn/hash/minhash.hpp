@@ -1,6 +1,7 @@
 #pragma once
 
 #include "puffinn/format/set.hpp"
+#include "puffinn/similarity_measure/jaccard.hpp"
 #include <random>
 
 namespace puffinn {
@@ -94,7 +95,7 @@ namespace puffinn {
     class MinHash {
     public:
         using Args = MinHashArgs;
-        using Format = SetFormat;
+        using Sim = JaccardSimilarity;
         using Function = MinHashFunction;
 
     private:
@@ -152,7 +153,7 @@ namespace puffinn {
     class MinHash1Bit {
     public:
         using Args = MinHash::Args;
-        using Format = MinHash::Format;
+        using Sim = MinHash::Sim;
         using Function = MinHash1BitFunction;
 
     private:

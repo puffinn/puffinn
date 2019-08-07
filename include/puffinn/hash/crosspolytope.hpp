@@ -4,6 +4,7 @@
 #include "external/ffht/fht_header_only.h"
 #include "puffinn/format/unit_vector.hpp"
 #include "puffinn/math.hpp"
+#include "puffinn/similarity_measure/cosine.hpp"
 
 namespace puffinn {
     struct CrossPolytopeCollisionEstimates {
@@ -188,7 +189,7 @@ namespace puffinn {
     class FHTCrossPolytopeHash {
     public:
         using Args = FHTCrossPolytopeArgs;
-        using Format = UnitVectorFormat;
+        using Sim = CosineSimilarity;
         using Function = FHTCrossPolytopeHashFunction;
 
     private:
@@ -295,7 +296,7 @@ namespace puffinn {
     class CrossPolytopeHash {
     public:
         using Args = CrossPolytopeArgs;
-        using Format = UnitVectorFormat;
+        using Sim = CosineSimilarity;
         using Function = CrossPolytopeHashFunction;
 
     private:

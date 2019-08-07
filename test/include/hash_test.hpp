@@ -17,7 +17,7 @@ namespace hash {
     void test_hash_even_distribution(unsigned int dimensions) {
         const float ACCEPTED_DEVIATION = 0.03;
 
-        Dataset<typename T::Format> dataset(dimensions);
+        Dataset<typename T::Sim::Format> dataset(dimensions);
 
         typename T::Args args;
         auto family = T(dataset.get_description(), args);
@@ -42,8 +42,8 @@ namespace hash {
 
         // Compute distribution for hashes
         for (unsigned int i=0; i < num_samples; i++) {
-            auto vec = T::Format::generate_random(dimensions);
-            auto stored_vec = to_stored_type<typename T::Format>(vec, dataset.get_description());
+            auto vec = T::Sim::Format::generate_random(dimensions);
+            auto stored_vec = to_stored_type<typename T::Sim::Format>(vec, dataset.get_description());
             auto hash = hasher(stored_vec.get());
             REQUIRE(hash < possible_hashes);
             hash_counts[hash]++;
@@ -69,7 +69,7 @@ namespace hash {
     ) {
         const float ACCEPTED_DEVIATION = 0.02;
 
-        Dataset<typename T::Format> dataset(dimensions);
+        Dataset<typename T::Sim::Format> dataset(dimensions);
 
         auto family = T(dataset.get_description(), args);
         auto hash_bits = num_bits == 0 ? family.bits_per_function() : num_bits;
@@ -78,12 +78,12 @@ namespace hash {
         float actual_sum = 0;
         for (unsigned int i=0; i < num_samples; i++) {
             auto hasher = family.sample();
-            auto vec_a = T::Format::generate_random(dimensions);
-            auto vec_b = T::Format::generate_random(dimensions);
+            auto vec_a = T::Sim::Format::generate_random(dimensions);
+            auto vec_b = T::Sim::Format::generate_random(dimensions);
 
-            auto stored_a = to_stored_type<typename T::Format>(
+            auto stored_a = to_stored_type<typename T::Sim::Format>(
                 vec_a, dataset.get_description());
-            auto stored_b = to_stored_type<typename T::Format>(
+            auto stored_b = to_stored_type<typename T::Sim::Format>(
                 vec_b, dataset.get_description());
             auto hash_a = hasher(stored_a.get()) % (1 << hash_bits);
             auto hash_b = hasher(stored_b.get()) % (1 << hash_bits);

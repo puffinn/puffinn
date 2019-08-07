@@ -15,7 +15,7 @@ namespace puffinn {
 
         // Make every hash function sampled from this source calculate the hash of
         // the supplied vector until the next call to reset.
-        virtual void reset(typename T::Format::Type* vec) = 0;
+        virtual void reset(typename T::Sim::Format::Type* vec) = 0;
 
         virtual float collision_probability(
             float similarity,
@@ -61,7 +61,7 @@ namespace puffinn {
     template <typename T>
     struct HashSourceArgs {
         virtual std::unique_ptr<HashSource<T>> build(
-            DatasetDescription<typename T::Format> desc,
+            DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
             unsigned int num_bits
         ) const = 0;

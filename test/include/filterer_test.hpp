@@ -21,7 +21,7 @@ namespace filterer_test {
             NUM_FILTER_HASHBITS);
         Filterer<SimHash> filterer(std::move(hash_source));
 
-        filterer.add_sketches(dataset);
+        filterer.add_sketches(dataset, 0);
 
         std::vector<float> query({1, 0});
         auto stored = to_stored_type<UnitVectorFormat>(query, dataset.get_description());
@@ -59,7 +59,7 @@ namespace filterer_test {
             NUM_SKETCHES,
             NUM_FILTER_HASHBITS);
         Filterer<SimHash> filterer(std::move(hash_source));
-        filterer.add_sketches(dataset);
+        filterer.add_sketches(dataset, 0);
 
         int bit_counts[NUM_FILTER_HASHBITS];
         for (int idx=0; idx < NUM_VECTORS; idx++) {

@@ -3,6 +3,7 @@
 #include "puffinn/dataset.hpp"
 #include "puffinn/format/unit_vector.hpp"
 #include "puffinn/math.hpp"
+#include "puffinn/similarity_measure/cosine.hpp"
 
 namespace puffinn {
     class SimHashFunction {
@@ -33,7 +34,7 @@ namespace puffinn {
     class SimHash {
     public:
         using Args = SimHashArgs;
-        using Format = UnitVectorFormat;
+        using Sim = CosineSimilarity;
         using Function = SimHashFunction;
 
     private:
