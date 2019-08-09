@@ -174,16 +174,16 @@ namespace puffinn {
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
-                this->hash_source->reset(dataset[idx]);
+                auto hash_state = this->hash_source->reset(dataset[idx]);
                 // Only parallelize if this step is computationally expensive.
                 if (hash_source->precomputed_hashes()) {
                     for (auto& map : lsh_maps) {
-                        map.insert(idx);
+                        map.insert(idx, hash_state.get());
                     }
                 } else {
                     #pragma omp parallel for
                     for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                        lsh_maps[map_idx].insert(idx);
+                        lsh_maps[map_idx].insert(idx, hash_state.get());
                     }
                 }
             }
@@ -215,7 +215,7 @@ namespace puffinn {
             unsigned int k,
             float recall,
             FilterType filter_type = FilterType::Default
-        ) {
+        ) const {
             if (dataset.get_size() < 100) {
                 // Due to optimizations values near the edges in prefixmaps are discarded.
                 // When there are fewer total values than SEGMENT_SIZE, all values will be skipped.
@@ -232,25 +232,33 @@ namespace puffinn {
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
             auto hash_query = to_stored_type<typename THash::Sim::Format>(query, desc);
-            hash_source->reset(hash_query.get());
+            auto hash_state = hash_source->reset(hash_query.get());
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::Sketching);
             auto sketch_query = to_stored_type<typename TSketch::Sim::Format>(query, desc);
-            filterer.reset(sketch_query.get());
+            auto sketches = filterer.reset(sketch_query.get());
             g_performance_metrics.store_time(Computation::Sketching);
 
             g_performance_metrics.start_timer(Computation::Search);
             switch (filter_type) {
                 case FilterType::None:
-                    search_maps_no_filter(stored_query.get(), maxbuffer, recall);
+                    search_maps_no_filter(
+                        stored_query.get(),
+                        maxbuffer,
+                        recall,
+                        sketches,
+                        hash_state.get());
                     break;
                 case FilterType::Simple:
-                    search_maps_simple_filter(stored_query.get(),
-                    maxbuffer,
-                    recall);
+                    search_maps_simple_filter(
+                        stored_query.get(),
+                        maxbuffer,
+                        recall,
+                        sketches,
+                        hash_state.get());
                     break;
                 default:
-                    search_maps(stored_query.get(), maxbuffer, recall);
+                    search_maps(stored_query.get(), maxbuffer, recall, sketches, hash_state.get());
             }
             g_performance_metrics.store_time(Computation::Search);
 
@@ -326,7 +334,15 @@ namespace puffinn {
             // Before a table can be used, the initial point is found through binary search.
             std::vector<PrefixMapQuery> query_objects;
 
-            SearchBuffers(const std::vector<PrefixMap<THash>>& maps) {
+            QuerySketches sketches;
+
+            SearchBuffers(
+                const std::vector<PrefixMap<THash>>& maps,
+                QuerySketches sketches,
+                HashSourceState* hash_state
+            )
+              : sketches(sketches)
+            {
                 g_performance_metrics.start_timer(Computation::SearchInit);
 
                 ranges =
@@ -336,7 +352,7 @@ namespace puffinn {
 
                 query_objects.reserve(maps.size());
                 std::transform(maps.begin(), maps.end(), std::back_inserter(query_objects),
-                    [](auto& map) { return map.create_query(); });
+                    [hash_state](auto& map) { return map.create_query(hash_state); });
 
                 g_performance_metrics.store_time(Computation::SearchInit);
             }
@@ -365,9 +381,11 @@ namespace puffinn {
         void search_maps_no_filter(
             typename TSim::Format::Type* query,
             MaxBuffer& maxbuffer,
-            float recall
-        ) {
-            SearchBuffers buffers(lsh_maps);
+            float recall,
+            QuerySketches sketches,
+            HashSourceState* hash_state
+        ) const {
+            SearchBuffers buffers(lsh_maps, sketches, hash_state);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
                 buffers.fill_ranges(lsh_maps);
                 g_performance_metrics.start_timer(Computation::Consider);
@@ -408,9 +426,11 @@ namespace puffinn {
         void search_maps_simple_filter(
             typename TSim::Format::Type* query,
             MaxBuffer& maxbuffer,
-            float recall
-        ) {
-            SearchBuffers buffers(lsh_maps);
+            float recall,
+            QuerySketches sketches,
+            HashSourceState* hash_state
+        ) const {
+            SearchBuffers buffers(lsh_maps, sketches, hash_state);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
                 buffers.fill_ranges(lsh_maps);
                 g_performance_metrics.start_timer(Computation::Consider);
@@ -418,7 +438,9 @@ namespace puffinn {
                     auto range = buffers.ranges[range_idx];
                     while (range.first != range.second) {
                         auto idx = *range.first;
-                        if (filterer.passes_filter(idx, range_idx%NUM_SKETCHES)) {
+                        auto sketch_idx = range_idx%NUM_SKETCHES;
+                        auto sketch = filterer.get_sketch(idx, sketch_idx);
+                        if (buffers.sketches.passes_filter(sketch, sketch_idx)) {
                             auto dist = TSim::compute_similarity(
                                 query,
                                 dataset[idx],
@@ -428,7 +450,7 @@ namespace puffinn {
                         range.first++;
                     }
                     auto kth_similarity = maxbuffer.smallest_value();
-                    filterer.update_max_sketch_diff(kth_similarity);
+                    buffers.sketches.max_sketch_diff = filterer.get_max_sketch_diff(kth_similarity);
                 }
                 g_performance_metrics.store_time(Computation::Consider);
                 g_performance_metrics.start_timer(Computation::CheckTermination);
@@ -455,12 +477,13 @@ namespace puffinn {
         void search_maps(
             typename TSim::Format::Type* query,
             MaxBuffer& maxbuffer,
-            float recall
-        ) {
+            float recall,
+            QuerySketches sketches,
+            HashSourceState* hash_state
+        ) const {
             const size_t FILTER_BUFFER_SIZE = 128;
 
-            SearchBuffers buffers(lsh_maps);
-
+            SearchBuffers buffers(lsh_maps, sketches, hash_state);
             // Buffer for values passing filtering and should have distances computed.
             // 8*RING_SIZE is necessary additional space as that is the maximum that can be added
             // between the last check of the size and it being emptied.
@@ -512,15 +535,23 @@ namespace puffinn {
                             __builtin_prefetch(&prereq_prefetch_segment[2]);
                             __builtin_prefetch(&prereq_prefetch_segment[3]);
 
+                            // indices
                             auto v1 = ring[ring_idx][0];
                             auto v2 = ring[ring_idx][1];
                             auto v3 = ring[ring_idx][2];
                             auto v4 = ring[ring_idx][3];
 
-                            auto p1 = filterer.passes_filter(v1, ring_idx);
-                            auto p2 = filterer.passes_filter(v2, ring_idx);
-                            auto p3 = filterer.passes_filter(v3, ring_idx);
-                            auto p4 = filterer.passes_filter(v4, ring_idx);
+                            // sketches
+                            auto s1 = filterer.get_sketch(v1, ring_idx);
+                            auto s2 = filterer.get_sketch(v2, ring_idx);
+                            auto s3 = filterer.get_sketch(v3, ring_idx);
+                            auto s4 = filterer.get_sketch(v4, ring_idx);
+
+                            // Whether they pass the filtering step
+                            auto p1 = buffers.sketches.passes_filter(s1, ring_idx);
+                            auto p2 = buffers.sketches.passes_filter(s2, ring_idx);
+                            auto p3 = buffers.sketches.passes_filter(s3, ring_idx);
+                            auto p4 = buffers.sketches.passes_filter(s4, ring_idx);
 
                             passing_filter[num_passing_filter] = v1;
                             num_passing_filter += p1;
@@ -563,10 +594,10 @@ namespace puffinn {
                         auto v3 = ring[ring_idx][2];
                         auto v4 = ring[ring_idx][3];
 
-                        auto p1 = filterer.passes_filter(v1, ring_idx);
-                        auto p2 = filterer.passes_filter(v2, ring_idx);
-                        auto p3 = filterer.passes_filter(v3, ring_idx);
-                        auto p4 = filterer.passes_filter(v4, ring_idx);
+                        auto p1 = buffers.sketches.passes_filter(v1, ring_idx);
+                        auto p2 = buffers.sketches.passes_filter(v2, ring_idx);
+                        auto p3 = buffers.sketches.passes_filter(v3, ring_idx);
+                        auto p4 = buffers.sketches.passes_filter(v4, ring_idx);
 
                         passing_filter[num_passing_filter] = v1;
                         num_passing_filter += p1;
@@ -597,7 +628,7 @@ namespace puffinn {
                     g_performance_metrics.add_distance_computations(num_passing_filter);
                     num_passing_filter = 0;
                     auto kth_similarity = maxbuffer.smallest_value();
-                    filterer.update_max_sketch_diff(kth_similarity);
+                    buffers.sketches.max_sketch_diff = filterer.get_max_sketch_diff(kth_similarity);
                     g_performance_metrics.store_time(Computation::Consider);
 
                     // Stop if we have seen enough to be confident about the recall guarantee

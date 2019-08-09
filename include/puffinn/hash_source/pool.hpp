@@ -11,6 +11,10 @@ namespace puffinn {
     template<typename T>
     class PooledHasher;
 
+    struct HashPoolState : HashSourceState {
+        std::unique_ptr<LshDatatype> hashes;
+    };
+
     // A pool of hash functions that can be shared.
     // These functions can be mixed to produce different hashes, which means that fewer hash
     // computations are needed. However if the pool contains too few hash functions, it will
@@ -19,7 +23,6 @@ namespace puffinn {
     class HashPool : public HashSource<T> {
         T hash_family;
         std::vector<typename T::Function> hash_functions;
-        std::unique_ptr<LshDatatype> hashes;
         uint_fast8_t bits_per_function;
         unsigned int bits_per_hasher;
 
@@ -31,8 +34,6 @@ namespace puffinn {
             unsigned int bits_per_hasher
         )
           : hash_family(desc, args),
-            hashes(std::unique_ptr<LshDatatype>(
-                new LshDatatype[num_functions])),
             bits_per_function(hash_family.bits_per_function()),
             bits_per_hasher(bits_per_hasher)
         {
@@ -47,35 +48,43 @@ namespace puffinn {
             return std::make_unique<PooledHasher<T>>(this, bits_per_hasher);
         }
 
-        uint64_t concatenate_hash(const std::vector<unsigned int>& indices) {
+        uint64_t concatenate_hash(
+            const std::vector<unsigned int>& indices,
+            const LshDatatype* hashes
+        ) const {
             uint64_t res = 0;
             for (auto idx : indices) {
                 res <<= bits_per_function;
-                res |= hashes.get()[idx];
+                res |= hashes[idx];
             }
             return res;
         }
 
-        unsigned int get_size() {
+        unsigned int get_size() const {
             return hash_functions.size();
         }
 
-        uint_fast8_t get_bits_per_function() {
+        uint_fast8_t get_bits_per_function() const {
             return bits_per_function;
         }
 
         // Recompute hashes for a new vector.
-        void reset(typename T::Sim::Format::Type* vec) {
+        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
+            auto hashes = std::unique_ptr<LshDatatype>(new LshDatatype[hash_functions.size()]);
+                
             #pragma omp parallel for
             for (size_t i=0; i<hash_functions.size(); i++) {
                 hashes.get()[i] = hash_functions[i](vec);
             }
+            auto state = std::make_unique<HashPoolState>();
+            state->hashes = std::move(hashes);
+            return state;
         }
 
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits
-        ) {
+        ) const {
             return hash_family.collision_probability(similarity, num_bits);
         }
 
@@ -86,7 +95,7 @@ namespace puffinn {
             uint_fast32_t tables,
             uint_fast32_t max_tables,
             float kth_similarity
-        ) {
+        ) const {
             float col_prob =
                 this->concatenated_collision_probability(hash_length, kth_similarity);
             float last_prob =
@@ -103,14 +112,14 @@ namespace puffinn {
     template <typename T>
     class PooledHasher : public Hash {
         // The pool always outlives the hasher.
-        HashPool<T> *pool;
+        const HashPool<T> *pool;
         std::vector<unsigned int> indices;
         int bits_to_cut;
 
     public:
         // Create a hash function reusing the given pool.
         // The resulting hash consists of exactly the given number of bits.
-        PooledHasher(HashPool<T> *pool, size_t hash_length)
+        PooledHasher(const HashPool<T> *pool, size_t hash_length)
           : pool(pool)
         {
             auto& rand_gen = get_default_random_generator();
@@ -124,8 +133,9 @@ namespace puffinn {
 
         // It is assumed that the vector to hash has already been hashed in the pool, so no
         // argument is needed.
-        uint64_t operator()() const {
-            return (pool->concatenate_hash(indices)) >> bits_to_cut;
+        uint64_t operator()(HashSourceState* state) const {
+            auto pool_state = static_cast<HashPoolState*>(state);
+            return (pool->concatenate_hash(indices, pool_state->hashes.get())) >> bits_to_cut;
         }
     };
 

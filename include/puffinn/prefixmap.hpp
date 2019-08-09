@@ -93,8 +93,8 @@ namespace puffinn {
 
         // Add a vector to be included next time rebuild is called. 
         // Expects that the hash source was last reset with that vector.
-        void insert(uint32_t idx) {
-            rebuilding_data.push_back({ idx, (*hash_function)() });
+        void insert(uint32_t idx, HashSourceState* hash_state) {
+            rebuilding_data.push_back({ idx, (*hash_function)(hash_state) });
         }
 
         void rebuild() {
@@ -157,9 +157,9 @@ namespace puffinn {
         }
 
         // Construct a query object to search for the nearest neighbors of the given vector.
-        PrefixMapQuery create_query() const {
+        PrefixMapQuery create_query(HashSourceState* hash_state) const {
             g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash = (*hash_function)();
+            auto hash = (*hash_function)(hash_state);
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::CreateQuery);
             auto prefix = hash >> (hash_length-PREFIX_INDEX_BITS);

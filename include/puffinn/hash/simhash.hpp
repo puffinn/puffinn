@@ -54,7 +54,7 @@ namespace puffinn {
             return 1;
         }
 
-        float collision_probability(float similarity, int_fast8_t num_bits) {
+        float collision_probability(float similarity, int_fast8_t num_bits) const {
             if (num_bits == 0) {
                 return 1.0;
             } else {

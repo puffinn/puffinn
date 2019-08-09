@@ -35,6 +35,10 @@ namespace puffinn {
     template <typename T>
     class TensoredHasher;
 
+    struct TensoredHashState : HashSourceState {
+        std::vector<uint64_t> hashes;
+    };
+
     // Contains two sets of hashfunctions. Hash values are constructed by interleaving one hash
     // from the first set with one from the second set. The used hash values are chosen so as
     // to avoid using the same combination twice.
@@ -42,7 +46,6 @@ namespace puffinn {
     class TensoredHashSource : public HashSource<T> {
         IndependentHashSource<T> independent_hash_source;
         std::vector<std::unique_ptr<Hash>> hashers;
-        std::vector<uint64_t> hashes;
         unsigned int next_hash_idx = 0;
         unsigned int num_bits;
 
@@ -65,7 +68,6 @@ namespace puffinn {
             for (unsigned int i=0; i < independent_hash_source.get_size(); i++) {
                 hashers.push_back(independent_hash_source.sample());
             }
-            hashes.resize(hashers.size());
         }
 
         std::unique_ptr<Hash> sample() {
@@ -77,12 +79,15 @@ namespace puffinn {
                 index_pair.second);
         }
 
-        void reset(typename T::Sim::Format::Type* vec) {
-            independent_hash_source.reset(vec);
+        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
+            auto inner_state = independent_hash_source.reset(vec);
+
+            std::vector<uint64_t> hashes;
+            hashes.resize(hashers.size());
             // Store the hashes so that the final hash can be created by simply bitwise or-ing them together.
             #pragma omp parallel for
             for (unsigned int i=0; i < hashers.size(); i++) {
-                hashes[i] = intersperse_zero((*hashers[i])());
+                hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
             }
             // Store hashes shifted by one, so that lhs hashes and rhs hashes
             // do not overlap.
@@ -98,16 +103,20 @@ namespace puffinn {
                     hashes[i] >>= 1;
                 }
             }
+
+            auto state = std::make_unique<TensoredHashState>();
+            state->hashes = std::move(hashes);
+            return state;
         }
 
-        uint64_t hash(unsigned int lhs_idx, unsigned int rhs_idx) const {
-            return hashes[lhs_idx] | hashes[hashes.size()/2+rhs_idx];
+        uint64_t hash(unsigned int lhs_idx, unsigned int rhs_idx, TensoredHashState* state) const {
+            return state->hashes[lhs_idx] | state->hashes[state->hashes.size()/2+rhs_idx];
         }
 
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits
-        ) {
+        ) const {
             return independent_hash_source.collision_probability(similarity, num_bits);
         }
 
@@ -116,7 +125,7 @@ namespace puffinn {
             uint_fast32_t num_tables, 
             uint_fast32_t max_tables,
             float similarity
-        ) {
+        ) const {
             auto cur_left_bits = (hash_length+1)/2;
             auto cur_right_bits = hash_length-cur_left_bits;
 
@@ -149,7 +158,7 @@ namespace puffinn {
                 (1-last_lower_left_prob*last_lower_right_prob);
         }
 
-        uint_fast8_t get_bits_per_function() {
+        uint_fast8_t get_bits_per_function() const {
             return independent_hash_source.get_bits_per_function();
         }
 
@@ -172,8 +181,9 @@ namespace puffinn {
         {
         }
 
-        uint64_t operator()() const {
-            return source->hash(lhs_idx, rhs_idx);
+        uint64_t operator()(HashSourceState* state) const {
+            auto tensored_state = static_cast<TensoredHashState*>(state);
+            return source->hash(lhs_idx, rhs_idx, tensored_state);
         }
     };
 

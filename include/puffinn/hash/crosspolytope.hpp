@@ -82,7 +82,7 @@ namespace puffinn {
             }
         }
 
-        float get_collision_probability(float sim, int_fast8_t num_bits) {
+        float get_collision_probability(float sim, int_fast8_t num_bits) const {
             return probabilities[num_bits][(size_t)(sim/eps)];
         }
     };
@@ -222,7 +222,7 @@ namespace puffinn {
         float collision_probability(
             float similarity,
             int_fast8_t num_bits
-        ) {
+        ) const {
             return estimates.get_collision_probability(similarity, num_bits);
         }
     };
@@ -329,7 +329,7 @@ namespace puffinn {
         float collision_probability(
             float similarity,
             int_fast8_t num_bits
-        ) {
+        ) const {
             return estimates.get_collision_probability(similarity, num_bits);
         }
     };

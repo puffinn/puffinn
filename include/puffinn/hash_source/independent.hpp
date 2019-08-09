@@ -10,6 +10,11 @@ namespace puffinn {
     template <typename T>
     class IndependentHasher;
 
+    template <typename T>
+    struct IndependentHashSourceState : HashSourceState {
+        typename T::Sim::Format::Type* hashed_vec = nullptr;
+    };
+
     // A source of completely independent hash functions.
     template <typename T>
     class IndependentHashSource : public HashSource<T> {
@@ -19,8 +24,6 @@ namespace puffinn {
         uint_fast8_t bits_per_function;
         unsigned int next_function = 0;
         unsigned int bits_to_cut;
-
-        typename T::Sim::Format::Type* hashed_vec = nullptr;
     
     public:
         IndependentHashSource(
@@ -44,7 +47,10 @@ namespace puffinn {
             }
         }
 
-        uint64_t hash(unsigned int first_hash) const {
+        uint64_t hash(
+            unsigned int first_hash, 
+            typename T::Sim::Format::Type* hashed_vec
+        ) const {
             uint64_t res = 0;
             for (unsigned int i=0; i < functions_per_hasher; i++) {
                 res <<= bits_per_function;
@@ -53,12 +59,14 @@ namespace puffinn {
             return (res >> bits_to_cut);
         }
 
-        void reset(typename T::Sim::Format::Type* vec) {
-            hashed_vec = vec;    
+        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
+            auto state = std::make_unique<IndependentHashSourceState<T>>();
+            state->hashed_vec = vec;
+            return state;
         }
 
         // Retrieve the number of functions this source can create.
-        size_t get_size() {
+        size_t get_size() const {
             return hash_functions.size()/functions_per_hasher;
         }
 
@@ -68,14 +76,14 @@ namespace puffinn {
             return res;
         }
 
-        uint_fast8_t get_bits_per_function() {
+        uint_fast8_t get_bits_per_function() const {
             return bits_per_function;
         }
 
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits
-        ) {
+        ) const {
             return hash_family.collision_probability(similarity, num_bits);
         }
 
@@ -84,7 +92,7 @@ namespace puffinn {
             uint_fast32_t tables,
             uint_fast32_t max_tables,
             float kth_similarity
-        ) {
+        ) const {
             float col_prob =
                 this->concatenated_collision_probability(hash_length, kth_similarity);
             float last_prob =
@@ -109,8 +117,9 @@ namespace puffinn {
         {
         }
 
-        uint64_t operator()() const {
-            return source->hash(first_function);
+        uint64_t operator()(HashSourceState* state) const {
+            auto independent_state = static_cast<IndependentHashSourceState<T>*>(state); 
+            return source->hash(first_function, independent_state->hashed_vec);
         }
     };
 

@@ -25,22 +25,22 @@ namespace filterer_test {
 
         std::vector<float> query({1, 0});
         auto stored = to_stored_type<UnitVectorFormat>(query, dataset.get_description());
-        filterer.reset(stored.get());
+        auto sketches = filterer.reset(stored.get());
 
         // Anything initially passes
         for (size_t i=0; i < NUM_SKETCHES; i++) {
-            REQUIRE(filterer.passes_filter(1, i));
+            REQUIRE(sketches.passes_filter(filterer.get_sketch(1, i), i));
         }
 
-        filterer.update_max_sketch_diff(1.0);
+        sketches.max_sketch_diff = filterer.get_max_sketch_diff(1.0);
         for (size_t i=0; i < NUM_SKETCHES; i++) {
-            REQUIRE(filterer.passes_filter(0, i));
-            REQUIRE(!filterer.passes_filter(1, i));
+            REQUIRE(sketches.passes_filter(filterer.get_sketch(0, i), i));
+            REQUIRE(!sketches.passes_filter(filterer.get_sketch(1, i), i));
         }
 
-        filterer.update_max_sketch_diff(0.0);
+        sketches.max_sketch_diff = filterer.get_max_sketch_diff(0.0);
         for (size_t i=0; i < NUM_SKETCHES; i++) {
-            REQUIRE(filterer.passes_filter(1, i));
+            REQUIRE(sketches.passes_filter(filterer.get_sketch(1, i), i));
         }
     }
 

@@ -121,11 +121,11 @@ namespace puffinn {
             return Function(TabulationHash(rng), perm);
         }
 
-        unsigned int bits_per_function() {
+        unsigned int bits_per_function() const {
             return ceil_log(set_size);
         }
 
-        float collision_probability(float similarity, int_fast8_t num_bits) {
+        float collision_probability(float similarity, int_fast8_t num_bits) const {
             // Number of hashes that would collide with the given number of bits.
             float num_possible_hashes =
                 static_cast<float>(set_size)/std::min(1u << num_bits, set_size)-1.0;
@@ -169,11 +169,11 @@ namespace puffinn {
             return Function(minhash.sample());
         }
 
-        unsigned int bits_per_function() {
+        unsigned int bits_per_function() const {
             return 1;
         }
 
-        float collision_probability(float similarity, int_fast8_t num_bits) {
+        float collision_probability(float similarity, int_fast8_t num_bits) const {
             if (num_bits > 1) { num_bits = 1; }
             return minhash.collision_probability(similarity, num_bits);
         }
