@@ -6,8 +6,8 @@
 
 #include "puffinn/typedefs.hpp"
 
-const bool PUFFINN_PERFORMANCE = true;
-const bool PUFFINN_PERFORMANCE_TIME = true;
+const bool PUFFINN_PERFORMANCE = false;
+const bool PUFFINN_PERFORMANCE_TIME = false;
 
 namespace puffinn {
     const size_t NUM_TIMED_COMPUTATIONS = 11;
@@ -59,11 +59,14 @@ namespace puffinn {
             queries.clear();
             // Add an empty query so that methods can be called without starting a query.
             // This can happen in tests.
+            queries.push_back(QueryMetrics());
             new_query();
         }
 
         void new_query() {
-            queries.push_back(QueryMetrics());
+            if (PUFFINN_PERFORMANCE || PUFFINN_PERFORMANCE_TIME) {
+                queries.push_back(QueryMetrics());
+            }
         }
 
         void add_distance_computations(unsigned int count) {
@@ -115,10 +118,12 @@ namespace puffinn {
 
         // Store that the given computation has taken the time since last call to start_timer().
         void store_time(Computation computation) {
-            int computation_idx = static_cast<int>(computation);
-            auto end_time = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> duration = end_time-start_time[computation_idx];
-            current_query().time[computation_idx] += duration.count();
+            if (PUFFINN_PERFORMANCE_TIME) {
+                int computation_idx = static_cast<int>(computation);
+                auto end_time = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> duration = end_time-start_time[computation_idx];
+                current_query().time[computation_idx] += duration.count();
+            }
         }
     };
 
