@@ -12,6 +12,8 @@ namespace puffinn {
     template <typename T>
     class HashSource {
     public:
+        virtual ~HashSource() {}
+
         // Sample a random hash function from this source.
         virtual std::unique_ptr<Hash> sample() = 0;
 
@@ -55,6 +57,7 @@ namespace puffinn {
     // A hash function sampled from a HashSource.
     class Hash {
     public:
+        virtual ~Hash() {}
         // Compute the hash of the vector that the source was last reset with.
         //
         // It can be assumed that the state is created by the same source as the hash.
@@ -72,5 +75,16 @@ namespace puffinn {
         ) const = 0;
 
         virtual std::unique_ptr<HashSourceArgs<T>> copy() const = 0;
+
+        virtual uint64_t memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int num_tables,
+            unsigned int num_bits
+        ) const = 0;
+
+        virtual uint64_t function_memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int num_bits
+        ) const = 0;
     };
 }

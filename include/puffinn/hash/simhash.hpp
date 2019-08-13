@@ -27,7 +27,13 @@ namespace puffinn {
     };
 
     /// ``SimHash`` does not take any arguments.
-    struct SimHashArgs {};
+    struct SimHashArgs {
+        uint64_t memory_usage(DatasetDescription<UnitVectorFormat> dataset) const {
+            return sizeof(SimHashFunction) + dataset.storage_len*sizeof(UnitVectorFormat::Type);
+        }
+
+        void set_no_preprocessing() {}
+    };
 
     /// A one-bit hash function, which creates a random hyperplane at the origin
     /// and hashes points depending on which side of the plane the point is located on.

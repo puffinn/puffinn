@@ -70,6 +70,7 @@ namespace puffinn {
         // Construction of the hash source is delayed until the
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
+        std::unique_ptr<HashSourceArgs<TSketch>> sketch_args;
 
         constexpr static IndependentHashArgs<THash> DEFAULT_HASH_SOURCE
             = IndependentHashArgs<THash>();
@@ -104,7 +105,8 @@ namespace puffinn {
                     NUM_SKETCHES,
                     NUM_FILTER_HASHBITS)),
             memory_limit(memory_limit),
-            hash_args(hash_args.copy())
+            hash_args(hash_args.copy()),
+            sketch_args(sketch_args.copy())
         {
             static_assert(
                 std::is_same<TSim, typename THash::Sim>::value
@@ -135,19 +137,29 @@ namespace puffinn {
                 omp_set_num_threads(num_threads);
             }
 
-            // Upper bound on the size of the data stored inside hash buckets.
-            unsigned int table_size =
-                dataset.get_size() * (sizeof(uint32_t) + sizeof(LshDatatype))
-                + sizeof(PrefixMap<THash>);
-            unsigned int dataset_bytes =
-                dataset.get_capacity() * dataset.get_description().storage_len
-                * sizeof(typename TSim::Format::Type);
-            auto necessary_bytes = dataset_bytes;
+            auto desc = dataset.get_description();
+            auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
+            auto filterer_bytes = Filterer<TSketch>::memory_usage(
+                sketch_args.get(),
+                desc,
+                dataset.get_size());
+
+            uint64_t required_mem = dataset.memory_usage()+filterer_bytes; 
+            unsigned int num_tables = 0;
+            uint64_t table_mem = 0;
+            while (required_mem + table_mem < memory_limit) {
+                num_tables++;
+                table_mem = hash_args->memory_usage(desc, num_tables, MAX_HASHBITS)
+                    + num_tables * table_bytes;
+            }
+            if (num_tables != 0) {
+                num_tables--;
+            }
+
             // Not enough memory for at least one table
-            if (memory_limit < necessary_bytes+table_size) {
+            if (num_tables == 0) {
                 throw std::invalid_argument("insufficient memory");
             }
-            unsigned int num_tables = (memory_limit-necessary_bytes)/table_size;
 
             // if rebuild has been called before
             if (hash_source) {
@@ -163,6 +175,7 @@ namespace puffinn {
                     num_tables,
                     MAX_HASHBITS);
                 // Construct the prefixmaps.
+                lsh_maps.reserve(num_tables);
                 for (unsigned int repetition=0; repetition < num_tables; repetition++) {
                     lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
                 }
@@ -170,6 +183,10 @@ namespace puffinn {
 
             // Compute sketches for the new vectors.
             filterer.add_sketches(dataset, last_rebuild);
+
+            for (auto& map : lsh_maps) {
+                map.reserve(dataset.get_size());
+            }
 
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.

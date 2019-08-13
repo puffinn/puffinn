@@ -97,6 +97,15 @@ namespace puffinn {
             rebuilding_data.push_back({ idx, (*hash_function)(hash_state) });
         }
 
+        // Reserve the correct amount of memory before inserting.
+        void reserve(size_t size) {
+            if (hashes.size() == 0) {
+                rebuilding_data.reserve(size);
+            } else {
+                rebuilding_data.reserve(size-(hashes.size()-2*SEGMENT_SIZE));
+            }
+        }
+
         void rebuild() {
             // A value whose prefix will never match that of a query vector, as long as less than 32
             // hash bits are used.
@@ -117,26 +126,26 @@ namespace puffinn {
                     return a.second < b.second;
                 }
             );
-
-            // Move data back
-            hashes.clear();
-            indices.clear();
-            hashes.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
-            indices.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
+            std::vector<LshDatatype> new_hashes;
+            new_hashes.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
+            std::vector<uint32_t> new_indices;
+            new_indices.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
 
             // Pad with SEGMENT_SIZE values on each size to remove need for bounds check.
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                hashes.push_back(IMPOSSIBLE_PREFIX);
-                indices.push_back(0);
+                new_hashes.push_back(IMPOSSIBLE_PREFIX);
+                new_indices.push_back(0);
             }
             for (auto v : rebuilding_data) {
-                indices.push_back(v.first);
-                hashes.push_back(v.second);
+                new_indices.push_back(v.first);
+                new_hashes.push_back(v.second);
             }
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                hashes.push_back(IMPOSSIBLE_PREFIX);
-                indices.push_back(0);
+                new_hashes.push_back(IMPOSSIBLE_PREFIX);
+                new_indices.push_back(0);
             }
+            hashes = std::move(new_hashes);
+            indices = std::move(new_indices);
 
             // Build prefix_index data structure.
             // Index of the first occurence of the prefix
@@ -151,7 +160,7 @@ namespace puffinn {
                 prefix_index[prefix] = SEGMENT_SIZE+idx;
             }
             prefix_index[1 << PREFIX_INDEX_BITS] = SEGMENT_SIZE+rebuilding_data.size();
-            
+
             rebuilding_data.clear();
             rebuilding_data.shrink_to_fit();
         }
@@ -214,6 +223,14 @@ namespace puffinn {
                 query.prefix_mask <<= 1;
                 return std::make_pair(&indices[start_idx], &indices[end_idx]);
             }
+        }
+
+        static uint64_t memory_usage(size_t size, uint64_t function_size) {
+            size = size+2*SEGMENT_SIZE;
+            return sizeof(PrefixMap)
+                + size*sizeof(uint32_t)
+                + size*sizeof(LshDatatype)
+                + function_size; 
         }
     };
 }

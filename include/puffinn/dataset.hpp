@@ -90,5 +90,10 @@ namespace puffinn {
         void clear() {
             inserted_vectors = 0;
         }
+
+        uint64_t memory_usage() const {
+            return sizeof(Dataset<T>)
+                + capacity*storage_len*sizeof(typename T::Type);
+        }
     };
 }

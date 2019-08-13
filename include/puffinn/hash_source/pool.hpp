@@ -128,6 +128,7 @@ namespace puffinn {
             for (size_t i=0; i < hash_length; i += bits_per_function) {
                 indices.push_back(random_idx(rand_gen));
             }
+            indices.shrink_to_fit();
             bits_to_cut = pool->get_bits_per_function()*indices.size()-hash_length;
         }
 
@@ -174,6 +175,28 @@ namespace puffinn {
 
         std::unique_ptr<HashSourceArgs<T>> copy() const {
             return std::make_unique<HashPoolArgs<T>>(*this);
+        }
+
+        uint64_t memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int /*num_tables*/,
+            unsigned int /*num_bits*/
+        ) const {
+            typename T::Args args_copy(args);
+            args_copy.set_no_preprocessing();
+            auto bits = T(dataset, args_copy).bits_per_function();
+            return sizeof(HashPool<T>)
+                + pool_size/bits*args.memory_usage(dataset);
+        }
+
+        uint64_t function_memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int num_bits
+        ) const {
+            typename T::Args args_copy(args);
+            args_copy.set_no_preprocessing();
+            auto bits = T(dataset, args_copy).bits_per_function();
+            return sizeof(PooledHasher<T>)+(num_bits+bits-1)/bits*sizeof(unsigned int);
         }
     };
 }

@@ -211,5 +211,24 @@ namespace puffinn {
         std::unique_ptr<HashSourceArgs<T>> copy() const {
             return std::make_unique<TensoredHashArgs<T>>(*this);
         }
+
+        uint64_t memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int num_tables,
+            unsigned int num_bits
+        ) const {
+            IndependentHashArgs<T> inner_args;
+            auto inner_size = 2*std::ceil(std::sqrt(static_cast<float>(num_tables)));
+            return sizeof(TensoredHashSource<T>)
+                + inner_args.memory_usage(dataset, inner_size, (num_bits+1)/2)
+                + inner_size*inner_args.function_memory_usage(dataset, num_bits);
+        }
+
+        uint64_t function_memory_usage(
+            DatasetDescription<typename T::Sim::Format>,
+            unsigned int /*num_bits*/
+        ) const {
+            return sizeof(TensoredHasher<T>);
+        }
     };
 }

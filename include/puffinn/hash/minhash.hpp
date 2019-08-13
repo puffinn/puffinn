@@ -51,19 +51,6 @@ namespace puffinn {
         }
     };
 
-    /// ``MinHash`` does not take any arguments.
-    struct MinHashArgs {
-        /// Give each token a different unique value in each function.
-        /// Without this, some near neighbors are very unlikely to be found.
-        /// However doing so requires additional memory and preprocessing.
-        bool randomize_tokens;
-
-        constexpr MinHashArgs()
-          : randomize_tokens(true)
-        {
-        }
-    };
-
     class MinHashFunction {
         TabulationHash hash;
         BitPermutation permutation;
@@ -85,6 +72,32 @@ namespace puffinn {
             return permutation(min_token);
         }
     };
+
+    /// ``MinHash`` does not take any arguments.
+    struct MinHashArgs {
+        /// Give each token a different unique value in each function.
+        /// Without this, some near neighbors are very unlikely to be found.
+        /// However doing so requires additional memory and preprocessing.
+        bool randomize_tokens;
+
+        constexpr MinHashArgs()
+          : randomize_tokens(true)
+        {
+        }
+
+        void set_no_preprocessing() {
+            // randomize_tokens runs when sampling
+        }
+
+        uint64_t memory_usage(DatasetDescription<SetFormat> dataset) const {
+            uint64_t perm_mem = 0;
+            if (randomize_tokens) {
+                perm_mem = dataset.args * sizeof(uint32_t);
+            }
+            return sizeof(MinHashFunction)+perm_mem;
+        }
+    };
+
 
     /// A multi-bit hash function for sets, which selects the minimum token 
     /// when ordered by a random permutation.

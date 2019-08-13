@@ -145,5 +145,27 @@ namespace puffinn {
         std::unique_ptr<HashSourceArgs<T>> copy() const {
             return std::make_unique<IndependentHashArgs<T>>(*this);
         }
+
+        uint64_t memory_usage(
+            DatasetDescription<typename T::Sim::Format> dataset,
+            unsigned int num_tables,
+            unsigned int num_bits
+        ) const {
+            typename T::Args args_copy(args);
+            // Ensure that no expensive preprocessing is done,
+            // as this method should be fast.
+            args_copy.set_no_preprocessing();
+            auto bits = T(dataset, args_copy).bits_per_function();
+            auto funcs_per_hash = (num_bits+bits-1)/bits;
+            return sizeof(IndependentHashSource<T>)
+                + funcs_per_hash*num_tables*args.memory_usage(dataset);
+        }
+
+        uint64_t function_memory_usage(
+            DatasetDescription<typename T::Sim::Format>,
+            unsigned int /*num_bits*/
+        ) const {
+            return sizeof(IndependentHasher<T>);
+        }
     };
 }

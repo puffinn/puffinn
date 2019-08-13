@@ -94,7 +94,7 @@ namespace puffinn {
         // Random +-1 diagonal matrix for each rotation in each application of cross-polytope.
         // Hash idx * num_rotations * dimensions as power of 2
         // Shared_ptr as functors must be copy-constructible
-        std::shared_ptr<int> random_signs;
+        std::shared_ptr<int8_t> random_signs;
 
         // Calculate a unique value depending on which axis is closest to the given floating point
         // vector.
@@ -126,7 +126,7 @@ namespace puffinn {
             log_dimensions = ceil_log(dimensions);
 
             int random_signs_len = num_rotations*(1 << log_dimensions);
-            random_signs = std::unique_ptr<int>(new int[random_signs_len]);
+            random_signs = std::shared_ptr<int8_t>(new int8_t[random_signs_len]);
 
             std::uniform_int_distribution<int_fast32_t> sign_distribution(0, 1);
             auto& generator = get_default_random_generator();
@@ -137,27 +137,27 @@ namespace puffinn {
 
         // Hash the given vector
         LshDatatype operator()(int16_t* vec) const {
-            std::unique_ptr<float> rotated_vec(new float[1 << log_dimensions]);
+            float rotated_vec[1 << log_dimensions];
 
             // Reset rotation vec
             for (int i=0; i<dimensions; i++) {
-                rotated_vec.get()[i] = UnitVectorFormat::from_16bit_fixed_point(vec[i]);
+                rotated_vec[i] = UnitVectorFormat::from_16bit_fixed_point(vec[i]);
             }
             for (int i=dimensions; i < (1 << log_dimensions); i++) {
-                rotated_vec.get()[i] = 0.0f;
+                rotated_vec[i] = 0.0f;
             }
 
             for (unsigned int rotation = 0; rotation < num_rotations; rotation++) {
                 // Multiply by a diagonal +-1 matrix.
                 int sign_idx = rotation*(1 << log_dimensions);
                 for (int i=0; i < (1 << log_dimensions); i++) {
-                    rotated_vec.get()[i] *= random_signs.get()[sign_idx+i];
+                    rotated_vec[i] *= random_signs.get()[sign_idx+i];
                 }
                 // Apply the fast hadamard transform
-                fht(rotated_vec.get(), log_dimensions);
+                fht(rotated_vec, log_dimensions);
             }
 
-            return encode_closest_axis(rotated_vec.get());
+            return encode_closest_axis(rotated_vec);
         }
     };
 
@@ -175,6 +175,16 @@ namespace puffinn {
               estimation_repetitions(1000),
               estimation_eps(5e-3)
         {
+        }
+
+        uint64_t memory_usage(DatasetDescription<UnitVectorFormat> dataset) const {
+            return sizeof(FHTCrossPolytopeHashFunction)
+            + num_rotations*(1 << ceil_log(dataset.args))*sizeof(int8_t);
+        }
+
+        void set_no_preprocessing() {
+            estimation_repetitions = 0;
+            estimation_eps = 2.0;
         }
     };
 
@@ -227,20 +237,6 @@ namespace puffinn {
         }
     };
 
-    /// Arguments for the cross-polytope LSH.
-    struct CrossPolytopeArgs {
-        /// Number of samples used to estimate collision probabilities.
-        unsigned int estimation_repetitions;
-        /// Granularity of collision probability estimation.
-        float estimation_eps;
-
-        constexpr CrossPolytopeArgs()
-          : estimation_repetitions(1000),
-            estimation_eps(5e-3)
-        {
-        }
-    };
-
     class CrossPolytopeHashFunction {
         unsigned int dimensions;
         unsigned int padded_dimensions;
@@ -282,6 +278,30 @@ namespace puffinn {
                 }
             }
             return res;
+        }
+    };
+
+    /// Arguments for the cross-polytope LSH.
+    struct CrossPolytopeArgs {
+        /// Number of samples used to estimate collision probabilities.
+        unsigned int estimation_repetitions;
+        /// Granularity of collision probability estimation.
+        float estimation_eps;
+
+        constexpr CrossPolytopeArgs()
+          : estimation_repetitions(1000),
+            estimation_eps(5e-3)
+        {
+        }
+
+        void set_no_preprocessing() {
+            estimation_repetitions = 0;
+            estimation_eps = 2.0;
+        }
+
+        uint64_t memory_usage(DatasetDescription<UnitVectorFormat> dataset) const {
+            return sizeof(CrossPolytopeHashFunction)
+                + dataset.args*dataset.storage_len*sizeof(int16_t);
         }
     };
 

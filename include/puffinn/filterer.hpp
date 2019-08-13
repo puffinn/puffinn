@@ -46,6 +46,16 @@ namespace puffinn {
             }
         }
 
+        static uint64_t memory_usage(
+            HashSourceArgs<T>* hash_source,
+            DatasetDescription<typename T::Sim::Format> dataset,
+            size_t dataset_size
+        ) {
+            return hash_source->memory_usage(dataset, NUM_SKETCHES, NUM_FILTER_HASHBITS)
+                + NUM_SKETCHES*dataset_size*sizeof(FilterLshDatatype)
+                + NUM_SKETCHES*hash_source->function_memory_usage(dataset, NUM_FILTER_HASHBITS);
+        }
+
         void add_sketches(
             const Dataset<typename T::Sim::Format>& dataset,
             uint32_t first_index
