@@ -235,4 +235,36 @@ namespace collection {
         REQUIRE_NOTHROW(index.insert(std::vector<unsigned int>{0, 4}));
         REQUIRE_THROWS(index.insert(std::vector<unsigned int>{5}));
     }
+
+    TEST_CASE("Rebuild") {
+        int dims = 100;
+        int n = 5000;
+        float recall = 0.8;
+        int k = 10;
+        int samples = 100;
+
+        Index<CosineSimilarity> index(dims, 512*MB);
+        for (int rebuilds = 0; rebuilds < 3; rebuilds++) {
+            for (int i=0; i < n; i++) {
+                index.insert(UnitVectorFormat::generate_random(dims));
+            }
+            index.rebuild();
+
+            int num_correct = 0;
+            float expected_correct = recall*k*samples;
+            for (int sample=0; sample < samples; sample++) {
+                auto query = UnitVectorFormat::generate_random(dims);
+                auto exact = index.search_bf(query, k);
+                auto res = index.search(query, k, recall);
+
+                REQUIRE(res.size() == k);
+                for (auto i : exact) {
+                    if (std::count(res.begin(), res.end(), i) != 0) {
+                        num_correct++;
+                    }
+                }
+            }
+            REQUIRE(num_correct >= expected_correct);
+        }
+    }
 }
