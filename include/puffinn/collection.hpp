@@ -110,7 +110,8 @@ namespace puffinn {
         {
             static_assert(
                 std::is_same<TSim, typename THash::Sim>::value
-                && std::is_same<TSim, typename TSketch::Sim>::value);
+                && std::is_same<TSim, typename TSketch::Sim>::value,
+                "Hash function not applicable to similarity measure");
         }
 
         /// Insert a value into the index.
