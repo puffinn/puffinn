@@ -88,6 +88,8 @@ namespace puffinn {
             }
         }
 
+        static void free(Type&) {}
+
         static std::vector<float> generate_random(unsigned int dimensions) {
             std::normal_distribution<float> normal_distribution(0.0, 1.0);
             auto& generator = get_default_random_generator();

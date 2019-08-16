@@ -43,6 +43,37 @@ namespace puffinn {
         {
         }
 
+        ~Dataset() {
+            for (size_t i=0; i < inserted_vectors*storage_len; i++) {
+                T::free(data.get()[i]);
+            }
+        }
+
+        Dataset(Dataset&& other)
+          : args(other.args),
+            storage_len(other.storage_len),
+            inserted_vectors(other.inserted_vectors),
+            capacity(other.capacity),
+            data(std::move(other.data))
+        {
+        }
+
+        Dataset& operator=(Dataset&& rhs) {
+            if (this != &rhs) {
+                if (data) {
+                    for (size_t i=0; i < inserted_vectors*storage_len; i++) {
+                        T::free(data.get()[i]);
+                    }
+                }
+                args = rhs.args;
+                storage_len = rhs.storage_len;
+                inserted_vectors = rhs.inserted_vectors;
+                capacity = rhs.capacity;
+                data = std::move(rhs.data);
+            }
+            return *this;
+        }
+
         // Access the vector at the given position.
         typename T::Type* operator[](unsigned int idx) const {
             return &data.get()[idx*storage_len];

@@ -42,6 +42,10 @@ namespace puffinn {
             std::sort(vec->begin(), vec->end());
         }
 
+        static void free(Type& vec) {
+            vec.~vector();
+        }
+
         static std::vector<uint32_t> generate_random(unsigned int dimensions) {
             // Probability of each element to be included in the set.
             const float INCLUSION_PROB = 0.3;
