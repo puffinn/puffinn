@@ -92,8 +92,13 @@ namespace puffinn {
         }
 
         uint64_t memory_usage() const {
+            uint64_t inner_memory = 0;
+            for (size_t i=0; i < inserted_vectors*storage_len; i++) {
+                inner_memory += T::inner_memory_usage(data.get()[i]); 
+            }
             return sizeof(Dataset<T>)
-                + capacity*storage_len*sizeof(typename T::Type);
+                + capacity*storage_len*sizeof(typename T::Type)
+                + inner_memory;
         }
     };
 }

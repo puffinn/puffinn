@@ -19,6 +19,10 @@ namespace puffinn {
             return 1;
         }
 
+        static uint64_t inner_memory_usage(Type& vec) {
+            return vec.capacity()*sizeof(uint32_t);
+        }
+
         static void store(
             const std::vector<uint32_t>& set,
             std::vector<uint32_t>* storage,

@@ -54,6 +54,10 @@ namespace puffinn {
             return dimensions;
         }
 
+        static uint64_t inner_memory_usage(Type&) {
+            return 0;
+        }
+
         static void store(
             const std::vector<float>& input,
             Type* storage,
