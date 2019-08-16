@@ -131,8 +131,6 @@ public:
     ) {
         if (metric == "angular") {
             init_angular(dimensions, memory_limit, kwargs);
-        } else if (metric == "euclidean") {
-            init_euclidean(dimensions, memory_limit, kwargs);
         } else if (metric == "jaccard") {
             init_jaccard(dimensions, memory_limit, kwargs);
         } else {
@@ -206,7 +204,7 @@ private:
         set(args.num_rotations, params, "num_rotations");
     }
 
-    void set_hash_args(MinHash::Args& args, const py::dict&) {
+    void set_hash_args(MinHash::Args& args, const py::dict& params) {
         set(args.randomize_tokens, params, "randomize_tokens");
     }
 
@@ -261,31 +259,6 @@ private:
                 *get_hash_source_args<CrossPolytopeHash>(kwargs));
         } else if (hash_function == "fht_crosspolytope") {
             real_table = std::make_unique<AngularIndex<FHTCrossPolytopeHash>>(        
-                dimensions,
-                memory_limit,
-                *get_hash_source_args<FHTCrossPolytopeHash>(kwargs));
-        } else {
-            throw std::invalid_argument("hash_function");
-        }
-    }
-
-    void init_euclidean(unsigned int dimensions, uint64_t memory_limit, const py::kwargs& kwargs) {
-        std::string hash_function = "fht_crosspolytope";
-        if (kwargs.contains("hash_function")) {
-            hash_function = py::cast<std::string>(kwargs["hash_function"]);
-        }
-        if (hash_function == "simhash") {
-            real_table = std::make_unique<EuclideanIndex<SimHash>>(
-                dimensions,
-                memory_limit,
-                *get_hash_source_args<SimHash>(kwargs));
-        } else if (hash_function == "crosspolytope") {
-            real_table = std::make_unique<EuclideanIndex<CrossPolytopeHash>>(
-                dimensions,
-                memory_limit,
-                *get_hash_source_args<CrossPolytopeHash>(kwargs));
-        } else if (hash_function == "fht_crosspolytope") {
-            real_table = std::make_unique<EuclideanIndex<FHTCrossPolytopeHash>>(        
                 dimensions,
                 memory_limit,
                 *get_hash_source_args<FHTCrossPolytopeHash>(kwargs));
