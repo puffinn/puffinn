@@ -268,7 +268,7 @@ namespace puffinn {
             for (unsigned int i=0; i<(1u << ceil_log(dimensions)); i++) {
                 auto matrix_row = &random_matrix.get()[i*padded_dimensions];
                 // dot product
-                auto rotated_i = dot_product_i16_avx2(vec, matrix_row, dimensions);
+                auto rotated_i = dot_product_i16(vec, matrix_row, dimensions);
                 if (rotated_i > max_abs_dot) {
                     max_abs_dot = rotated_i;
                     res = i;

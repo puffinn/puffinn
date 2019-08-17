@@ -21,7 +21,7 @@ namespace puffinn {
 
         // Hash the given vector.
         LshDatatype operator()(int16_t* vec) const {
-            auto dot = dot_product_i16_avx2(hash_vec.get(), vec, dimensions);
+            auto dot = dot_product_i16(hash_vec.get(), vec, dimensions);
             return dot >= UnitVectorFormat::to_16bit_fixed_point(0.0);
         }
     };
