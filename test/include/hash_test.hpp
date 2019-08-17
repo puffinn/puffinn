@@ -132,12 +132,6 @@ namespace hash {
         REQUIRE(minhash.collision_probability(0.5, 1)-(0.5+0.5*(49.0/99.0)) < 1e-6);
 
         MinHashArgs args;
-        args.randomize_tokens = false;
-        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 7, args);
-        test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3, args);
-        test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000, 1, args);
-
-        args.randomize_tokens = true;
         test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 7, args);
         test_hash_collision_probability<MinHash, JaccardSimilarity>(100, 4000, 3, args);
         test_hash_collision_probability<MinHash1Bit, JaccardSimilarity>(100, 4000, 1, args);
@@ -169,7 +163,6 @@ namespace hash {
         Dataset<SetFormat> dataset(dimensions);
 
         MinHashArgs args;
-        args.randomize_tokens = true;
         auto family = MinHash1Bit(dataset.get_description(), args);
 
         auto a = to_stored_type<SetFormat>(std::vector<uint32_t>{0}, dataset.get_description());

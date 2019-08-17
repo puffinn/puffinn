@@ -205,7 +205,7 @@ private:
     }
 
     void set_hash_args(MinHash::Args& args, const py::dict& params) {
-        set(args.randomize_tokens, params, "randomize_tokens");
+        set(args.randomized_bits, params, "randomized_bits");
     }
 
     template <typename T>

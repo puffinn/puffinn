@@ -30,24 +30,31 @@ namespace puffinn {
         }
     };
 
+    // Randomize the lower bits to another unique value.
     class BitPermutation {
+        unsigned int num_bits;
         std::vector<uint32_t> perm;
     public:
         BitPermutation() {}
 
-        BitPermutation(std::mt19937_64& rng, unsigned int universe_size) {
-            for (unsigned int i=0; i < universe_size; i++) {
+        BitPermutation(std::mt19937_64& rng, unsigned int universe_size, unsigned int num_bits)
+          : num_bits(num_bits)
+        {
+            for (unsigned int i=0; i < std::min(universe_size, (1u << num_bits)); i++) {
                 perm.push_back(i);
             }
             std::shuffle(perm.begin(), perm.end(), rng);
         }
 
         LshDatatype operator()(LshDatatype v) const {
-            if (v < perm.size()) {
-                return perm[v];
-            } else {
-                return v;
+            if (num_bits != 0) {
+                auto mask = (1 << num_bits)-1;
+                auto lower = v & mask;
+                auto lower_perm = perm[lower];
+                // assemble permuted lower bits and the unchanged upper bits.
+                return (v & (~mask)) | lower_perm;
             }
+            return v;
         }
     };
 
@@ -73,15 +80,19 @@ namespace puffinn {
         }
     };
 
-    /// ``MinHash`` does not take any arguments.
+    /// Arguments for ``MinHash``.
     struct MinHashArgs {
-        /// Give each token a different unique value in each function.
-        /// Without this, some near neighbors are very unlikely to be found.
-        /// However doing so requires additional memory and preprocessing.
-        bool randomize_tokens;
+        /// Randomize a number of the lower bits in minhash values.
+        ///
+        /// For some pairs of sets the collision probability does not increase when using partial
+        /// hashes.
+        /// This means that the achieved recall can be lower than
+        /// expected.
+        /// By randomizing parts of the tokens, this becomes unlikely to happen.
+        unsigned int randomized_bits;
 
         constexpr MinHashArgs()
-          : randomize_tokens(true)
+          : randomized_bits(4)
         {
         }
 
@@ -90,10 +101,8 @@ namespace puffinn {
         }
 
         uint64_t memory_usage(DatasetDescription<SetFormat> dataset) const {
-            uint64_t perm_mem = 0;
-            if (randomize_tokens) {
-                perm_mem = dataset.args * sizeof(uint32_t);
-            }
+            auto perm_len = std::min(dataset.args, (1u << randomized_bits));
+            uint64_t perm_mem = perm_len * sizeof(uint32_t);
             return sizeof(MinHashFunction)+perm_mem;
         }
     };
@@ -127,10 +136,7 @@ namespace puffinn {
         }
 
         Function sample() {
-            BitPermutation perm;
-            if (args.randomize_tokens) {
-                perm = BitPermutation(rng, set_size);
-            }
+            BitPermutation perm(rng, set_size, args.randomized_bits);
             return Function(TabulationHash(rng), perm);
         }
 
