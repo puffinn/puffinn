@@ -2,6 +2,9 @@
 
 #include "puffinn/format/set.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
+
+#include <istream>
+#include <ostream>
 #include <random>
 
 namespace puffinn {
@@ -19,6 +22,20 @@ namespace puffinn {
                 t3[i] = rng();
                 t4[i] = rng();
             }
+        }
+
+        TabulationHash(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&t1[0]), 256*sizeof(uint64_t));
+            in.read(reinterpret_cast<char*>(&t2[0]), 256*sizeof(uint64_t));
+            in.read(reinterpret_cast<char*>(&t3[0]), 256*sizeof(uint64_t));
+            in.read(reinterpret_cast<char*>(&t4[0]), 256*sizeof(uint64_t));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&t1[0]), 256*sizeof(uint64_t));
+            out.write(reinterpret_cast<const char*>(&t2[0]), 256*sizeof(uint64_t));
+            out.write(reinterpret_cast<const char*>(&t3[0]), 256*sizeof(uint64_t));
+            out.write(reinterpret_cast<const char*>(&t4[0]), 256*sizeof(uint64_t));
         }
 
         uint64_t operator()(uint32_t val) const {
@@ -46,6 +63,25 @@ namespace puffinn {
             std::shuffle(perm.begin(), perm.end(), rng);
         }
 
+        BitPermutation(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&num_bits), sizeof(num_bits));
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            perm.reserve(len);
+            for (size_t i=0; i < len; i++) {
+                uint32_t v;
+                in.read(reinterpret_cast<char*>(&v), sizeof(uint32_t));
+                perm.push_back(v);
+            }
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&num_bits), sizeof(unsigned int));
+            size_t len = perm.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            out.write(reinterpret_cast<const char*>(&perm[0]), len*sizeof(uint32_t));
+        }
+
         LshDatatype operator()(LshDatatype v) const {
             if (num_bits != 0) {
                 auto mask = (1 << num_bits)-1;
@@ -64,6 +100,17 @@ namespace puffinn {
 
     public:
         MinHashFunction(TabulationHash hash, BitPermutation perm) : hash(hash), permutation(perm) {
+        }
+
+        MinHashFunction(std::istream& in)
+          : hash(in),
+            permutation(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            hash.serialize(out);
+            permutation.serialize(out);
         }
 
         LshDatatype operator()(std::vector<uint32_t>* vec) const {
@@ -96,6 +143,14 @@ namespace puffinn {
         {
         }
 
+        MinHashArgs(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&randomized_bits), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&randomized_bits), sizeof(unsigned int));
+        }
+
         void set_no_preprocessing() {
             // randomize_tokens runs when sampling
         }
@@ -122,7 +177,6 @@ namespace puffinn {
 
     private:
         Args args;
-        std::mt19937_64 rng;
         unsigned int set_size;
 
     public:
@@ -132,10 +186,22 @@ namespace puffinn {
             // minimum set size is 2.
             set_size(std::max(dataset.args, 2u))
         {
-            rng.seed(get_default_random_generator()());
+        }
+
+        MinHash(std::istream& in) {
+            args = Args(in);
+            in.read(reinterpret_cast<char*>(&set_size), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            args.serialize(out);
+            out.write(reinterpret_cast<const char*>(&set_size), sizeof(unsigned int));
         }
 
         Function sample() {
+            std::mt19937_64 rng;
+            rng.seed(get_default_random_generator()());
+
             BitPermutation perm(rng, set_size, args.randomized_bits);
             return Function(TabulationHash(rng), perm);
         }
@@ -163,6 +229,15 @@ namespace puffinn {
         {
         }
 
+        MinHash1BitFunction(std::istream& in)
+          : hash(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            hash.serialize(out);
+        }
+
         LshDatatype operator()(std::vector<uint32_t>* vec) const {
             return hash(vec)%2;
         }
@@ -182,6 +257,15 @@ namespace puffinn {
         MinHash1Bit(DatasetDescription<SetFormat> dataset, Args args)
           : minhash(dataset, args)
         {
+        }
+
+        MinHash1Bit(std::istream& in)
+          : minhash(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            minhash.serialize(out);
         }
 
         Function sample() {

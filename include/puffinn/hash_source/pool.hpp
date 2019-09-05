@@ -44,6 +44,30 @@ namespace puffinn {
             }
         }
 
+        HashPool(std::istream& in)
+          : hash_family(in)
+        {
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            hash_functions.reserve(len);
+            for (size_t i=0; i < len; i++) {
+                hash_functions.emplace_back(in);
+            }
+            in.read(reinterpret_cast<char*>(&bits_per_function), sizeof(uint_fast8_t));
+            in.read(reinterpret_cast<char*>(&bits_per_hasher), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            hash_family.serialize(out);
+            size_t len = hash_functions.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            for (auto& h : hash_functions) {
+                h.serialize(out);
+            }
+            out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
+            out.write(reinterpret_cast<const char*>(&bits_per_hasher), sizeof(unsigned int));
+        }
+
         std::unique_ptr<Hash> sample() {
             return std::make_unique<PooledHasher<T>>(this, bits_per_hasher);
         }
@@ -106,6 +130,10 @@ namespace puffinn {
         bool precomputed_hashes() const {
             return true;
         }
+
+        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
+            return std::make_unique<PooledHasher<T>>(in, this);
+        }
     };
 
     // A hash function that selects some hashfunctions from a pool and reuses their values.
@@ -130,6 +158,24 @@ namespace puffinn {
             }
             indices.shrink_to_fit();
             bits_to_cut = pool->get_bits_per_function()*indices.size()-hash_length;
+        }
+
+        PooledHasher(std::istream& in, const HashPool<T>* pool)
+          : pool(pool)
+        {
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            indices.resize(len);
+            in.read(reinterpret_cast<char*>(&indices[0]), len*sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&bits_to_cut), sizeof(int));
+
+        }
+
+        void serialize(std::ostream& out) const {
+            size_t len = indices.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            out.write(reinterpret_cast<const char*>(&indices[0]), len*sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(int));
         }
 
         // It is assumed that the vector to hash has already been hashed in the pool, so no
@@ -158,6 +204,20 @@ namespace puffinn {
         constexpr HashPoolArgs(unsigned int pool_size)
           : pool_size(pool_size)
         {
+        }
+
+        HashPoolArgs(std::istream& in)
+          : args(in)
+        {
+            in.read(reinterpret_cast<char*>(&pool_size), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            HashSourceType type = HashSourceType::Pool;
+            out.write(reinterpret_cast<const char*>(&type), sizeof(HashSourceType));
+
+            args.serialize(out);
+            out.write(reinterpret_cast<const char*>(&pool_size), sizeof(unsigned int));
         }
 
         std::unique_ptr<HashSource<T>> build(
@@ -197,6 +257,10 @@ namespace puffinn {
             args_copy.set_no_preprocessing();
             auto bits = T(dataset, args_copy).bits_per_function();
             return sizeof(PooledHasher<T>)+(num_bits+bits-1)/bits*sizeof(unsigned int);
+        }
+
+        std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {
+            return std::make_unique<HashPool<T>>(in);
         }
     };
 }

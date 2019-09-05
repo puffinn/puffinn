@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <istream>
+#include <ostream>
 #include <utility>
 #include <vector>
 
@@ -89,6 +91,47 @@ namespace puffinn {
         {
             // Ensure that the map can be queried even if nothing is inserted.
             rebuild();
+        }
+
+        PrefixMap(std::istream& in, HashSource<T>& source) {
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            indices.resize(len);
+            hashes.resize(len);
+            in.read(reinterpret_cast<char*>(&indices[0]), len*sizeof(uint32_t));
+            in.read(reinterpret_cast<char*>(&hashes[0]), len*sizeof(LshDatatype));
+
+            size_t rebuilding_len;
+            in.read(reinterpret_cast<char*>(&rebuilding_len), sizeof(size_t));
+            rebuilding_data.resize(rebuilding_len);
+            in.read(reinterpret_cast<char*>(&rebuilding_data[0]), rebuilding_len*sizeof(HashedVecIdx));
+
+            in.read(reinterpret_cast<char*>(&hash_length), sizeof(unsigned int));
+            hash_function = source.deserialize_hash(in);
+
+            in.read(
+                reinterpret_cast<char*>(&prefix_index[0]),
+                ((1 << PREFIX_INDEX_BITS)+1)*sizeof(uint32_t));
+        }
+
+        void serialize(std::ostream& out) const {
+            size_t len = indices.size();
+            out.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
+            out.write(reinterpret_cast<const char*>(&indices[0]), len*sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&hashes[0]), len*sizeof(LshDatatype));
+
+            size_t rebuilding_len = rebuilding_data.size();
+            out.write(reinterpret_cast<const char*>(&rebuilding_len), sizeof(size_t));
+            out.write(
+                reinterpret_cast<const char*>(&rebuilding_data[0]),
+                rebuilding_len*sizeof(HashedVecIdx));
+
+            out.write(reinterpret_cast<const char*>(&hash_length), sizeof(unsigned int));
+            hash_function->serialize(out);
+
+            out.write(reinterpret_cast<const char*>(
+                &prefix_index),
+                ((1 << PREFIX_INDEX_BITS)+1)*sizeof(uint32_t));
         }
 
         // Add a vector to be included next time rebuild is called. 

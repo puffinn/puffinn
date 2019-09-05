@@ -10,6 +10,8 @@
 #include "puffinn/similarity_measure/cosine.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
 
+#include <sstream>
+
 namespace collection {
     using namespace puffinn;
 
@@ -268,5 +270,96 @@ namespace collection {
             // Only fail if the recall is far away from the expectation.
             REQUIRE(num_correct >= 0.8*expected_correct);
         }
+    }
+
+    template <typename T, typename H, typename S>
+    void test_serialize(
+        typename T::Format::Args args,
+        const HashSourceArgs<H>& hash_args,
+        const HashSourceArgs<S>& sketch_args
+    ) {
+        int k = 50;
+
+        Index<T, H, S> index(args, 50*MB, hash_args, sketch_args);
+        for (int i=0; i < 1000; i++) {
+            index.insert(T::Format::generate_random(args));
+        }
+        index.rebuild();
+
+        auto query = T::Format::generate_random(args);
+        auto res1 = index.search(query, k, 0.5);
+
+        std::stringstream s;
+        index.serialize(s);
+        Index<T, H, S> deserialized(s);
+
+        // Test that searches give the same result.
+        auto res2 = deserialized.search(query, k, 0.5);
+        REQUIRE(res1 == res2);
+
+        // Test that ser(de(ser(Index))) == ser(Index), which should catch errors in parts
+        // that don't show up when searching.
+        std::stringstream s2;
+        deserialized.serialize(s2);
+        REQUIRE(s2.str() == s.str());
+    }
+
+    TEST_CASE("Serialize") {
+        test_serialize<CosineSimilarity>(
+            100,
+            IndependentHashArgs<FHTCrossPolytopeHash>(),
+            IndependentHashArgs<SimHash>());
+        test_serialize<CosineSimilarity>(
+            100,
+            HashPoolArgs<CrossPolytopeHash>(3000),
+            HashPoolArgs<SimHash>(1000));
+        test_serialize<JaccardSimilarity>(
+            1000,
+            TensoredHashArgs<MinHash>(),
+            TensoredHashArgs<MinHash1Bit>());
+    }
+
+    TEST_CASE("Serialize chunked") {
+        int dims = 100;
+        Index<CosineSimilarity> index(dims, 50*MB);
+        for (int i=0; i < 1000; i++) {
+            index.insert(UnitVectorFormat::generate_random(dims));
+        }
+        index.rebuild();
+
+        std::stringstream s;
+        index.serialize(s, true);
+        auto iter = index.serialize_chunks();
+        size_t len = 0;
+        while (iter.has_next()) {
+            iter.serialize_next(s);
+            len++;
+        }
+
+        Index<CosineSimilarity> deserialized(s);
+        for (size_t i=0; i < len; i++) {
+            deserialized.deserialize_chunk(s);
+        }
+
+        // Test that the original and deserialized deserialize to the same string.
+        std::stringstream s1, s2;
+        index.serialize(s1);
+        deserialized.serialize(s2);
+        REQUIRE(s1.str() == s2.str());
+    }
+
+    TEST_CASE("Serialize no rebuild") {
+        int dims = 100;
+        Index<CosineSimilarity> index(dims, 50*MB);
+        for (int i=0; i < 1000; i++) {
+            index.insert(UnitVectorFormat::generate_random(dims));
+        }
+        std::stringstream s1;
+        index.serialize(s1);
+
+        Index<CosineSimilarity> deserialized(s1);
+        std::stringstream s2;
+        deserialized.serialize(s2);
+        REQUIRE(s1.str() == s2.str());
     }
 }

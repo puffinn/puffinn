@@ -15,11 +15,7 @@ namespace filterer_test {
         dataset.insert(std::vector<float>({-1, 0}));
 
         IndependentHashArgs<SimHash> hash_args;
-        auto hash_source = hash_args.build(
-            dataset.get_description(),
-            NUM_SKETCHES,
-            NUM_FILTER_HASHBITS);
-        Filterer<SimHash> filterer(std::move(hash_source));
+        Filterer<SimHash> filterer(hash_args, dataset.get_description());
 
         filterer.add_sketches(dataset, 0);
 
@@ -54,11 +50,7 @@ namespace filterer_test {
         }
 
         IndependentHashArgs<SimHash> hash_args;
-        auto hash_source = hash_args.build(
-            dataset.get_description(),
-            NUM_SKETCHES,
-            NUM_FILTER_HASHBITS);
-        Filterer<SimHash> filterer(std::move(hash_source));
+        Filterer<SimHash> filterer(hash_args, dataset.get_description());
         filterer.add_sketches(dataset, 0);
 
         int bit_counts[NUM_FILTER_HASHBITS];

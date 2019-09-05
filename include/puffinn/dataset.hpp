@@ -4,7 +4,9 @@
 #include "puffinn/typedefs.hpp"
 
 #include <cstring>
+#include <istream>
 #include <memory>
+#include <ostream>
 
 namespace puffinn {
     const unsigned int DEFAULT_CAPACITY = 100;
@@ -72,6 +74,28 @@ namespace puffinn {
                 data = std::move(rhs.data);
             }
             return *this;
+        }
+
+        Dataset(std::istream& in)
+          : data(nullptr, &free)
+        {
+            T::deserialize_args(in, &args);
+            in.read(reinterpret_cast<char*>(&storage_len), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&inserted_vectors), sizeof(unsigned int));
+            capacity = inserted_vectors;
+            data = allocate_storage<T>(capacity, storage_len);
+            for (size_t i=0; i < inserted_vectors*storage_len; i++) {
+                T::deserialize_type(in, &data.get()[i]);
+            }
+        }
+
+        void serialize(std::ostream& out) const {
+            T::serialize_args(out, args);
+            out.write(reinterpret_cast<const char*>(&storage_len), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&inserted_vectors), sizeof(unsigned int));
+            for (size_t i=0; i < inserted_vectors*storage_len; i++) {
+                T::serialize_type(out, data.get()[i]);
+            }
         }
 
         // Access the vector at the given position.

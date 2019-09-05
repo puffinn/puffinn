@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <cmath>
+#include <istream>
+#include <ostream>
 #include <random>
 #include <vector>
 
@@ -99,6 +101,22 @@ namespace puffinn {
                 values.push_back(normal_distribution(generator));
             }
             return values;
+        }
+
+        static void serialize_args(std::ostream& out, const Args& args) {
+            out.write(reinterpret_cast<const char*>(&args), sizeof(Args));
+        }
+
+        static void deserialize_args(std::istream& in, Args* args) {
+            in.read(reinterpret_cast<char*>(args), sizeof(Args));
+        }
+
+        static void serialize_type(std::ostream& out, const Type& type) {
+            out.write(reinterpret_cast<const char*>(&type), sizeof(Type));
+        }
+
+        static void deserialize_type(std::istream& in, Type* type) {
+            in.read(reinterpret_cast<char*>(type), sizeof(Type));
         }
     };
 }

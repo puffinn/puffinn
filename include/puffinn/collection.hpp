@@ -2,6 +2,7 @@
 
 #include "puffinn/dataset.hpp"
 #include "puffinn/filterer.hpp"
+#include "puffinn/hash_source/deserialize.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/hash_source/independent.hpp"
 #include "puffinn/maxbuffer.hpp"
@@ -10,7 +11,9 @@
 
 #include <omp.h>
 #include <cassert>
+#include <istream>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 namespace puffinn {
@@ -27,6 +30,34 @@ namespace puffinn {
         /// A simple approach which mirrors ``None``, but with filtering.
         /// It is only intended to be used to fairly assess the impact of sketching on the result. 
         Simple
+    };
+
+    class ChunkSerializable {
+    public:
+        virtual void serialize_chunk(std::ostream&, size_t) const = 0;
+    };
+
+    /// Iterator over serialized chunks in the index.
+    class SerializeIter {
+        const ChunkSerializable& ref;
+        size_t len;
+        size_t idx = 0;
+
+    public:
+        SerializeIter(const ChunkSerializable& ref, size_t len)
+          : ref(ref),
+            len(len)
+        {
+        }
+
+        bool has_next() const {
+            return idx < len;
+        }
+
+        void serialize_next(std::ostream& out) {
+            ref.serialize_chunk(out, idx);
+            idx++;
+        }
     };
 
     /// An index constructed over a dataset which supports approximate
@@ -55,7 +86,7 @@ namespace puffinn {
         typename THash = typename TSim::DefaultHash,
         typename TSketch = typename TSim::DefaultSketch
     >
-    class Index {
+    class Index : ChunkSerializable {
         Dataset<typename TSim::Format> dataset;
         // Hash tables used by LSH.
         std::vector<PrefixMap<THash>> lsh_maps;
@@ -70,7 +101,6 @@ namespace puffinn {
         // Construction of the hash source is delayed until the
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
-        std::unique_ptr<HashSourceArgs<TSketch>> sketch_args;
 
         constexpr static IndependentHashArgs<THash> DEFAULT_HASH_SOURCE
             = IndependentHashArgs<THash>();
@@ -99,19 +129,84 @@ namespace puffinn {
             const HashSourceArgs<TSketch>& sketch_args = DEFAULT_SKETCH_SOURCE
         )
           : dataset(Dataset<typename TSim::Format>(dataset_args)),
-            filterer(
-                sketch_args.build(
-                    dataset.get_description(),
-                    NUM_SKETCHES,
-                    NUM_FILTER_HASHBITS)),
+            filterer(sketch_args, dataset.get_description()),
             memory_limit(memory_limit),
-            hash_args(hash_args.copy()),
-            sketch_args(sketch_args.copy())
+            hash_args(hash_args.copy())
         {
             static_assert(
                 std::is_same<TSim, typename THash::Sim>::value
                 && std::is_same<TSim, typename TSketch::Sim>::value,
                 "Hash function not applicable to similarity measure");
+        }
+
+        /// Deserialize an index.
+        ///
+        /// It is assumed that the input data is a serialized index
+        /// using the same version of PUFFINN.
+        Index(std::istream& in)
+          : dataset(in),
+            filterer(in)
+        {
+            hash_args = deserialize_hash_args<THash>(in);
+            bool has_hash_source;
+            in.read(reinterpret_cast<char*>(&has_hash_source), sizeof(bool));
+            if (has_hash_source) {
+                hash_source = hash_args->deserialize_source(in);
+            }
+            size_t num_maps;
+            in.read(reinterpret_cast<char*>(&num_maps), sizeof(size_t));
+            lsh_maps.reserve(num_maps);
+            bool use_chunks;
+            in.read(reinterpret_cast<char*>(&use_chunks), sizeof(bool));
+            if (!use_chunks) {
+                for (size_t i=0; i < num_maps; i++) {
+                    // if num_maps is non-zero, hash_source is non-null
+                    lsh_maps.emplace_back(in, *hash_source);
+                }
+            }
+            in.read(reinterpret_cast<char*>(&memory_limit), sizeof(uint64_t));
+            in.read(reinterpret_cast<char*>(&last_rebuild), sizeof(uint32_t));
+        }
+
+        /// Deserialize a single chunk.
+        void deserialize_chunk(std::istream& in) {
+            // Assumes that hash_source is non-null,
+            // which it will be if there were any chunks during serialization.
+            lsh_maps.emplace_back(in, *hash_source);
+        }
+
+        /// Serialize the index to the output stream to be loaded later.
+        /// Supports splitting the serialized data into chunks,
+        /// which can be accessed using the ``serialize_chunks`` method.
+        /// This is primarily useful when the serialized data cannot be written to a file directly
+        /// and storing the index twice in memory is infeasible.
+        ///
+        /// @param use_chunks Whether to split the serialized index into chunks. Defaults to false.
+        void serialize(std::ostream& out, bool use_chunks = false) const {
+            dataset.serialize(out);
+            filterer.serialize(out);
+            hash_args->serialize(out);
+            bool has_hash_source = hash_source;
+            out.write(reinterpret_cast<char*>(&has_hash_source), sizeof(bool));
+            if (has_hash_source) {
+                hash_source->serialize(out);
+            }
+            size_t num_maps = lsh_maps.size();
+            out.write(reinterpret_cast<char*>(&num_maps), sizeof(size_t));
+            out.write(reinterpret_cast<char*>(&use_chunks), sizeof(bool));
+            if (!use_chunks) {
+                for (auto& m : lsh_maps) {
+                    m.serialize(out);
+                }
+            }
+            out.write(reinterpret_cast<const char*>(&memory_limit), sizeof(uint64_t));
+            out.write(reinterpret_cast<const char*>(&last_rebuild), sizeof(uint32_t));
+        }
+
+        /// Get an iterator over serialized chunks in the dataset.
+        /// See ``serialize`` for its use.
+        SerializeIter serialize_chunks() const {
+            return SerializeIter(*this, lsh_maps.size());
         }
 
         /// Insert a value into the index.
@@ -138,12 +233,12 @@ namespace puffinn {
                 omp_set_num_threads(num_threads);
             }
 
+            // Compute sketches for the new vectors.
+            filterer.add_sketches(dataset, last_rebuild);
+
             auto desc = dataset.get_description();
             auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
-            auto filterer_bytes = Filterer<TSketch>::memory_usage(
-                sketch_args.get(),
-                desc,
-                dataset.get_size());
+            auto filterer_bytes = filterer.memory_usage(desc);
 
             uint64_t required_mem = dataset.memory_usage()+filterer_bytes; 
             unsigned int num_tables = 0;
@@ -181,9 +276,6 @@ namespace puffinn {
                     lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
                 }
             }
-
-            // Compute sketches for the new vectors.
-            filterer.add_sketches(dataset, last_rebuild);
 
             for (auto& map : lsh_maps) {
                 map.reserve(dataset.get_size());
@@ -670,6 +762,10 @@ namespace puffinn {
                 }
                 g_performance_metrics.store_time(Computation::Filtering);
             }
+        }
+
+        void serialize_chunk(std::ostream& out, size_t idx) const {
+            lsh_maps[idx].serialize(out);
         }
     };
 

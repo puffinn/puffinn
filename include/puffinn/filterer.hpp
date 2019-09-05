@@ -2,6 +2,7 @@
 
 #include "puffinn/dataset.hpp"
 #include "puffinn/typedefs.hpp"
+#include "puffinn/hash_source/deserialize.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/performance.hpp"
 
@@ -36,24 +37,50 @@ namespace puffinn {
 
         // Filters are stored with sketches for the same value adjacent.
         std::vector<FilterLshDatatype> sketches;
+        std::unique_ptr<HashSourceArgs<T>> sketch_args;
 
     public:
-        Filterer(std::unique_ptr<HashSource<T>> source)
-          : hash_source(std::move(source))
+        Filterer(const HashSourceArgs<T>& args, DatasetDescription<typename T::Sim::Format> dataset)
+          : hash_source(
+                args.build(
+                    dataset,
+                    NUM_SKETCHES,
+                    NUM_FILTER_HASHBITS)),
+            sketch_args(args.copy())
         {
             for (size_t i=0; i<NUM_SKETCHES; i++) {
                 hash_functions.push_back(hash_source->sample());
             }
         }
 
-        static uint64_t memory_usage(
-            HashSourceArgs<T>* hash_source,
-            DatasetDescription<typename T::Sim::Format> dataset,
-            size_t dataset_size
-        ) {
-            return hash_source->memory_usage(dataset, NUM_SKETCHES, NUM_FILTER_HASHBITS)
-                + NUM_SKETCHES*dataset_size*sizeof(FilterLshDatatype)
-                + NUM_SKETCHES*hash_source->function_memory_usage(dataset, NUM_FILTER_HASHBITS);
+        Filterer(std::istream& in) {
+            sketch_args = deserialize_hash_args<T>(in);
+            hash_source = sketch_args->deserialize_source(in);
+            hash_functions.reserve(NUM_SKETCHES);
+            for (size_t i=0; i < NUM_SKETCHES; i++) {
+                hash_functions.push_back(hash_source->deserialize_hash(in));
+            }
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            sketches.resize(len);
+            in.read(reinterpret_cast<char*>(&sketches[0]), len*sizeof(FilterLshDatatype));
+        }
+
+        void serialize(std::ostream& out) const {
+            sketch_args->serialize(out);
+            hash_source->serialize(out);
+            for (auto& h : hash_functions) {
+                h->serialize(out);
+            }
+            size_t len = sketches.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            out.write(reinterpret_cast<const char*>(&sketches[0]), len*sizeof(FilterLshDatatype));
+        }
+
+        uint64_t memory_usage(DatasetDescription<typename T::Sim::Format> dataset) {
+            return sketch_args->memory_usage(dataset, NUM_SKETCHES, NUM_FILTER_HASHBITS)
+                + sketches.size()*sizeof(FilterLshDatatype)
+                + NUM_SKETCHES*sketch_args->function_memory_usage(dataset, NUM_FILTER_HASHBITS);
         }
 
         void add_sketches(

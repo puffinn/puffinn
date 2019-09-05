@@ -1,6 +1,8 @@
 #pragma once
 
+#include <istream>
 #include <memory>
+#include <ostream>
 
 namespace puffinn {
     // Both the dimensionality of the input vectors and the
@@ -9,6 +11,17 @@ namespace puffinn {
     struct DatasetDescription {
         typename T::Args args;
         unsigned int storage_len;
+
+        DatasetDescription() = default;
+        DatasetDescription(std::istream& in) {
+            T::deserialize_args(in, &args);
+            in.read(reinterpret_cast<char*>(&storage_len), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            T::serialize_args(out, args);
+            out.write(reinterpret_cast<const char*>(&storage_len), sizeof(unsigned int));
+        }
     };
 
     // Round up the given value to the first value that is a multiple of the second argument.

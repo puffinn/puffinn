@@ -47,6 +47,34 @@ namespace puffinn {
             }
         }
 
+        IndependentHashSource(std::istream& in)
+          : hash_family(in)
+        {
+            size_t funcs_len;
+            in.read(reinterpret_cast<char*>(&funcs_len), sizeof(size_t));
+            hash_functions.reserve(funcs_len);
+            for (size_t i=0; i < funcs_len; i++) {
+                hash_functions.push_back(typename T::Function(in));
+            }
+            in.read(reinterpret_cast<char*>(&functions_per_hasher), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&bits_per_function), sizeof(uint_fast8_t));
+            in.read(reinterpret_cast<char*>(&next_function), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&bits_to_cut), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            hash_family.serialize(out);
+            size_t funcs_len = hash_functions.size();
+            out.write(reinterpret_cast<char*>(&funcs_len), sizeof(size_t));
+            for (auto& h : hash_functions) {
+                h.serialize(out);
+            }
+            out.write(reinterpret_cast<const char*>(&functions_per_hasher), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
+            out.write(reinterpret_cast<const char*>(&next_function), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(unsigned int));
+        }
+
         uint64_t hash(
             unsigned int first_hash, 
             typename T::Sim::Format::Type* hashed_vec
@@ -103,18 +131,32 @@ namespace puffinn {
         bool precomputed_hashes() const {
             return false;
         }
+
+        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
+            return std::make_unique<IndependentHasher<T>>(in, this);
+        }
     };
 
     template <typename T>
     class IndependentHasher : public Hash {
-        IndependentHashSource<T>* source;
+        const IndependentHashSource<T>* source;
         unsigned int first_function;
 
     public:
-        IndependentHasher(IndependentHashSource<T>* source, unsigned int first_function)
+        IndependentHasher(const IndependentHashSource<T>* source, unsigned int first_function)
           : source(source),
             first_function(first_function)
         {
+        }
+
+        IndependentHasher(std::istream& in, const IndependentHashSource<T>* source)
+          : source(source)
+        {
+            in.read(reinterpret_cast<char*>(&first_function), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&first_function), sizeof(unsigned int));
         }
 
         uint64_t operator()(HashSourceState* state) const {
@@ -128,6 +170,19 @@ namespace puffinn {
     struct IndependentHashArgs : public HashSourceArgs<T> {
         /// Arguments for the hash family.
         typename T::Args args;
+
+        IndependentHashArgs() = default;
+
+        IndependentHashArgs(std::istream& in)
+          : args(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            HashSourceType type = HashSourceType::Independent;
+            out.write(reinterpret_cast<char*>(&type), sizeof(HashSourceType));
+            args.serialize(out);
+        }
 
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
@@ -166,6 +221,10 @@ namespace puffinn {
             unsigned int /*num_bits*/
         ) const {
             return sizeof(IndependentHasher<T>);
+        }
+
+        std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {
+            return std::make_unique<IndependentHashSource<T>>(in);
         }
     };
 }

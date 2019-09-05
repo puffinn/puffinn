@@ -3,6 +3,7 @@ import numpy
 import time
 import math
 
+import pickle
 def angular_dist(a, b):
     return numpy.dot(a, b)/(numpy.linalg.norm(a)*numpy.linalg.norm(b))
 
@@ -33,6 +34,10 @@ for v in dataset:
 t0 = time.time()
 index.rebuild()
 print("Building index took %.2f seconds." % (time.time() - t0) )
+
+# The index can be stored and loaded using pickle.
+serialized = pickle.dumps(index)
+index = pickle.loads(serialized)
 
 results = []
 print('Searching the index')

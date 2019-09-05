@@ -1,5 +1,9 @@
 #pragma once
 
+#include <vector>
+#include <istream>
+#include <ostream>
+
 #include "puffinn/format/generic.hpp"
 
 namespace puffinn {
@@ -60,6 +64,34 @@ namespace puffinn {
                 }
             }
             return res;
+        }
+
+        static void serialize_args(std::ostream& out, const Args& args) {
+            out.write(reinterpret_cast<const char*>(&args), sizeof(Args));
+        }
+
+        static void deserialize_args(std::istream& in, Args* args) {
+            in.read(reinterpret_cast<char*>(args), sizeof(Args));
+        }
+
+        static void serialize_type(std::ostream& out, const Type& type) {
+            size_t len = type.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            for (size_t i=0; i < len; i++) {
+                out.write(reinterpret_cast<const char*>(&type[i]), sizeof(uint32_t));
+            }
+        }
+
+        static void deserialize_type(std::istream& in, Type* type) {
+            auto vec = new(type) std::vector<uint32_t>;
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            vec->reserve(len);
+            for (size_t i=0; i < len; i++) {
+                uint32_t v;
+                in.read(reinterpret_cast<char*>(&v), sizeof(uint32_t));
+                vec->push_back(v);
+            }
         }
     };
 }

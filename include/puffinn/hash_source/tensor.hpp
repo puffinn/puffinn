@@ -70,6 +70,32 @@ namespace puffinn {
             }
         }
 
+        TensoredHashSource(std::istream& in)
+          : independent_hash_source(in)
+        {
+            size_t len;
+            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
+            hashers.reserve(len);
+            for (size_t i=0; i < len; i++) {
+                // these functions only use the args for dispatch, so
+                // it does not matter that it is not the 'correct' arguments.
+                hashers.push_back(independent_hash_source.deserialize_hash(in));
+            }
+            in.read(reinterpret_cast<char*>(&next_hash_idx), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&num_bits), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            independent_hash_source.serialize(out);
+            size_t len = hashers.size();
+            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
+            for (auto& h : hashers) {
+                h->serialize(out);
+            }
+            out.write(reinterpret_cast<const char*>(&next_hash_idx), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&num_bits), sizeof(unsigned int));
+        }
+
         std::unique_ptr<Hash> sample() {
             auto index_pair = get_minimal_index_pair(next_hash_idx);
             next_hash_idx++;
@@ -165,11 +191,15 @@ namespace puffinn {
         bool precomputed_hashes() const {
             return true;
         }
+
+        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
+            return std::make_unique<TensoredHasher<T>>(in, this);
+        }
     };
 
     template <typename T>
     class TensoredHasher : public Hash {
-        TensoredHashSource<T>* source;
+        const TensoredHashSource<T>* source;
         unsigned int lhs_idx;
         unsigned int rhs_idx;
 
@@ -179,6 +209,18 @@ namespace puffinn {
             lhs_idx(lhs_idx),
             rhs_idx(rhs_idx)
         {
+        }
+
+        TensoredHasher(std::istream& in, const TensoredHashSource<T>* source)
+          : source(source)
+        {
+            in.read(reinterpret_cast<char*>(&lhs_idx), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&rhs_idx), sizeof(unsigned int));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&lhs_idx), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&rhs_idx), sizeof(unsigned int));
         }
 
         uint64_t operator()(HashSourceState* state) const {
@@ -194,6 +236,19 @@ namespace puffinn {
     template <typename T>
     struct TensoredHashArgs : public HashSourceArgs<T> {
         typename T::Args args;
+
+        TensoredHashArgs() = default;
+
+        TensoredHashArgs(std::istream& in)
+          : args(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            HashSourceType type = HashSourceType::Tensor;
+            out.write(reinterpret_cast<char*>(&type), sizeof(HashSourceType));
+            args.serialize(out);
+        }
 
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
@@ -229,6 +284,10 @@ namespace puffinn {
             unsigned int /*num_bits*/
         ) const {
             return sizeof(TensoredHasher<T>);
+        }
+
+        std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {
+            return std::make_unique<TensoredHashSource<T>>(in);
         }
     };
 }

@@ -5,6 +5,9 @@
 #include "puffinn/math.hpp"
 #include "puffinn/similarity_measure/cosine.hpp"
 
+#include <istream>
+#include <ostream>
+
 namespace puffinn {
     class SimHashFunction {
         std::unique_ptr<typename UnitVectorFormat::Type, decltype(free)*> hash_vec;
@@ -13,10 +16,27 @@ namespace puffinn {
     public:
         SimHashFunction(DatasetDescription<UnitVectorFormat> dataset)
           : hash_vec(allocate_storage<UnitVectorFormat>(1, dataset.storage_len)),
-            dimensions(dataset.args)
+            dimensions(dataset.storage_len)
         {
-            auto vec = UnitVectorFormat::generate_random(dimensions);
+            auto vec = UnitVectorFormat::generate_random(dataset.args);
             UnitVectorFormat::store(vec, hash_vec.get(), dataset);
+        }
+
+        SimHashFunction(std::istream& in)
+          : hash_vec(nullptr, &free)
+        {
+            in.read(reinterpret_cast<char*>(&dimensions), sizeof(unsigned int));
+            hash_vec = allocate_storage<UnitVectorFormat>(1, dimensions);
+            in.read(
+                reinterpret_cast<char*>(hash_vec.get()),
+                dimensions*sizeof(typename UnitVectorFormat::Type));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&dimensions), sizeof(unsigned int));
+            out.write(
+                reinterpret_cast<const char*>(hash_vec.get()),
+                dimensions*sizeof(typename UnitVectorFormat::Type));
         }
 
         // Hash the given vector.
@@ -28,6 +48,12 @@ namespace puffinn {
 
     /// ``SimHash`` does not take any arguments.
     struct SimHashArgs {
+        SimHashArgs() = default;
+
+        SimHashArgs(std::istream&) {}
+
+        void serialize(std::ostream&) const {}
+
         uint64_t memory_usage(DatasetDescription<UnitVectorFormat> dataset) const {
             return sizeof(SimHashFunction) + dataset.storage_len*sizeof(UnitVectorFormat::Type);
         }
@@ -50,6 +76,15 @@ namespace puffinn {
         SimHash(DatasetDescription<UnitVectorFormat> dataset, Args)
           : dataset(dataset)
         {
+        }
+
+        SimHash(std::istream& in)
+          : dataset(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            dataset.serialize(out);
         }
 
         SimHashFunction sample() {

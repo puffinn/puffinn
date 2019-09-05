@@ -82,6 +82,32 @@ namespace puffinn {
             }
         }
 
+        CrossPolytopeCollisionEstimates(std::istream& in) {
+            size_t d1;
+            in.read(reinterpret_cast<char*>(&d1), sizeof(size_t));
+
+            for (size_t i=0; i < d1; i++) {
+                size_t d2;
+                in.read(reinterpret_cast<char*>(&d2), sizeof(size_t));
+
+                probabilities.emplace_back(d2);
+                in.read(reinterpret_cast<char*>(&probabilities[i][0]), d2*sizeof(float));
+            }
+            in.read(reinterpret_cast<char*>(&eps), sizeof(float));
+        }
+
+        void serialize(std::ostream& out) const {
+            size_t d1 = probabilities.size();
+            out.write(reinterpret_cast<char*>(&d1), sizeof(size_t));
+
+            for (size_t i=0; i < d1; i++) {
+                size_t d2 = probabilities[i].size();
+                out.write(reinterpret_cast<char*>(&d2), sizeof(size_t));
+                out.write(reinterpret_cast<const char*>(&probabilities[i][0]), d2*sizeof(float));
+            }
+            out.write(reinterpret_cast<const char*>(&eps), sizeof(float));
+        }
+
         float get_collision_probability(float sim, int_fast8_t num_bits) const {
             return probabilities[num_bits][(size_t)(sim/eps)];
         }
@@ -93,8 +119,7 @@ namespace puffinn {
         unsigned int num_rotations;
         // Random +-1 diagonal matrix for each rotation in each application of cross-polytope.
         // Hash idx * num_rotations * dimensions as power of 2
-        // Shared_ptr as functors must be copy-constructible
-        std::shared_ptr<int8_t> random_signs;
+        std::vector<int8_t> random_signs;
 
         // Calculate a unique value depending on which axis is closest to the given floating point
         // vector.
@@ -126,13 +151,31 @@ namespace puffinn {
             log_dimensions = ceil_log(dimensions);
 
             int random_signs_len = num_rotations*(1 << log_dimensions);
-            random_signs = std::shared_ptr<int8_t>(new int8_t[random_signs_len]);
+            random_signs.reserve(random_signs_len);
 
             std::uniform_int_distribution<int_fast32_t> sign_distribution(0, 1);
             auto& generator = get_default_random_generator();
             for (int i=0; i < random_signs_len; i++) {
-                random_signs.get()[i] = sign_distribution(generator)*2-1;
+                random_signs.push_back(sign_distribution(generator)*2-1);
             }
+        }
+
+        FHTCrossPolytopeHashFunction(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&dimensions), sizeof(int));
+            in.read(reinterpret_cast<char*>(&log_dimensions), sizeof(int));
+            in.read(reinterpret_cast<char*>(&num_rotations), sizeof(unsigned int));
+
+            int signs_len = num_rotations*(1 << log_dimensions);
+            random_signs = std::vector<int8_t>(signs_len);
+            in.read(reinterpret_cast<char*>(&random_signs[0]), signs_len*sizeof(int8_t));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&dimensions), sizeof(int));
+            out.write(reinterpret_cast<const char*>(&log_dimensions), sizeof(int));
+            out.write(reinterpret_cast<const char*>(&num_rotations), sizeof(unsigned int));
+
+            out.write(reinterpret_cast<const char*>(&random_signs[0]), random_signs.size()*sizeof(int8_t));
         }
 
         // Hash the given vector
@@ -151,7 +194,7 @@ namespace puffinn {
                 // Multiply by a diagonal +-1 matrix.
                 int sign_idx = rotation*(1 << log_dimensions);
                 for (int i=0; i < (1 << log_dimensions); i++) {
-                    rotated_vec[i] *= random_signs.get()[sign_idx+i];
+                    rotated_vec[i] *= random_signs[sign_idx+i];
                 }
                 // Apply the fast hadamard transform
                 fht(rotated_vec, log_dimensions);
@@ -175,6 +218,18 @@ namespace puffinn {
               estimation_repetitions(1000),
               estimation_eps(5e-3)
         {
+        }
+
+        FHTCrossPolytopeArgs(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&num_rotations), sizeof(int));
+            in.read(reinterpret_cast<char*>(&estimation_repetitions), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&estimation_eps), sizeof(float));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&num_rotations), sizeof(int));
+            out.write(reinterpret_cast<const char*>(&estimation_repetitions), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&estimation_eps), sizeof(float));
         }
 
         uint64_t memory_usage(DatasetDescription<UnitVectorFormat> dataset) const {
@@ -221,6 +276,19 @@ namespace puffinn {
         {
         }
 
+        FHTCrossPolytopeHash(std::istream& in)
+          : dataset(in),
+            args(in),
+            estimates(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            dataset.serialize(out);
+            args.serialize(out);
+            estimates.serialize(out);
+        }
+
         FHTCrossPolytopeHashFunction sample() {
             return FHTCrossPolytopeHashFunction(dataset, args.num_rotations);
         }
@@ -262,6 +330,26 @@ namespace puffinn {
             }
         }
 
+        CrossPolytopeHashFunction(std::istream& in)
+          : random_matrix(nullptr, &free)
+        {
+            in.read(reinterpret_cast<char*>(&dimensions), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&padded_dimensions), sizeof(unsigned int));
+            random_matrix = allocate_storage<UnitVectorFormat>(
+                (1 << ceil_log(dimensions)),
+                padded_dimensions);
+            auto matrix_len = (1 << ceil_log(dimensions))*padded_dimensions;
+            in.read(reinterpret_cast<char*>(random_matrix.get()), matrix_len*sizeof(int16_t));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&dimensions), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&padded_dimensions), sizeof(unsigned int));
+
+            auto matrix_len = (1 << ceil_log(dimensions))*padded_dimensions;
+            out.write(reinterpret_cast<const char*>(random_matrix.get()), matrix_len*sizeof(int16_t));
+        }
+
         LshDatatype operator()(int16_t* vec) const {
             LshDatatype res = 0;
             uint16_t max_abs_dot = 0;
@@ -292,6 +380,16 @@ namespace puffinn {
           : estimation_repetitions(1000),
             estimation_eps(5e-3)
         {
+        }
+
+        CrossPolytopeArgs(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&estimation_repetitions), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&estimation_eps), sizeof(float));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&estimation_repetitions), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&estimation_eps), sizeof(float));
         }
 
         void set_no_preprocessing() {
@@ -336,6 +434,19 @@ namespace puffinn {
                 args.estimation_repetitions,
                 args.estimation_eps)
         {
+        }
+
+        CrossPolytopeHash(std::istream& in)
+          : dataset(in),
+            args(in),
+            estimates(in)
+        {
+        }
+
+        void serialize(std::ostream& out) const {
+            dataset.serialize(out);
+            args.serialize(out);
+            estimates.serialize(out);
         }
 
         CrossPolytopeHashFunction sample() {
