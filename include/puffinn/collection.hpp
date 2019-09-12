@@ -185,7 +185,7 @@ namespace puffinn {
             dataset.serialize(out);
             filterer.serialize(out);
             hash_args->serialize(out);
-            bool has_hash_source = hash_source;
+            bool has_hash_source = hash_source.get() != nullptr;
             out.write(reinterpret_cast<char*>(&has_hash_source), sizeof(bool));
             if (has_hash_source) {
                 hash_source->serialize(out);
