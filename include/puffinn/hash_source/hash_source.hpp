@@ -14,7 +14,7 @@ namespace puffinn {
     };
 
     template <typename T>
-    class HashSourceArgs;
+    struct HashSourceArgs;
 
     // A source for hash functions.
     //
