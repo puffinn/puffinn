@@ -101,11 +101,6 @@ namespace puffinn {
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
 
-        constexpr static IndependentHashArgs<THash> DEFAULT_HASH_SOURCE
-            = IndependentHashArgs<THash>();
-        constexpr static IndependentHashArgs<TSketch> DEFAULT_SKETCH_SOURCE
-            = IndependentHashArgs<TSketch>();
-
     public:
         /// Construct an empty index.
         ///
@@ -124,8 +119,8 @@ namespace puffinn {
         Index(
             typename TSim::Format::Args dataset_args,
             uint64_t memory_limit,
-            const HashSourceArgs<THash>& hash_args = DEFAULT_HASH_SOURCE,
-            const HashSourceArgs<TSketch>& sketch_args = DEFAULT_SKETCH_SOURCE
+            const HashSourceArgs<THash>& hash_args = IndependentHashArgs<THash>(),
+            const HashSourceArgs<TSketch>& sketch_args = IndependentHashArgs<TSketch>()
         )
           : dataset(Dataset<typename TSim::Format>(dataset_args)),
             filterer(sketch_args, dataset.get_description()),
@@ -762,9 +757,4 @@ namespace puffinn {
             lsh_maps[idx].serialize(out);
         }
     };
-
-    template <typename T, typename U, typename V>
-    constexpr IndependentHashArgs<U> Index<T, U, V>::DEFAULT_HASH_SOURCE;
-    template <typename T, typename U, typename V>
-    constexpr IndependentHashArgs<V> Index<T, U, V>::DEFAULT_SKETCH_SOURCE;
 }

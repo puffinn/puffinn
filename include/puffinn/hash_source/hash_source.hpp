@@ -85,6 +85,8 @@ namespace puffinn {
     /// @param T The used LSH family.
     template <typename T>
     struct HashSourceArgs {
+        virtual ~HashSourceArgs() {}
+
         virtual std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
