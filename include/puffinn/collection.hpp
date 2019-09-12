@@ -9,7 +9,6 @@
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
 
-#include <omp.h>
 #include <cassert>
 #include <istream>
 #include <memory>
@@ -224,15 +223,10 @@ namespace puffinn {
 
         /// Rebuild the index using the currently inserted points.
         /// 
-        /// This can be done in parallel.
-        ///
-        /// @param num_threads The number of threads to use.
-        /// If set to zero, it will use as many threads as there are cores. 
-        void rebuild(unsigned int num_threads = 0) {
-            if (num_threads != 0) {
-                omp_set_num_threads(num_threads);
-            }
-
+        /// This is done in parallel by default.
+        /// The number of threads used can be specified using the
+        /// OMP_NUM_THREADS environment variable.
+        void rebuild() {
             // Compute sketches for the new vectors.
             filterer.add_sketches(dataset, last_rebuild);
 
