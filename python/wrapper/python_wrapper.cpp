@@ -31,7 +31,7 @@ struct PySerializeIter {
 };
 
 struct AbstractIndex {
-    virtual void rebuild(unsigned int num_threads) = 0;
+    virtual void rebuild() = 0;
     virtual void serialize(std::ostream& out) = 0;
     virtual std::string metric() = 0;
     virtual std::string hash_function() = 0;
@@ -69,8 +69,8 @@ public:
     void insert(const std::vector<float>& vec) {
         table.insert(vec);
     };
-    void rebuild(unsigned int num_threads) {
-        table.rebuild(num_threads);
+    void rebuild() {
+        table.rebuild();
     }
     std::vector<uint32_t> search(
         const std::vector<float>& vec,
@@ -143,8 +143,8 @@ public:
         table.insert(vec); 
     }
 
-    void rebuild(unsigned int num_threads) {
-        table.rebuild(num_threads);
+    void rebuild() {
+        table.rebuild();
     }
 
     std::vector<uint32_t> search(
@@ -240,11 +240,11 @@ public:
         }
     }
 
-    void rebuild(unsigned int num_threads) {
+    void rebuild() {
         if (real_table) {
-            real_table->rebuild(num_threads);
+            real_table->rebuild();
         } else {
-            set_table->rebuild(num_threads);
+            set_table->rebuild();
         }
     }
 
@@ -456,7 +456,7 @@ PYBIND11_MODULE(puffinn, m) {
     py::class_<Index>(m, "Index")
         .def(py::init<const std::string&, const unsigned int&, const uint64_t&, const py::kwargs&>())
         .def("insert", &Index::insert)
-        .def("rebuild", &Index::rebuild, py::arg("num_threads") = 0)
+        .def("rebuild", &Index::rebuild)
         .def("search", &Index::search,
              py::arg("vec"), py::arg("k"), py::arg("recall"),
              py::arg("filter_type") = "default"

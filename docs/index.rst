@@ -134,13 +134,11 @@ Python Documentation
 
    :param list[integer] value: The value to insert.
 
-   .. py:method:: rebuild(num_threads = 0)
+   .. py:method:: rebuild()
 
     Rebuild the index using the currently inserted points.
 
-    This can be done in parallel.
-
-    :param integer num_threads: The number of threads to use. If set to zero, it will use as many threads as there are cores. 
+    This is done in parallel.
 
    .. py:method:: search(query, k, recall, filter_type = "default")
 
