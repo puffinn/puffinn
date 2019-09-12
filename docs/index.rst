@@ -116,6 +116,7 @@ Python Documentation
 .. py:class:: Index(similarity_measure, dimensions, memory_limit, kwargs)
 
    An index constructed over a dataset which supports approximate near-neighbor queries for a specific similarity measure.
+   It can be serialized using pickle.
 
    :param str metric: The name of the metric used to measure the similarity of two points. Currently ``"angular"`` and ``"jaccard"`` are supported, which respectively map to ``CosineSimilarity`` and ``JaccardSimilarity`` in the C++ API.
    :param integer dimensions: The required number of dimensions of the input. When using the ``"angular"`` metric, all input vectors must have this length. When using the ``"jaccard"`` metric, all tokens in the input sets must be integers between 0, inclusive, and dimensions, exclusive. 
