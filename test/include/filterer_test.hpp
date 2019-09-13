@@ -57,7 +57,7 @@ namespace filterer_test {
         for (int idx=0; idx < NUM_VECTORS; idx++) {
             for (unsigned int sketch=0; sketch < NUM_SKETCHES; sketch++) {
                 for (unsigned int bit=0; bit < NUM_FILTER_HASHBITS; bit++) {
-                    if (filterer.get_sketch(idx, sketch) & (1 << bit)) {
+                    if (filterer.get_sketch(idx, sketch) & (1llu << bit)) {
                         bit_counts[bit]++;
                     }
                 }

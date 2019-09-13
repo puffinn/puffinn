@@ -73,7 +73,12 @@ namespace puffinn {
                     }
                 }
                 for (unsigned int used_bits = 0; used_bits <= log_dimensions+1; used_bits++) {
-                    auto prob = static_cast<float>(collisions[used_bits])/num_repetitions;
+                    float prob;
+                    if (num_repetitions != 0) {
+                        prob = static_cast<float>(collisions[used_bits])/num_repetitions;
+                    } else {
+                        prob = 1.0;
+                    }
                     probabilities[used_bits].push_back(prob);
                 }
                 // eps refers to the number of segments between 0 and 1, but the estimation

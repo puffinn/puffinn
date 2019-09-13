@@ -39,17 +39,15 @@ namespace puffinn {
         // Convert a floating point value between -1 and 1 to the internal, fixed point representation.
         static constexpr int16_t to_16bit_fixed_point(float val) {
             assert(val >= -1.0 && val <= 1.0);
-            // The value cannot represent 1, so for accuracy, positive numbers are compared to the value
-            // above INT16_MAX. 1.0 is set to the greatest representable value.
-            auto res = (int16_t)(-val*INT16_MIN);
-            if (val > 0.0 && res < 0) { res = INT16_MAX; }
-            return res;
+
+            val = std::min(val*(1 << 15), static_cast<float>(INT16_MAX));
+            return static_cast<int16_t>(val);
         }
 
         // Convert a number between -1 and 1 from the internal,
         // fixed point representation to floating point.
         static constexpr float from_16bit_fixed_point(Type val) {
-            return -((float)val)/INT16_MIN;
+            return static_cast<float>(val)/(1 << 15);
         }
 
         static unsigned int storage_dimensions(Args dimensions) {

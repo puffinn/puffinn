@@ -44,7 +44,7 @@ namespace hash_source {
             auto vec = UnitVectorFormat::generate_random(dimensions.args);
             auto stored = to_stored_type<typename T::Sim::Format>(vec, dimensions);
             auto state = source->reset(stored.get());
-            uint64_t max_hash = (((1 << (hash_length-1))-1) << 1)+1;
+            uint64_t max_hash = (((1llu << (hash_length-1))-1) << 1)+1;
 
             for (unsigned int i=0; i < num_hashes; i++) {
                 uint64_t hash = (*hash_functions[i])(state.get());
