@@ -216,6 +216,18 @@ namespace puffinn {
             // Dont insert into the hash tables as it would be in linear time.
         }
 
+        /// Retrieve the n'th value inserted into the index.
+        ///
+        /// Since the value is converted back from the internal storage format,
+        /// it is unlikely to be equal to the inserted value
+        /// due to normalization, rounding and other adjustments.
+        template <typename T>
+        T get(uint32_t idx) {
+            return convert_stored_type<typename TSim::Format, T>(
+                dataset[idx],
+                dataset.get_description());
+        }
+
         /// Rebuild the index using the currently inserted points.
         /// 
         /// This is done in parallel by default.

@@ -94,4 +94,12 @@ namespace puffinn {
             }
         }
     };
+
+    template <>
+    std::vector<uint32_t> convert_stored_type<SetFormat, std::vector<uint32_t>>(
+        typename SetFormat::Type* storage,
+        DatasetDescription<SetFormat>
+    ) {
+        return *storage;
+    }
 }

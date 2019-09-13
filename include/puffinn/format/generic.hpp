@@ -66,4 +66,8 @@ namespace puffinn {
         T::store(input, storage.get(), desc);
         return storage;
     }
+
+    template <typename F, typename T>
+    T convert_stored_type(typename F::Type*, DatasetDescription<F>);
+
 }

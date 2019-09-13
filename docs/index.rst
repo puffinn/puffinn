@@ -135,6 +135,14 @@ Python Documentation
 
    :param list[integer] value: The value to insert.
 
+   .. py:method:: get(idx)
+
+   Retrieve a value that has been inserted into the index.
+
+   The value is converted back from the internal storage format, which means that it is unlikely to be equal to the inserted value due to normalization, rounding and other adjustments.
+
+   :param integer idx: The value to retrieve by insertion order.
+
    .. py:method:: rebuild()
 
     Rebuild the index using the currently inserted points.

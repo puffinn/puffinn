@@ -117,4 +117,17 @@ namespace puffinn {
             in.read(reinterpret_cast<char*>(type), sizeof(Type));
         }
     };
+
+    template <>
+    std::vector<float> convert_stored_type<UnitVectorFormat, std::vector<float>>(
+        typename UnitVectorFormat::Type* storage,
+        DatasetDescription<UnitVectorFormat> dataset
+    ) {
+        std::vector<float> res;
+        res.reserve(dataset.args);
+        for (size_t i=0; i < dataset.args; i++) {
+            res.push_back(UnitVectorFormat::from_16bit_fixed_point(storage[i]));
+        }
+        return res;
+    }
 }

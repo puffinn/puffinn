@@ -17,6 +17,22 @@ namespace collection {
 
     const unsigned int MB = 1024*1024;
 
+    TEST_CASE("get unit vector") {
+        Index<CosineSimilarity> index(2, 1*MB);
+        index.insert(std::vector<float>({1, 0}));
+        index.insert(std::vector<float>({0, 1}));
+        REQUIRE(index.get<std::vector<float>>(1)[0] == 0.0);
+        REQUIRE(index.get<std::vector<float>>(1)[1] == Approx(1.0).margin(1.5/(1 << 15)));
+    }
+
+    TEST_CASE("get set") {
+        Index<JaccardSimilarity> index(5, 1*MB);
+        index.insert(std::vector<uint32_t>{1, 0, 4});
+        index.insert(std::vector<uint32_t>{2, 3});
+        REQUIRE(index.get<std::vector<uint32_t>>(0) == std::vector<uint32_t>{0, 1, 4});
+        REQUIRE(index.get<std::vector<uint32_t>>(1) == std::vector<uint32_t>{2, 3});
+    }
+
     TEST_CASE("Index::search_bf") {
         const unsigned DIMENSIONS = 2;
 

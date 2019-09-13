@@ -44,6 +44,7 @@ struct AbstractIndex {
 class RealIndex : public AbstractIndex {
 public:
     virtual void insert(const std::vector<float>& vec) = 0;
+    virtual std::vector<float> get(uint32_t) = 0;
     virtual std::vector<uint32_t> search(
         const std::vector<float>& vec,
         unsigned int k,
@@ -68,10 +69,16 @@ public:
 
     void insert(const std::vector<float>& vec) {
         table.insert(vec);
-    };
+    }
+
+    std::vector<float> get(uint32_t idx) {
+        return table.template get<std::vector<float>>(idx);
+    }
+
     void rebuild() {
         table.rebuild();
     }
+
     std::vector<uint32_t> search(
         const std::vector<float>& vec,
         unsigned int k,
@@ -113,6 +120,7 @@ public:
 class AbstractSetIndex : public AbstractIndex {
 public:
     virtual void insert(const std::vector<uint32_t>& vec) = 0;
+    virtual std::vector<uint32_t> get(uint32_t idx) = 0;
     virtual std::vector<uint32_t> search(
         const std::vector<uint32_t>& vec,
         unsigned int k,
@@ -141,6 +149,10 @@ public:
 
     void insert(const std::vector<uint32_t>& vec) {
         table.insert(vec); 
+    }
+
+    std::vector<uint32_t> get(uint32_t idx) {
+        return table.template get<std::vector<uint32_t>>(idx);
     }
 
     void rebuild() {
@@ -237,6 +249,14 @@ public:
         } else {
             auto vec = list.cast<std::vector<unsigned int>>();
             set_table->insert(vec);
+        }
+    }
+
+    py::object get(uint32_t idx) {
+        if (real_table) {
+            return py::cast(real_table->get(idx));
+        } else {
+            return py::cast(set_table->get(idx));
         }
     }
 
@@ -461,6 +481,7 @@ PYBIND11_MODULE(puffinn, m) {
              py::arg("vec"), py::arg("k"), py::arg("recall"),
              py::arg("filter_type") = "default"
          )
+        .def("get", &Index::get)
         .def("__reduce__", &Index::reduce)
         .def("append", &Index::append_chunk)
         .def("extend", &Index::extend_chunks);
