@@ -38,6 +38,7 @@ namespace puffinn {
                 }
             }
             // Placement-new
+            free(*storage);
             auto vec = new(storage) std::vector<uint32_t>; 
             vec->reserve(set.size());
             for (auto i : set) {

@@ -10,7 +10,7 @@
 
 namespace puffinn {
     class SimHashFunction {
-        std::unique_ptr<typename UnitVectorFormat::Type, decltype(free)*> hash_vec;
+        AlignedStorage<UnitVectorFormat> hash_vec;
         unsigned int dimensions;
 
     public:
@@ -22,9 +22,7 @@ namespace puffinn {
             UnitVectorFormat::store(vec, hash_vec.get(), dataset);
         }
 
-        SimHashFunction(std::istream& in)
-          : hash_vec(nullptr, &free)
-        {
+        SimHashFunction(std::istream& in) {
             in.read(reinterpret_cast<char*>(&dimensions), sizeof(unsigned int));
             hash_vec = allocate_storage<UnitVectorFormat>(1, dimensions);
             in.read(

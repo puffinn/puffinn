@@ -39,26 +39,87 @@ namespace puffinn {
         return ceil_to_multiple(dimensions, T::ALIGNMENT/sizeof(typename T::Type));
     }
 
+    // Aligns data by allocating additional space.
+    template <typename T>
+    class AlignedStorage {
+        void* raw_mem;
+        typename T::Type* aligned;
+        size_t len;
+
+        void reset() {
+            raw_mem = nullptr;
+            aligned = nullptr;
+            len = 0;
+        }
+
+    public:
+        AlignedStorage() {
+            reset();
+        }
+
+        AlignedStorage(size_t len)
+          : len(len)
+        {
+            size_t buffer_len = len*sizeof(typename T::Type)+T::ALIGNMENT;
+
+            raw_mem = operator new(buffer_len);
+            void* raw_aligned = raw_mem;
+            if (T::ALIGNMENT != 0) {
+                std::align(
+                    T::ALIGNMENT,
+                    len*sizeof(typename T::Type),
+                    raw_aligned,
+                    buffer_len);
+            }
+
+            aligned = static_cast<typename T::Type* const>(raw_aligned);
+            for (size_t i=0; i < len; i++) {
+                new(aligned+i) typename T::Type();
+            }
+        }
+
+        AlignedStorage(AlignedStorage&& other)
+          : raw_mem(other.raw_mem),
+            aligned(other.aligned),
+            len(other.len)
+        {
+            other.reset();
+        }
+
+        AlignedStorage& operator=(AlignedStorage&& rhs) {
+            if (this != &rhs) {
+                raw_mem = rhs.raw_mem;
+                aligned = rhs.aligned;
+                len = rhs.len;
+                rhs.reset();
+            }
+            return *this;
+        }
+
+        ~AlignedStorage() {
+            for (size_t i=0; i < len; i++) {
+                T::free(aligned[i]);
+            }
+            operator delete(raw_mem);
+        }
+
+        typename T::Type* get() const {
+            return aligned;
+        }
+    };
+
     // Allocate a number of vectors of a specific format.
     template <typename T>
-    std::unique_ptr<typename T::Type, decltype(free)*> allocate_storage(
+    AlignedStorage<T> allocate_storage(
         size_t vector_count,
         unsigned int padded_dimensions
     ) {
-        size_t bytes = vector_count*padded_dimensions*sizeof(typename T::Type);
-        // alignment 0 means that it does not matter
-        void* raw_storage = T::ALIGNMENT == 0 ? malloc(bytes) : aligned_alloc(T::ALIGNMENT, bytes);
-        auto storage = static_cast<typename T::Type*>(raw_storage);
-        // Ensure data is in a valid state by default constructing them.
-        for (size_t i=0; i < vector_count*padded_dimensions; i++) {
-            new(storage+i) typename T::Type();
-        }
-        return std::unique_ptr<typename T::Type, decltype(free)*>(storage, free);
+        return AlignedStorage<T>(vector_count*padded_dimensions);
     }
 
     // Convert the input type to the internal format.
     template <typename T, typename U>
-    std::unique_ptr<typename T::Type, decltype(free)*> to_stored_type(
+    AlignedStorage<T> to_stored_type(
         const U& input,
         DatasetDescription<T> desc
     ) {

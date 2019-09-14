@@ -313,7 +313,7 @@ namespace puffinn {
     class CrossPolytopeHashFunction {
         unsigned int dimensions;
         unsigned int padded_dimensions;
-        std::unique_ptr<int16_t, decltype(free)*> random_matrix;
+        AlignedStorage<UnitVectorFormat> random_matrix;
 
     public:
         CrossPolytopeHashFunction(DatasetDescription<UnitVectorFormat> dataset)
@@ -335,9 +335,7 @@ namespace puffinn {
             }
         }
 
-        CrossPolytopeHashFunction(std::istream& in)
-          : random_matrix(nullptr, &free)
-        {
+        CrossPolytopeHashFunction(std::istream& in) {
             in.read(reinterpret_cast<char*>(&dimensions), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&padded_dimensions), sizeof(unsigned int));
             random_matrix = allocate_storage<UnitVectorFormat>(

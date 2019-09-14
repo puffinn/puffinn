@@ -26,7 +26,7 @@ namespace puffinn {
         // Maximal number of inserted vectors.
         unsigned int capacity;
         // Inserted vectors, aligned to the vector alignment.
-        std::unique_ptr<typename T::Type, decltype(free)*> data;
+        AlignedStorage<T> data;
 
     public:
         // Create an empty storage for vectors with the given number of dimensions.
@@ -45,12 +45,6 @@ namespace puffinn {
         {
         }
 
-        ~Dataset() {
-            for (size_t i=0; i < inserted_vectors*storage_len; i++) {
-                T::free(data.get()[i]);
-            }
-        }
-
         Dataset(Dataset&& other)
           : args(other.args),
             storage_len(other.storage_len),
@@ -62,11 +56,6 @@ namespace puffinn {
 
         Dataset& operator=(Dataset&& rhs) {
             if (this != &rhs) {
-                if (data) {
-                    for (size_t i=0; i < inserted_vectors*storage_len; i++) {
-                        T::free(data.get()[i]);
-                    }
-                }
                 args = rhs.args;
                 storage_len = rhs.storage_len;
                 inserted_vectors = rhs.inserted_vectors;
@@ -76,9 +65,7 @@ namespace puffinn {
             return *this;
         }
 
-        Dataset(std::istream& in)
-          : data(nullptr, &free)
-        {
+        Dataset(std::istream& in) {
             T::deserialize_args(in, &args);
             in.read(reinterpret_cast<char*>(&storage_len), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&inserted_vectors), sizeof(unsigned int));
