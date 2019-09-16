@@ -32,6 +32,12 @@ struct PySerializeIter {
 
 struct AbstractIndex {
     virtual void rebuild() = 0;
+    virtual std::vector<uint32_t> search_from_index(
+        uint32_t idx,
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) = 0;
     virtual void serialize(std::ostream& out) = 0;
     virtual std::string metric() = 0;
     virtual std::string hash_function() = 0;
@@ -86,6 +92,15 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<uint32_t> search_from_index(
+        uint32_t idx,
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) {
+        return table.search_from_index(idx, k, recall, filter_type);
     }
 
     void serialize(std::ostream& out) {
@@ -166,6 +181,15 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<uint32_t> search_from_index(
+        uint32_t idx,
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) {
+        return table.search_from_index(idx, k, recall, filter_type);
     }
 
     void serialize(std::ostream& out) {
@@ -268,28 +292,47 @@ public:
         }
     }
 
+    FilterType get_filter_type(const std::string& name) {
+        FilterType filter_type;
+        if (name == "default") {
+            filter_type = FilterType::Default;
+        } else if (name == "none") {
+            filter_type = FilterType::None;
+        } else if (name == "simple") {
+            filter_type = FilterType::Simple;
+        } else {
+            throw std::invalid_argument("filter_type");
+        }
+        return filter_type;
+    }
+
     std::vector<uint32_t> search(
         py::list list,
         unsigned int k,
         float recall,
         std::string filter_name
     ) {
-        FilterType filter_type;
-        if (filter_name == "default") {
-            filter_type = FilterType::Default;
-        } else if (filter_name == "none") {
-            filter_type = FilterType::None;
-        } else if (filter_name == "simple") {
-            filter_type = FilterType::Simple;
-        } else {
-            throw std::invalid_argument("filter_type");
-        }
+        auto filter_type = get_filter_type(filter_name);
         if (real_table) {
             auto vec = list.cast<std::vector<float>>();
             return real_table->search(vec, k, recall, filter_type);
         } else {
             auto vec = list.cast<std::vector<unsigned int>>();
             return set_table->search(vec, k, recall, filter_type);
+        }
+    }
+
+    std::vector<uint32_t> search_from_index(
+        uint32_t idx,
+        unsigned int k,
+        float recall,
+        std::string filter_name
+    ) {
+        auto filter_type = get_filter_type(filter_name);
+        if (real_table) {
+            return real_table->search_from_index(idx, k, recall, filter_type);
+        } else {
+            return set_table->search_from_index(idx, k, recall, filter_type);
         }
     }
 
@@ -481,6 +524,10 @@ PYBIND11_MODULE(puffinn, m) {
              py::arg("vec"), py::arg("k"), py::arg("recall"),
              py::arg("filter_type") = "default"
          )
+        .def("search_from_index", &Index::search_from_index,
+            py::arg("index"), py::arg("k"), py::arg("recall"),
+            py::arg("filter_type") = "default"
+        )
         .def("get", &Index::get)
         .def("__reduce__", &Index::reduce)
         .def("append", &Index::append_chunk)

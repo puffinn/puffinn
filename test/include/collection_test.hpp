@@ -378,4 +378,25 @@ namespace collection {
         deserialized.serialize(s2);
         REQUIRE(s1.str() == s2.str());
     }
+
+    TEST_CASE("search_from_index == search") {
+        int dims = 100;
+        int n = 5000;
+        int k = 10;
+        float recall = 0.7;
+
+        Index<CosineSimilarity> index(dims, 100*MB);
+        for (int i=0; i < 5000; i++) {
+            index.insert(UnitVectorFormat::generate_random(dims));
+        }
+        auto query = UnitVectorFormat::generate_random(dims);
+        index.insert(query);
+        index.rebuild();
+
+        auto res1 = index.search(query, k, recall);
+        res1.erase(res1.begin());
+        auto res2 = index.search_from_index(n, k, recall);
+        res2.pop_back();
+        REQUIRE(res1 == res2);
+    }
 }

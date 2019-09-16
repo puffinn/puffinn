@@ -327,54 +327,29 @@ namespace puffinn {
             float recall,
             FilterType filter_type = FilterType::Default
         ) const {
-            if (dataset.get_size() < 100) {
-                // Due to optimizations values near the edges in prefixmaps are discarded.
-                // When there are fewer total values than SEGMENT_SIZE, all values will be skipped.
-                // However at that point, brute force is likely to be faster regardless.
-                return search_bf(query, k);
-            }
-            g_performance_metrics.new_query();
-            g_performance_metrics.start_timer(Computation::Total);
             auto desc = dataset.get_description();
-
-            // Ensure that the vec is kept alive for the entire scope
             auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
+            return search_formatted_query(stored_query.get(), k, recall, filter_type);
+        }
 
-            MaxBuffer maxbuffer(k);
-            g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash_query = to_stored_type<typename THash::Sim::Format>(query, desc);
-            auto hash_state = hash_source->reset(hash_query.get());
-            g_performance_metrics.store_time(Computation::Hashing);
-            g_performance_metrics.start_timer(Computation::Sketching);
-            auto sketch_query = to_stored_type<typename TSketch::Sim::Format>(query, desc);
-            auto sketches = filterer.reset(sketch_query.get());
-            g_performance_metrics.store_time(Computation::Sketching);
-
-            g_performance_metrics.start_timer(Computation::Search);
-            switch (filter_type) {
-                case FilterType::None:
-                    search_maps_no_filter(
-                        stored_query.get(),
-                        maxbuffer,
-                        recall,
-                        sketches,
-                        hash_state.get());
-                    break;
-                case FilterType::Simple:
-                    search_maps_simple_filter(
-                        stored_query.get(),
-                        maxbuffer,
-                        recall,
-                        sketches,
-                        hash_state.get());
-                    break;
-                default:
-                    search_maps(stored_query.get(), maxbuffer, recall, sketches, hash_state.get());
+        /// Search for the approximate ``k`` nearest neighbors to a value already inserted into the index.
+        ///
+        /// This is similar to ``search(get(idx))``, but avoids potential rounding errors
+        /// from converting between data formats and automatically removes the query index
+        /// from the search results .
+        std::vector<uint32_t> search_from_index(
+            uint32_t idx,
+            unsigned int k,
+            float recall,
+            FilterType filter_type = FilterType::Default
+        ) const {
+            // search for one more as the query will be part of the result set.
+            auto res = search_formatted_query(dataset[idx], k+1, recall, filter_type);
+            if (res.size() != 0 && res[0] == idx) {
+                res.erase(res.begin());
+            } else {
+                res.pop_back();
             }
-            g_performance_metrics.store_time(Computation::Search);
-
-            auto res = maxbuffer.best_indices();
-            g_performance_metrics.store_time(Computation::Total);
             return res;
         }
 
@@ -396,19 +371,7 @@ namespace puffinn {
         ) const {
             auto stored = to_stored_type<typename TSim::Format>(
                 query, dataset.get_description());
-            MaxBuffer res(k);
-            for (size_t i=0; i < dataset.get_size(); i++) {
-                float sim = TSim::compute_similarity(
-                    stored.get(),
-                    dataset[i],
-                    dataset.get_description());
-                res.insert(i, sim);
-            }
-            std::vector<uint32_t> res_indices;
-            for (auto p : res.best_entries()) {
-                res_indices.push_back(p.first);
-            }
-            return res_indices;
+            return search_bf_formatted_query(stored.get(), k);
         }
 
         // Retrieve the number of inserted vectors.
@@ -422,6 +385,76 @@ namespace puffinn {
         }
 
     private:
+        std::vector<unsigned int> search_bf_formatted_query(
+            typename TSim::Format::Type* query,
+            unsigned int k
+        ) const {
+            MaxBuffer res(k);
+            for (size_t i=0; i < dataset.get_size(); i++) {
+                float sim = TSim::compute_similarity(
+                    query,
+                    dataset[i],
+                    dataset.get_description());
+                res.insert(i, sim);
+            }
+            std::vector<uint32_t> res_indices;
+            for (auto p : res.best_entries()) {
+                res_indices.push_back(p.first);
+            }
+            return res_indices;
+        }
+
+        std::vector<uint32_t> search_formatted_query(
+            typename TSim::Format::Type* query,
+            unsigned int k,
+            float recall,
+            FilterType filter_type
+        ) const {
+            if (dataset.get_size() < 100) {
+                // Due to optimizations values near the edges in prefixmaps are discarded.
+                // When there are fewer total values than SEGMENT_SIZE, all values will be skipped.
+                // However at that point, brute force is likely to be faster regardless.
+                return search_bf_formatted_query(query, k);
+            }
+            g_performance_metrics.new_query();
+            g_performance_metrics.start_timer(Computation::Total);
+
+            MaxBuffer maxbuffer(k);
+            g_performance_metrics.start_timer(Computation::Hashing);
+            auto hash_state = hash_source->reset(query);
+            g_performance_metrics.store_time(Computation::Hashing);
+            g_performance_metrics.start_timer(Computation::Sketching);
+            auto sketches = filterer.reset(query);
+            g_performance_metrics.store_time(Computation::Sketching);
+
+            g_performance_metrics.start_timer(Computation::Search);
+            switch (filter_type) {
+                case FilterType::None:
+                    search_maps_no_filter(
+                        query,
+                        maxbuffer,
+                        recall,
+                        sketches,
+                        hash_state.get());
+                    break;
+                case FilterType::Simple:
+                    search_maps_simple_filter(
+                        query,
+                        maxbuffer,
+                        recall,
+                        sketches,
+                        hash_state.get());
+                    break;
+                default:
+                    search_maps(query, maxbuffer, recall, sketches, hash_state.get());
+            }
+            g_performance_metrics.store_time(Computation::Search);
+
+            auto res = maxbuffer.best_indices();
+            g_performance_metrics.store_time(Computation::Total);
+            return res;
+        }
+
         // Size of buffer of 4element segments to consider at once.
         const static int RING_SIZE = NUM_SKETCHES;
 
