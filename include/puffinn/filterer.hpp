@@ -24,7 +24,7 @@ namespace puffinn {
         // Check if the value at position idx in the dataset passes the next filter.
         // A value can only pass one filter.
         bool passes_filter(FilterLshDatatype sketch, int_fast32_t sketch_idx) const {
-            uint_fast8_t sketch_diff = __builtin_popcountll(sketch ^ query_sketches[sketch_idx]);
+            uint_fast8_t sketch_diff = popcountll(sketch ^ query_sketches[sketch_idx]);
             return (sketch_diff <= max_sketch_diff);
         }
     };
@@ -110,7 +110,7 @@ namespace puffinn {
         }
 
         void prefetch(uint32_t idx, int_fast32_t sketch_idx) const {
-            __builtin_prefetch(&sketches[(idx << LOG_NUM_SKETCHES) | sketch_idx]);
+            prefetch_addr(&sketches[(idx << LOG_NUM_SKETCHES) | sketch_idx]);
         }
 
         uint_fast8_t get_max_sketch_diff(float min_dist) const {

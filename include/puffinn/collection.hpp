@@ -674,10 +674,10 @@ namespace puffinn {
 
                             auto prereq_prefetch_segment =
                                 ring[(ring_idx+PREREQ_PREFETCH_DIST)&(RING_SIZE-1)];
-                            __builtin_prefetch(&prereq_prefetch_segment[0]);
-                            __builtin_prefetch(&prereq_prefetch_segment[1]);
-                            __builtin_prefetch(&prereq_prefetch_segment[2]);
-                            __builtin_prefetch(&prereq_prefetch_segment[3]);
+                            prefetch_addr(&prereq_prefetch_segment[0]);
+                            prefetch_addr(&prereq_prefetch_segment[1]);
+                            prefetch_addr(&prereq_prefetch_segment[2]);
+                            prefetch_addr(&prereq_prefetch_segment[3]);
 
                             // indices
                             auto v1 = ring[ring_idx][0];
@@ -728,10 +728,10 @@ namespace puffinn {
 
                         auto prereq_prefetch_segment =
                             ring[(ring_idx+PREREQ_PREFETCH_DIST)&(RING_SIZE-1)];
-                        __builtin_prefetch(&prereq_prefetch_segment[0]);
-                        __builtin_prefetch(&prereq_prefetch_segment[1]);
-                        __builtin_prefetch(&prereq_prefetch_segment[2]);
-                        __builtin_prefetch(&prereq_prefetch_segment[3]);
+                        prefetch_addr(&prereq_prefetch_segment[0]);
+                        prefetch_addr(&prereq_prefetch_segment[1]);
+                        prefetch_addr(&prereq_prefetch_segment[2]);
+                        prefetch_addr(&prereq_prefetch_segment[3]);
 
                         auto v1 = ring[ring_idx][0];
                         auto v2 = ring[ring_idx][1];
