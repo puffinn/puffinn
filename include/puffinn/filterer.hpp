@@ -6,6 +6,7 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/performance.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <immintrin.h>
 #include <memory>
@@ -115,7 +116,7 @@ namespace puffinn {
 
         uint_fast8_t get_max_sketch_diff(float min_dist) const {
             float collision_prob = hash_source->collision_probability(min_dist, 1);
-            return (NUM_FILTER_HASHBITS*(1.0-collision_prob));
+            return std::roundf(NUM_FILTER_HASHBITS*(1.0-collision_prob));
         }
 
         FilterLshDatatype get_sketch(uint32_t idx, int_fast32_t sketch_idx) const {
