@@ -63,7 +63,7 @@ namespace puffinn {
             size_t len;
             in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
             sketches.resize(len);
-            in.read(reinterpret_cast<char*>(&sketches[0]), len*sizeof(FilterLshDatatype));
+            in.read(reinterpret_cast<char*>(sketches.data()), len*sizeof(FilterLshDatatype));
         }
 
         void serialize(std::ostream& out) const {
@@ -74,7 +74,7 @@ namespace puffinn {
             }
             size_t len = sketches.size();
             out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
-            out.write(reinterpret_cast<const char*>(&sketches[0]), len*sizeof(FilterLshDatatype));
+            out.write(reinterpret_cast<const char*>(sketches.data()), len*sizeof(FilterLshDatatype));
         }
 
         uint64_t memory_usage(DatasetDescription<typename T::Sim::Format> dataset) {
