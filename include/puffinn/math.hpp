@@ -1,9 +1,7 @@
 #pragma once
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__AVX__)
     #include <immintrin.h>
-#elif __SSE__
-    #include <xmmintrin.h>
 #endif
 
 
@@ -52,10 +50,10 @@ namespace puffinn {
         #endif
     }
 
-    #ifdef __SSE__
+    #ifdef __AVX__
         // Compute the l2 distance between two floating point vectors without taking the
         // final root.
-        static float l2_distance_float_sse(const float* lhs, const float* rhs, unsigned int dimensions) {
+        static float l2_distance_float_avx(const float* lhs, const float* rhs, unsigned int dimensions) {
             // Number of float values that fit into a 256 bit vector.
             const static unsigned int VALUES_PER_VEC = 8;
 
@@ -95,8 +93,8 @@ namespace puffinn {
     }
 
     static float l2_distance_float(const float* lhs, const float* rhs, unsigned int dimensions) {
-        #ifdef __SSE__
-            return l2_distance_float_sse(lhs, rhs, dimensions);
+        #ifdef __AVX__
+            return l2_distance_float_avx(lhs, rhs, dimensions);
         #else
             return l2_distance_float_simple(lhs, rhs, dimensions);
         #endif
