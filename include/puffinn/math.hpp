@@ -35,9 +35,10 @@ namespace puffinn {
     #endif
 
     static int16_t dot_product_i16_simple(const int16_t* lhs, const int16_t* rhs, unsigned int dimensions) {
-        int16_t res = 0.0;
+        int16_t res = 0;
         for (unsigned int i=0; i < dimensions; i++) {
-            res += lhs[i]*rhs[i];
+            int32_t precise = static_cast<int32_t>(lhs[i])*static_cast<int32_t>(rhs[i]);
+            res += static_cast<int16_t>(((precise >> 14)+1) >> 1);
         }
         return res;
     }
