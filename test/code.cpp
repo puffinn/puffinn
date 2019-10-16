@@ -7,3 +7,4 @@
 #include "hash_test.hpp"
 #include "hash_source_test.hpp"
 #include "filterer_test.hpp"
+#include "math_test.hpp"
