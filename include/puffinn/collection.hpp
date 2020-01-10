@@ -285,7 +285,7 @@ namespace puffinn {
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
-                auto hash_state = this->hash_source->reset(dataset[idx]);
+                auto hash_state = this->hash_source->reset(dataset[idx], true);
                 // Only parallelize if this step is computationally expensive.
                 if (hash_source->precomputed_hashes()) {
                     for (auto& map : lsh_maps) {
@@ -421,7 +421,7 @@ namespace puffinn {
 
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash_state = hash_source->reset(query);
+            auto hash_state = hash_source->reset(query, false);
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::Sketching);
             auto sketches = filterer.reset(query);

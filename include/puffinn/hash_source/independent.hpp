@@ -87,7 +87,10 @@ namespace puffinn {
             return (res >> bits_to_cut);
         }
 
-        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
+        std::unique_ptr<HashSourceState> reset(
+                typename T::Sim::Format::Type* vec,
+                bool parallelize
+        ) const {
             auto state = std::make_unique<IndependentHashSourceState<T>>();
             state->hashed_vec = vec;
             return state;

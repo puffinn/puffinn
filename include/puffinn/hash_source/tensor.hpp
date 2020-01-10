@@ -105,16 +105,26 @@ namespace puffinn {
                 index_pair.second);
         }
 
-        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
-            auto inner_state = independent_hash_source.reset(vec);
+        std::unique_ptr<HashSourceState> reset(
+                typename T::Sim::Format::Type* vec,
+                bool parallelize
+        ) const {
+            auto inner_state = independent_hash_source.reset(vec, parallelize);
 
             std::vector<uint64_t> hashes;
             hashes.resize(hashers.size());
             // Store the hashes so that the final hash can be created by simply bitwise or-ing them together.
-            #pragma omp parallel for
-            for (unsigned int i=0; i < hashers.size(); i++) {
-                hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
+            if (parallelize) {
+                #pragma omp parallel for
+                for (unsigned int i=0; i < hashers.size(); i++) {
+                    hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
+                }
+            } else {
+                for (unsigned int i=0; i < hashers.size(); i++) {
+                    hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
+                }
             }
+
             // Store hashes shifted by one, so that lhs hashes and rhs hashes
             // do not overlap.
             // Ensure that the lhs hashes are longer or equal to the length of the rhs hashes.
