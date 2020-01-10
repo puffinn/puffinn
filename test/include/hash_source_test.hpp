@@ -18,9 +18,9 @@ namespace hash_source {
         auto stored2 = to_stored_type<typename T::Sim::Format>(vec2, dimensions);
 
         auto hasher = source->sample();
-        auto state = source->reset(stored1.get());
+        auto state = source->reset(stored1.get(), false);
         auto hash1 = (*hasher)(state.get());
-        state = source->reset(stored2.get());
+        state = source->reset(stored2.get(), false);
         auto hash2 = (*hasher)(state.get());
         REQUIRE(hash1 != hash2);
     }
@@ -43,7 +43,7 @@ namespace hash_source {
         for (int vec_idx = 0; vec_idx < 2; vec_idx++) {
             auto vec = UnitVectorFormat::generate_random(dimensions.args);
             auto stored = to_stored_type<typename T::Sim::Format>(vec, dimensions);
-            auto state = source->reset(stored.get());
+            auto state = source->reset(stored.get(), false);
             uint64_t max_hash = (((1llu << (hash_length-1))-1) << 1)+1;
 
             for (unsigned int i=0; i < num_hashes; i++) {
