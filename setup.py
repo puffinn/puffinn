@@ -14,7 +14,9 @@ except ImportError:
     sys.stderr.write('Setuptools not found!\n')
     raise
 
-use_openmp = False
+# native clang doesn't support openmp
+# TODO add better way to check for openmp
+use_openmp = sys.platform != 'darwin'
 extra_args = ['-std=c++14', '-march=native', '-O3']
 extra_link_args = []
 
