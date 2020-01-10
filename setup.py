@@ -6,7 +6,7 @@ try:
     import pypandoc
     long_description = pypandoc.convert('README.md', 'rst', format='md')
 except (IOError, ImportError):
-    long_description = open('README.md').read()
+    long_description = open('README.md', encoding='utf-8').read()
 
 try:
     from setuptools import setup, find_packages, Extension
