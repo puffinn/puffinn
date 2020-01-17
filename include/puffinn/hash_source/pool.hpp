@@ -93,13 +93,23 @@ namespace puffinn {
         }
 
         // Recompute hashes for a new vector.
-        std::unique_ptr<HashSourceState> reset(typename T::Sim::Format::Type* vec) const {
+        std::unique_ptr<HashSourceState> reset(
+                typename T::Sim::Format::Type* vec,
+                bool parallelize
+        ) const {
             auto hashes = std::unique_ptr<LshDatatype>(new LshDatatype[hash_functions.size()]);
                 
-            #pragma omp parallel for
-            for (size_t i=0; i<hash_functions.size(); i++) {
-                hashes.get()[i] = hash_functions[i](vec);
+            if (parallelize) {
+                #pragma omp parallel for
+                for (size_t i=0; i<hash_functions.size(); i++) {
+                    hashes.get()[i] = hash_functions[i](vec);
+                }
+            } else {
+                for (size_t i=0; i<hash_functions.size(); i++) {
+                    hashes.get()[i] = hash_functions[i](vec);
+                }
             }
+
             auto state = std::make_unique<HashPoolState>();
             state->hashes = std::move(hashes);
             return state;

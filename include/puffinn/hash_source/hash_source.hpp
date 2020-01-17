@@ -30,7 +30,8 @@ namespace puffinn {
 
         // Initialize the state necessary to compute the hashes of the given vector.
         virtual std::unique_ptr<HashSourceState> reset(
-            typename T::Sim::Format::Type* vec
+            typename T::Sim::Format::Type* vec,
+            bool parallelize
         ) const = 0;
 
         virtual float collision_probability(

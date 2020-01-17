@@ -91,7 +91,7 @@ namespace puffinn {
             sketches.reserve(dataset.get_size()*NUM_SKETCHES);
 
             for (size_t idx = first_index; idx < dataset.get_size(); idx++) {
-                auto state = hash_source->reset(dataset[idx]);
+                auto state = hash_source->reset(dataset[idx], true);
                 for (size_t sketch_index = 0; sketch_index < NUM_SKETCHES; sketch_index++) {
                     sketches.push_back((*hash_functions[sketch_index])(state.get()));
                 }
@@ -99,7 +99,7 @@ namespace puffinn {
         }
 
         QuerySketches reset(typename T::Sim::Format::Type* vec) const {
-            auto state = hash_source->reset(vec);
+            auto state = hash_source->reset(vec, false);
 
             QuerySketches res;
             res.query_sketches.reserve(NUM_SKETCHES);
