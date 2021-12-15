@@ -54,6 +54,7 @@ namespace puffinn {
             return dimensions;
         }
 
+
         static uint64_t inner_memory_usage(Type&) {
             return 0;
         }
@@ -86,6 +87,18 @@ namespace puffinn {
             for (size_t i=copy.size(); i < dataset.storage_len; i++) {
                 storage[i] = to_16bit_fixed_point(0.0);
             }
+        }
+
+        static float distance(Type* p1, Type* p2, unsigned int dimensions) {
+            Type dist = 0;
+            for(unsigned int i = 0; i < dimensions; i++) {
+                dist += p1[i] - p2[i];
+                // TODO: Square the above expression, though it is in fixed point format
+            }
+            return from_16bit_fixed_point(dist);
+
+
+
         }
 
         static void free(Type&) {}

@@ -8,6 +8,7 @@
 #include "puffinn/maxbuffer.hpp"
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
+#include "puffinn/kmeans.hpp"
 
 #include <cassert>
 #include <istream>
@@ -92,6 +93,8 @@ namespace puffinn {
         std::unique_ptr<HashSource<THash>> hash_source;
         // Container of sketches. Also needs to be reset.
         Filterer<TSketch> filterer;
+        // Kmeans clustering for PQ
+        Kmeans<typename TSim::Format> clustering;
 
         // Number of bytes allowed to be used.
         uint64_t memory_limit;
@@ -125,7 +128,8 @@ namespace puffinn {
           : dataset(Dataset<typename TSim::Format>(dataset_args)),
             filterer(sketch_args, dataset.get_description()),
             memory_limit(memory_limit),
-            hash_args(hash_args.copy())
+            hash_args(hash_args.copy()),
+            clustering(dataset, 8)
         {
             static_assert(
                 std::is_same<TSim, typename THash::Sim>::value
@@ -162,6 +166,9 @@ namespace puffinn {
             in.read(reinterpret_cast<char*>(&last_rebuild), sizeof(uint32_t));
         }
 
+        void fit(){
+            clustering.fit();
+        }
         /// Deserialize a single chunk.
         void deserialize_chunk(std::istream& in) {
             // Assumes that hash_source is non-null,

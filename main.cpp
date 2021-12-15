@@ -37,11 +37,17 @@ std::unordered_map<std::string, std::vector<float>> get_data()
 
 int main() {
     std::unordered_map<std::string, std::vector<float>> data = get_data();
+
     std::printf("Loaded data has %zu entries\n", data.size());
-    puffinn::Kmeans<float, 8> clustering;
-    for (auto it = data.begin(); it != data.end(); it++) {
-        clustering.insert((*it).second);
+
+    puffinn::Index<puffinn::CosineSimilarity> index(
+        100,
+        4LL*1024*1024*1024
+    );
+    for (auto p : data) {
+        index.insert(p.second);
     }
+    index.fit();
 
 
 
