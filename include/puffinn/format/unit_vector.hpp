@@ -90,15 +90,15 @@ namespace puffinn {
         }
 
         static float distance(Type* p1, Type* p2, unsigned int dimensions) {
-            Type dist = 0;
+            float dist = 0;
             for(unsigned int i = 0; i < dimensions; i++) {
-                dist += p1[i] - p2[i];
-                // TODO: Square the above expression, though it is in fixed point format
+                float a = from_16bit_fixed_point(p1[i]),
+                      b = from_16bit_fixed_point(p2[i]);
+                dist += std::pow(a-b,2);
             }
-            return from_16bit_fixed_point(dist);
-
-
-
+            // the actual distance is unimportant so no need to take the square root 
+            // dist = std::sqrt(dist)
+            return dist;
         }
 
         static void free(Type&) {}
