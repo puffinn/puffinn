@@ -100,6 +100,11 @@ namespace puffinn {
             // dist = std::sqrt(dist)
             return dist;
         }
+        static void add_to_float(Type* p1, float* p2, unsigned int dimensions){
+            for (unsigned int i = 0; i < dimensions; i++) {
+                p2[i] += from_16bit_fixed_point(p1[i]);
+            }
+        }
 
         static void free(Type&) {}
 
