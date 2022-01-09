@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "puffinn/format/generic.hpp"
+#include "puffinn/math.hpp"
 
 namespace puffinn {
     struct RealVectorFormat {
@@ -32,6 +33,22 @@ namespace puffinn {
         }
 
         static void free(Type&) {}
+
+
+        static float distance(const float* lhs, const float* rhs, unsigned int dimension)
+        {
+            return l2_distance_float(lhs, rhs, dimension);
+        }
+
+        static void add_assign(float* lhs, const float* rhs, unsigned int dimensions)
+        {   
+            add_assign_float(lhs, rhs, dimensions);
+        }
+
+        static void divide_assign(float* lhs, const unsigned int div, unsigned int dimensions)
+        {
+            multiply_assign_float(lhs, 1/div, dimensions);
+        }
 
         static std::vector<float> generate_random(unsigned int dimensions) {
             std::normal_distribution<float> normal_distribution(0.0, 1.0);

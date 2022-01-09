@@ -9,8 +9,8 @@
 namespace puffinn {
     #ifdef __AVX2__
         static int16_t dot_product_i16_avx2(const int16_t* lhs, const int16_t* rhs, unsigned int dimensions) {
-            // Number of i16 values that fit into a 256 bit vector.
-            const static unsigned int VALUES_PER_VEC = 16;
+        // Number of i16 values that fit into a 256 bit vector.
+        const static unsigned int VALUES_PER_VEC = 16;
 
             // specialized function for multiplication of the fixed point format
             __m256i res = _mm256_mulhrs_epi16(
@@ -82,6 +82,43 @@ namespace puffinn {
             }
             return ret;
         }
+
+    // Element-wise addition of float vectors and stores in lhs
+    static void add_assign_float_avx(float* lhs, const float* rhs, unsigned int dimensions)
+    {
+        const static unsigned int VALUES_PER_VEC = 8;
+
+        for (
+            unsigned int i=0;
+            i < dimensions;
+            i += VALUES_PER_VEC
+        ) {
+            __m256 sum = _mm256_add_ps(
+                    _mm256_load_ps(&lhs[i]),
+                    _mm256_load_ps(&hhs[i]))
+            _mm256_store_ps(&lhs[i], sum);
+        }
+    }
+
+    static void multiply_assign_float_avx(float* lhs, const float factor, unsigned int dimensions) 
+    {
+        const static unsigned int VALUES_PER_VEC = 8;
+
+
+        alignas(32) float factor_arr[8] = {factor, factor, factor, factor, factor, factor, factor, factor};
+        _m256 factor256 = __mm256_load_ps(factor_arr);
+
+        for (
+            unsigned int i=0;
+            i < dimensions;
+            i += VALUES_PER_VEC
+        ) {
+            __m256 res = _mm256_mul_ps(
+                    _mm256_load_ps(&lhs[i]),
+                    factor256);
+            _mm256_store_ps(&lhs[i], res);
+        }
+    }
     #endif
 
     static float l2_distance_float_simple(const float* lhs, const float* rhs, unsigned int dimensions) {
@@ -91,6 +128,34 @@ namespace puffinn {
             res += diff*diff;
         }
         return res;
+    }
+
+    static void add_assign_float_simple(float* lhs, const float* rhs, unsigned int dimensions) {
+        for(unsigned int i=0; i < dimensions; i++) {
+            lhs[i] += rhs[i];
+        }
+    }
+
+    static void multiply_assign_float_simple(float* lhs, const float factor, unsigned int dimensions) {
+        for(unsigned int i=0; i < dimensions; i++) {
+            lhs[i] *= factor;
+        }
+    }
+
+    static void add_assign_float(float* lhs, const float* rhs, unsigned int dimensions) {
+        #ifdef __AVX__
+            return add_assign_float_avx(lhs, rhs, dimensions);
+        #else
+            return add_assign_float_simple(lhs, rhs, dimensions);
+        #endif
+    }
+
+    static void multiply_assign_float(float* lhs, const float factor, unsigned int dimensions) {
+        #ifdef __AVX__
+            return multiply_assign_float_avx(lhs, factor, dimensions);
+        #else
+            return multiply_assign_float_simple(lhs, factor, dimensions);
+        #endif
     }
 
     static float l2_distance_float(const float* lhs, const float* rhs, unsigned int dimensions) {
@@ -107,7 +172,7 @@ namespace puffinn {
         unsigned int power_of_two = 1;
         while (power_of_two < value) {
             log++;
-            power_of_two *= 2;
+            power_of_two *= 2; 
         }
         return log;
     }
