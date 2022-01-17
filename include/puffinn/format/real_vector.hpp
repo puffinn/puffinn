@@ -47,7 +47,7 @@ namespace puffinn {
 
         static void divide_assign(float* lhs, const unsigned int div, unsigned int dimensions)
         {
-            multiply_assign_float(lhs, 1/div, dimensions);
+            multiply_assign_float(lhs, 1.0/div, dimensions);
         }
 
         static std::vector<float> generate_random(unsigned int dimensions) {

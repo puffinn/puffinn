@@ -1,70 +1,38 @@
 #pragma once
 
+#include "catch.hpp"
 #include "puffinn/dataset.hpp"
 #include "puffinn/kmeans.hpp"
 #include "puffinn/format/real_vector.hpp"
 
-#include <unordered_map>
 #include <vector>
-#include <string>
 #include <iostream>
-#include <stdio.h>
-#include <fstream>
-#include <sstream>
 
 
 using namespace puffinn;
 namespace kmeans {
 
-    
-    std::unordered_map<std::string, std::vector<float>> get_data(std::string path)
-    {
-        using namespace std;
-        unordered_map<string, vector<float>> data;
+    TEST_CASE("basic kmeans clustering") {
+        unsigned int N = 8, dims = 2, K=2;
+        std::vector<float>  data[N] = { {-4.0 , 1.0 },
+                                        {-3.0 , 1.0 },
+                                        {-2.0 , 1.0 },
+                                        {-1.0 , 1.0 },
+                                        {1.0 , 1.0 },
+                                        {2.0 , 1.0 },
+                                        {3.0 , 1.0 },
+                                        {4.0 , 1.0 }};
 
-        fstream datafile;
-        datafile.open(path, ios::in);
-        string line, value;
-        vector<float> data_entry;
-        vector<string> splitted_string;
-        if (datafile.is_open()) {
-            while(getline(datafile, line)) {
-                stringstream ss(line);
-                string word;
-                ss >> word;
-
-                while(ss >> value) {
-                    data[word].push_back(stof(value));
-                }
-            }
-        }
-        return data;
-
-    }
-
-    std::unordered_map<std::string, std::vector<float>> get_test_data()
-    {
-        return get_data("../data/test");
-    }
-
-    void general_test() 
-    {
-        // TODO:
-        // test add_assign and multiply assign in math
-        std::cout << "Start general_test" << std::endl;
-        std::unordered_map<std::string, std::vector<float>> data = get_test_data();
-        std::cout << "data loaded" << std::endl;
-
-        Dataset<RealVectorFormat> dataset(2, data.size());
-        std::cout << "dataset is initialized" << std::endl;
+        Dataset<RealVectorFormat> dataset(dims, N);
         for (auto entry : data) {
-            dataset.insert(entry.second);
+            dataset.insert(entry);
         }
-        std::cout << "data inserted" << std::endl;
-        KMeans<RealVectorFormat> kmeans(dataset, 8);
+        KMeans<RealVectorFormat> kmeans(dataset, (uint8_t)K);
         kmeans.fit();
-
-        std::cout << "test complete" << std::endl;
+        float   cen1 = kmeans.getCentroid(0)[0],
+                cen2 = kmeans.getCentroid(1)[0];
+        bool is_correct = (cen1 == 2.5 && cen2 == -2.5) || (cen1 == -2.5 && cen2 == 2.5);
+        REQUIRE(is_correct);
     }
 
 }
