@@ -95,7 +95,7 @@ namespace puffinn {
         ) {
             __m256 sum = _mm256_add_ps(
                     _mm256_load_ps(&lhs[i]),
-                    _mm256_load_ps(&hhs[i]))
+                    _mm256_load_ps(&rhs[i]));
             _mm256_store_ps(&lhs[i], sum);
         }
     }
@@ -106,7 +106,6 @@ namespace puffinn {
 
 
         alignas(32) float factor_arr[8] = {factor, factor, factor, factor, factor, factor, factor, factor};
-        _m256 factor256 = __mm256_load_ps(factor_arr);
 
         for (
             unsigned int i=0;
@@ -115,7 +114,7 @@ namespace puffinn {
         ) {
             __m256 res = _mm256_mul_ps(
                     _mm256_load_ps(&lhs[i]),
-                    factor256);
+                    _mm256_load_ps(factor_arr));
             _mm256_store_ps(&lhs[i], res);
         }
     }
