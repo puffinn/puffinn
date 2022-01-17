@@ -1,7 +1,2 @@
-#include "kmeans_test.hpp"
-
-int main()
-{
-    kmeans::general_test();
-
-}
+#define CATCH_CONFIG_MAIN
+#include "catch.hpp"
