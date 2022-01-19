@@ -11,12 +11,10 @@
 namespace puffinn
 {
     // TODO:
-    // Can most likely avoid converting to floats and just use fixed point format
-    // Better utilization of processer, perhaps parallelization
-    // implement kmeans++ center initilization algorithm 
-    // currently some centers have no points which are closest to them which is impossible when they are samples
-    // and center at index 0 always have the majority which it shouldn't as they should be random
-
+    // Handling of other data-formats
+    // Investigate parallelization within the clustering for performance gain
+    // Implement kmeans++ center initilization algorithm 
+    // Manage padding when using avx2 and vectors are divided into M sections
 
     /// Class for performing k-means clustering on a given dataset
     template <typename TFormat>
@@ -43,7 +41,7 @@ namespace puffinn
               N(dataset.get_size()),
               vector_len(dataset.get_description().storage_len)
         {
-            std::cout << "Kmeans info: \tN=" << N << "\tK=" << (unsigned int)K << std::endl;
+            std::cerr << "Kmeans info: \tN=" << N << "\tK=" << (unsigned int)K << std::endl;
             centroids = new typename TFormat::Type[K*vector_len] {};
             labels = new uint8_t[N];
             std::fill_n(labels, N, K+1);
@@ -58,7 +56,7 @@ namespace puffinn
 
         void fit()
         {
-            std::cout << "fit called" << std::endl;
+            std::cerr << "fit called" << std::endl;
             init_centers_random();
             single_lloyd();
         }
@@ -72,7 +70,7 @@ namespace puffinn
         void init_centers_random()
         {
             // Try using kmeans++ initialization algorithm
-            std::cout << "Init random centers" << std::endl;
+            std::cerr << "Init random centers" << std::endl;
             auto &rand_gen = get_default_random_generator();
             std::uniform_int_distribution<unsigned int> random_idx(0, N-1);
 
@@ -99,55 +97,49 @@ namespace puffinn
 
             do
             {
-                std::cout << "lloyd iteration: " << iteration;
+                std::cerr << "lloyd iteration: " << iteration << std::endl;
                 last_inertia = inertia;
-                inertia = setLabels(labels);
-                std::cout << " with inertia: " << inertia << std::endl;
+                inertia = setLabels();
                 show(labels, N);
-                setNewCenters(labels);
+                setNewCenters();
                 iteration++;
-                std::cout << std::endl << std::endl;
+                std::cerr << std::endl << std::endl;
 
             } while ((last_inertia-inertia) > tol && iteration < max_iter );
             
-            std::cout << "inertia diff: " << last_inertia << " - " <<  inertia << " = " << last_inertia - inertia << std::endl;
+            std::cerr << "inertia diff: " << last_inertia << " - " <<  inertia << " = " << last_inertia - inertia << std::endl;
 
 
         }
 
         // Sets the labels for all vectors returns the inertia for the current set of centers 
-        float setLabels(uint8_t* const labels) {
+        float setLabels() {
             float inertia = 0,
                   distances[N];
             std::fill_n(distances, N, FLT_MAX);
 
-
             // for every data entry
             for (size_t i = 0; i < N; i++) {
-                //std::printf("0x%08x = %d = %f\n", i,i,distances[i]);
                 // for every centroid
                 for (size_t c_i = 0; c_i < K; c_i++) {
                     float dist = TFormat::distance(dataset[i], centroids + (c_i*vector_len), vector_len);
-                    //std::cout << "index: " << i << " c_i: " << c_i << " dist=" << dist << std::endl;
                     if (dist < distances[i]){
-
                         distances[i] = dist;
-                        //std::printf("0x%08x\n", j);
                         labels[i] = c_i;
                     }
                 }
                 inertia += distances[i];
             }
-            std::cout << "\nDistances for entries" << std::endl;
+            std::cerr << "Distances for entries" << std::endl;
             show(distances, N);
+            std::cerr << "Which leads to an inertia of " << inertia << std::endl;
             return inertia;
         }
 
         // Sets new centers according to average of
         // vectors belonging to the cluster
-        void setNewCenters(uint8_t* const labels) {
-            // Doesn't seem to work
-            std::cout << "setNewCenters start" << std::endl;
+        void setNewCenters() {
+            std::cerr << "setNewCentroids start" << std::endl;
             showCentroids();
             typename TFormat::Type new_centroids[K*vector_len] = {};
             unsigned int counts[K] = {};
@@ -161,29 +153,29 @@ namespace puffinn
             for (size_t c_i = 0; c_i < K; c_i++) {
                 typename TFormat::Type* new_centroid_start = new_centroids + (c_i*vector_len);
                 TFormat::divide_assign(new_centroid_start, counts[c_i], vector_len);
-                std::cout << "printing centroid " << c_i << " after finding average" << std::endl;
-                show(new_centroid_start, vector_len);
             }
             // copy to class variable centroids
             std::copy(new_centroids, new_centroids + (K*vector_len), centroids); 
+            std::cerr << "setNewCentroids end" << std::endl;
+            showCentroids();
         }
 
         void show(uint8_t * arr, size_t size) {
             for (size_t i = 0; i < size; i++) {
-                std::cout << (unsigned int)arr[i] << " ";
+                std::cerr << (unsigned int)arr[i] << " ";
             }
-            std::cout << std::endl;
+            std::cerr << std::endl;
         }
 
         void show(typename TFormat::Type* arr, size_t size) {
             for (size_t i = 0; i < size; i++) {
-                std::cout << arr[i] << " ";
+                std::cerr << arr[i] << " ";
             }
-            std::cout << std::endl;
+            std::cerr << std::endl;
         }
         void showCentroids() {
             for (size_t c_i = 0; c_i < K; c_i++) {
-                std::cout << "Centroid " << c_i << " ";
+                std::cerr << "Centroid " << c_i << " ";
                 show(centroids + (c_i*vector_len), vector_len);
             }
         }
