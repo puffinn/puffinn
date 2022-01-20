@@ -7,9 +7,7 @@
 
 
 #### TODO:
-- Kmeans++
-- Mail to Hr. Aumüller
-- Read PQ overview paper againo
+- get Global minimum Enertia not local
 
 
 Format for PQ:
