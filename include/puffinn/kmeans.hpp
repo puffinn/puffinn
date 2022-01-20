@@ -100,6 +100,8 @@ namespace puffinn
 
         void init_centroids_kpp(float * distances)
         {
+
+            showCentroids();
             firstCentroid(distances);
             // 1 centroid is chosen
             for (size_t c_i = 1; c_i < K; c_i++) {
@@ -110,6 +112,7 @@ namespace puffinn
                 // compute all dists again
                 calcDists(distances, c_i);
             }
+            showCentroids();
 
         }
 
@@ -150,10 +153,12 @@ namespace puffinn
 
             do
             {
+                std::fill_n(distances, N, FLT_MAX);
                 std::cerr << "lloyd iteration: " << iteration << std::endl;
                 last_inertia = inertia;
                 setLabels(distances);
                 inertia = calcInertia(distances);
+                std::cerr << "Which leads to an inertia of " << inertia << std::endl;
                 show(labels, N);
                 setNewCenters();
                 iteration++;
@@ -176,14 +181,14 @@ namespace puffinn
         }
         // Calculates distances for all vectors to given centroid
         // Sets results in dists argument
-        void calcDists(float * const dists, size_t c_i) 
+        void calcDists(float * const distances, size_t c_i) 
         {
             // for every data entry
             for (size_t i = 0; i < N; i++) {
                 float dist = TFormat::distance(dataset[i], centroids[c_i], vector_len);
-                if (dist < dists[i]) {
+                if (dist < distances[i]) {
                     updateState(i,c_i);
-                    dists[i] = dist;
+                    distances[i] = dist;
                 }
 
             }
@@ -197,6 +202,7 @@ namespace puffinn
         // c_i: index for centroid
         void updateState(size_t i, size_t c_i)
         {
+            if (labels[i] == c_i) return;
             TFormat::subtract_assign(sums[labels[i]], dataset[i], vector_len);
             TFormat::add_assign(sums[c_i], dataset[i], vector_len);
             counts[labels[i]]--;
@@ -214,7 +220,6 @@ namespace puffinn
             // debug
             std::cerr << "Distances for entries" << std::endl;
             show(distances, N);
-            std::cerr << "Which leads to an inertia of " << inertia << std::endl;
         }
 
         // Sets new centers according to average of
@@ -246,7 +251,7 @@ namespace puffinn
         }
         void showCentroids() {
             for (size_t c_i = 0; c_i < K; c_i++) {
-                std::cerr << "Centroid " << c_i << " ";
+                std::cerr << "Centroid " << c_i << ": ";
                 show(centroids[c_i], vector_len);
             }
         }

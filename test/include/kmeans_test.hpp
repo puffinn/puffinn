@@ -29,10 +29,15 @@ namespace kmeans {
         }
         KMeans<RealVectorFormat> kmeans(dataset, (uint8_t)K);
         kmeans.fit();
-        float   cen1 = kmeans.getCentroid(0)[0],
-                cen2 = kmeans.getCentroid(1)[0];
-        bool is_correct = (cen1 == 2.5 && cen2 == -2.5) || (cen1 == -2.5 && cen2 == 2.5);
-        REQUIRE(is_correct);
+        float   *cen1 = kmeans.getCentroid(0),
+                *cen2 = kmeans.getCentroid(1);
+        std::vector<float> c1(cen1, cen1+2);
+        std::vector<float> c2(cen2, cen2+2);
+        std::set<std::vector<float>>
+                                correct = {{2.5, 1.0},
+                                            {-2.5, 1.0}},
+                                centroids = {c1,c2};
+        REQUIRE(correct == centroids);
     }
 
     TEST_CASE("basic kmeans clustering 2") {
