@@ -159,4 +159,33 @@ namespace math {
         }
 
     }
+
+    TEST_CASE("subtract_assign_float version equal"){
+        unsigned int reps = 100;
+        unsigned int dims = 100;
+        Dataset<RealVectorFormat> dataset(dims);
+        for (unsigned i = 0; i < reps; i++)
+        {
+            auto a = RealVectorFormat::generate_random(dims);
+            auto b = RealVectorFormat::generate_random(dims);
+            auto sa = to_stored_type<RealVectorFormat>(a, dataset.get_description());
+            auto sb = to_stored_type<RealVectorFormat>(b, dataset.get_description());
+            //normal addition
+            auto sa_simple = to_stored_type<RealVectorFormat>(a, dataset.get_description());
+
+            subtract_assign_float_simple(sa_simple.get(), sb.get(), dims);
+            #ifdef __AVX__
+                subtract_assign_float_avx(sa.get(), sb.get(), dims);
+                auto simple = sa_simple.get();
+                auto vectorized = sa.get();
+                bool equal = true;
+                for(unsigned int j = 0; j < dataset.get_description().storage_len; j++){
+                    if(simple[i] != Approx(vectorized[i]).epsilon(0.0001)) equal = false;
+                }
+                REQUIRE(equal);
+            #endif            
+        }
+
+    } 
+
 }

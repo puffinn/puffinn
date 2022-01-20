@@ -40,11 +40,15 @@ namespace puffinn {
             return l2_distance_float(lhs, rhs, dimension);
         }
 
-        static void add_assign(float* lhs, const float* rhs, unsigned int dimensions)
+        static void add_assign(float* const lhs, const float* rhs, unsigned int dimensions)
         {   
             add_assign_float(lhs, rhs, dimensions);
         }
+        static void subtract_assign(float * const lhs, const float* rhs, unsigned int dimensions){
+            
+            subtract_assign_float(lhs,rhs, dimensions);
 
+        }
         static void divide_assign(float* lhs, const unsigned int div, unsigned int dimensions)
         {
             multiply_assign_float(lhs, 1.0/div, dimensions);
