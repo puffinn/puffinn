@@ -29,6 +29,10 @@ namespace puffinn
         // Pointers to start of array
         typename TFormat::Type* centroids;
         uint8_t* labels;
+        // contains sum of all vectors in clusters
+        float * sums;
+        // contains count of vectors in each cluster
+        unsigned int* counts;
 
         const float tol = 0.0001;
         const uint16_t max_iter = 300;
@@ -45,20 +49,28 @@ namespace puffinn
             centroids = new typename TFormat::Type[K*vector_len] {};
             labels = new uint8_t[N];
             std::fill_n(labels, N, K+1);
+
+            sums = new float[K*vector_len] = {};
+            counts = new unsigned int[K] = {};
         }
 
         ~KMeans() 
         {
             delete[] centroids;
             delete[] labels;
+            delete[] sums;
+            delete[] counts;
 
         }
 
         void fit()
         {
+            float distances[N];
+            std::fill_n(distances, N, FLT_MAX);
             std::cerr << "fit called" << std::endl;
-            init_centers_random();
-            single_lloyd();
+            // init_centers_random(); doesn't work
+            init_centroids_kpp(distances);
+            single_lloyd(distances);
         }
 
         typename TFormat::Type* getCentroid(size_t index) {
@@ -87,10 +99,45 @@ namespace puffinn
             }
         }
 
+        void init_centroids_kpp(float * distances)
+        {
+            firstCentroid(distances);
+            // 1 centroid is chosen
+            for (size_t c_i = 1; c_i < K, c_i++) {
+                // pick vector based on dists
+                // copy vector to centriod
+                // compute all dists again
+                calcDists(c_i);
+            }
+
+
+
+            float dits[M][N];
+        }
+
+        void firstCentroid(float * distances)
+        {
+
+            // Pick random centroid uniformly
+            auto &rand_gen = get_default_random_generator();
+            std::uniform_int_distribution<unsigned int> random_idx(0, N-1);
+            unsigned int sample_idx = random_idx(rand_gen);
+            std::copy(dataset[sample_idx], datset[sample_idx] + vector_len, centroids);
+
+            // Calc all dists to this centroid
+            for (size_t i = 0; i < N; i++) {
+                float dist = TFormat::distance(dataset[i], centroids + (c_i*vector_len), vector_len);
+                distances[i] = dist;
+                TFormat::add_assign(sums, dataset[i], vector_len);
+                counts[0]++;
+                labels[i] = 0;
+            }
+
+        }
         // Performs a single kmeans clustering 
         // centers are set to the member centers
         // Using the lloyd algorithm for clustering
-        void single_lloyd() {
+        void single_lloyd(float * distances) {
 
             float last_inertia;
             uint16_t iteration = 0;
@@ -99,7 +146,8 @@ namespace puffinn
             {
                 std::cerr << "lloyd iteration: " << iteration << std::endl;
                 last_inertia = inertia;
-                inertia = setLabels();
+                setLabels(distances);
+                inertia = calcInertia(distances);
                 show(labels, N);
                 setNewCenters();
                 iteration++;
@@ -112,28 +160,55 @@ namespace puffinn
 
         }
 
-        // Sets the labels for all vectors returns the inertia for the current set of centers 
-        float setLabels() {
-            float inertia = 0,
-                  distances[N];
-            std::fill_n(distances, N, FLT_MAX);
-
-            // for every data entry
+        float calcInertia(float * distances)
+        {
+            float inertia = 0;
             for (size_t i = 0; i < N; i++) {
-                // for every centroid
-                for (size_t c_i = 0; c_i < K; c_i++) {
-                    float dist = TFormat::distance(dataset[i], centroids + (c_i*vector_len), vector_len);
-                    if (dist < distances[i]){
-                        distances[i] = dist;
-                        labels[i] = c_i;
-                    }
-                }
                 inertia += distances[i];
             }
+            return inertia;
+        }
+        // Calculates distances for all vectors to given centroid
+        // Sets results in dists argument
+        void calcDists(float * const dists, size_t c_i) 
+        {
+            // for every data entry
+            for (size_t i = 0; i < N; i++) {
+                float dist = TFormat::distance(dataset[i], centroids + (c_i*vector_len), vector_len);
+                if (dist < dists[i]) {
+                    updateState(i,c_i);
+                    dists[i] = dist;
+                }
+
+            }
+
+        }
+
+        // Update Label for vector
+        // update centroids sums for both old centroids and new assigned centroid
+        // update counts for both centroids as well
+        // i: index for vector
+        // c_i: index for centroid
+        void updateState(size_t i, size_t c_i)
+        {
+            TFormat::subtract_assign(sums + (labels[i]*vector_len), dataset[i], vector_len);
+            TFormat::add_assign(sums + (c_i*vector_len), dataset[i], vector_len);
+            counts[labels[i]]--;
+            counts[c_i]++;
+            labels[i] = c_i;
+            return;
+
+        }
+
+        // Sets the labels for all vectors 
+        void setLabels(float * distances) {
+            for (size_t c_i = 0; c_i < K; c_i++) {
+                calcDists(distances, c_i);
+            }
+            // debug
             std::cerr << "Distances for entries" << std::endl;
             show(distances, N);
             std::cerr << "Which leads to an inertia of " << inertia << std::endl;
-            return inertia;
         }
 
         // Sets new centers according to average of
@@ -141,21 +216,11 @@ namespace puffinn
         void setNewCenters() {
             std::cerr << "setNewCentroids start" << std::endl;
             showCentroids();
-            typename TFormat::Type new_centroids[K*vector_len] = {};
-            unsigned int counts[K] = {};
-            // Add all vectors in a cluster
-            for (size_t i = 0; i < N; i++) {
-                typename TFormat::Type* new_centroid_start = new_centroids + (labels[i]*vector_len);
-                TFormat::add_assign(new_centroid_start, dataset[i], vector_len);
-                counts[labels[i]]++;
-            }
+            std::copy(sums, sums + (K*vector_len), centroids);
             // Average all centroids by the number of elements in cluster
             for (size_t c_i = 0; c_i < K; c_i++) {
-                typename TFormat::Type* new_centroid_start = new_centroids + (c_i*vector_len);
-                TFormat::divide_assign(new_centroid_start, counts[c_i], vector_len);
+                TFormat::divide_assign(centroids + (c_i*vector_len), counts[c_i], vector_len);
             }
-            // copy to class variable centroids
-            std::copy(new_centroids, new_centroids + (K*vector_len), centroids); 
             std::cerr << "setNewCentroids end" << std::endl;
             showCentroids();
         }
