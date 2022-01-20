@@ -60,7 +60,6 @@ namespace kmeans {
         for (auto entry : data) {
             dataset.insert(entry);
         }
-        std::cout << "Tim du tager fucking fejl" << std::endl;
         KMeans<RealVectorFormat> kmeans(dataset, (uint8_t)K);
         kmeans.fit();
         float   *cen1 = kmeans.getCentroid(0),
