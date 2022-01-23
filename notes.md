@@ -3,11 +3,14 @@
 - How do we even compile and run the code correctly
 - How should we choose M? (Multiple of # of elements in avx2?), or something else with padding inside vectors
 - Inertia can overflow? Should we preprocess vectors?
+ 
 
 
 
 #### TODO:
-- get Global minimum Enertia not local
+- Kmeans++
+- Mail to Hr. Aumüller
+- Read PQ overview paper againo
 
 
 Format for PQ:
@@ -15,4 +18,9 @@ Format for PQ:
 - Construct lookup table
 - input: query vector
 - output: whatever paper says, probably indexes for data entries closest to query
+- Follow that of the filter already inside puffin that is used to store sketches
+- We have to determine threshholds for when data entries are added to the buffer, at least for the sketch distances, not sure how we will handle the stopping criterion
+
+
+
 
