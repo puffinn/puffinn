@@ -20,6 +20,8 @@ Format for PQ:
 - output: whatever paper says, probably indexes for data entries closest to query
 - Follow that of the filter already inside puffin that is used to store sketches
 - We have to determine threshholds for when data entries are added to the buffer, at least for the sketch distances, not sure how we will handle the stopping criterion
+- Will we use symmetric distance lookups or assymetric (in essence will we convert query vector into product code)
+
 
 
 

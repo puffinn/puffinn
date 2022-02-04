@@ -54,6 +54,17 @@ namespace puffinn {
         {
         }
 
+        Dataset& operator=(Dataset& rhs) {
+            if (this != &rhs) {
+                args = rhs.args;
+                storage_len = rhs.storage_len;
+                inserted_vectors = rhs.inserted_vectors;
+                capacity = rhs.capacity;
+                data = std::move(rhs.data);
+            }
+            return *this;
+        }
+
         Dataset& operator=(Dataset&& rhs) {
             if (this != &rhs) {
                 args = rhs.args;

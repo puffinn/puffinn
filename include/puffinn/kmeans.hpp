@@ -97,7 +97,7 @@ namespace puffinn
                 if (run_inertia < gb_inertia) {
                     // New run is the currently best, thus overwrite gb variables
                     gb_inertia = run_inertia;
-                    // gb_centroids = rd.centroids;
+                    gb_centroids = rd.centroids; // Copies the whole Class 
                     std::copy(rd.labels, rd.labels+N, gb_labels);
                 }
             }
