@@ -4,25 +4,39 @@
 - How should we choose M? (Multiple of # of elements in avx2?), or something else with padding inside vectors
 - Inertia can overflow? Should we preprocess vectors?
  
+#### Readings
+Both [1] does some precomputation by either random permutation or multiplication with an orthonormal matrix, respectively. Why is this?
+Seems many approches require linear algebra, shouldn't we use a library? (This would create issues with the currently implemented Dataset storing format)
 
+[1] - Quantization based Fast Inner Product Search
 
-
-#### TODO:
-- Kmeans++
-- Mail to Hr. Aumüller
-- Read PQ overview paper againo
 
 
 Format for PQ:
 - input: Dataset  
 - Construct lookup table
 - input: query vector
-- output: whatever paper says, probably indexes for data entries closest to query
+- output: Estimated cosine similarity
 - Follow that of the filter already inside puffin that is used to store sketches
 - We have to determine threshholds for when data entries are added to the buffer, at least for the sketch distances, not sure how we will handle the stopping criterion
-- Will we use symmetric distance lookups or assymetric (in essence will we convert query vector into product code)
+
+#### TODO:
+- Begin implementation of naive PQ with both euclidean dist optimization and mahalanobis dist.
+- Implement random permutation of data points, does it have any effect on (LSH scheme?)
+- Begin implementation of PQ class to follow format of 'filterer' in index class, and decide design for codebook. i.e. deciding sizes when $d/M \mod 2 \ne 0$ (**VIKTOR**)
+- Begin writing related work for original PQ paper and litterature related to that as well (llyod algo).
+- Begin writing formal problem definition of ANN
+- Create quick testing setup using acutal data (Investigate if ANN-Benchmark can be used through small datasample and only 1 not all datasets) (**TIM**)
+- Look at previous bsc. projects of what is included and to what level of expertize.
 
 
 
+#### Agenda for next meeting
+- Explain readings and what we think is important and should be implemented
+- Our next steps i.e. TODO list
+- Figuring out the threshhold for adding to the buffer?
+    - Empirically figure out what works at 'index building time'
+    - Bootstrap threshhold such that X\% is above threshhold according to real inner products (maybe faulty as estimated cosine dists are biased??)
+    - Other options?
 
 
