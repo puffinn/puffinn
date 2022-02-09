@@ -1,6 +1,5 @@
 #pragma once
 #include "puffinn/dataset.hpp"
-
 #include <vector>
 #include <iostream>
 #include <algorithm>
@@ -55,6 +54,7 @@ namespace puffinn
         const uint8_t K;
         const size_t N;
         const size_t vector_len;
+        unsigned int offset = 0;
         // reference to data contained in Index instance
         // centroids is for the current run and gb_centroids is for the global best
         Dataset<TFormat> &dataset,
@@ -81,15 +81,27 @@ namespace puffinn
             std::cerr << "Kmeans info: \tN=" << N << "\tK=" << (unsigned int)K << std::endl;
             gb_labels = new uint8_t[N];
         }
+        KMeans(Dataset<TFormat> &dataset, uint8_t K_clusters, unsigned int subspaceSize)
+            : K(K_clusters),
+              N(dataset.get_size()),
+              vector_len(subspaceSize),
+              dataset(dataset),
+              gb_centroids(vector_len, K)
+        {
+            std::cerr << "Kmeans info: \tN=" << N << "\tK=" << (unsigned int)K << std::endl;
+            gb_labels = new uint8_t[N];
+        }
 
         ~KMeans() 
         {
             delete[] gb_labels;
         }
-
-        void fit()
+        void fit(unsigned int m = 0)
         {
+            //clean up for next subspace fit
+            gb_inertia = FLT_MAX;
             std::cerr << "fit called" << std::endl;
+            offset = m*vector_len;
             // init_centers_random(); doesn't work
             for(uint8_t run=0; run < N_RUNS; run++) {
                 struct RunData rd(N, K, vector_len);
@@ -101,10 +113,17 @@ namespace puffinn
                     std::copy(rd.labels, rd.labels+N, gb_labels);
                 }
             }
+
         }
 
         typename TFormat::Type* getCentroid(size_t c_i) {
             return gb_centroids[c_i];
+        }
+
+        Dataset<TFormat> getCentroids(){
+            Dataset<TFormat> tmp(vector_len, K);
+            tmp = gb_centroids;
+            return tmp;
         }
 
     private:
@@ -147,7 +166,7 @@ namespace puffinn
                 // pick vector based on distances
                 int vec = weightedRandomSTD(rd.distances);
                 // copy vector to centriod
-                std::copy(dataset[vec], dataset[vec] + vector_len, rd.centroids[c_i]);
+                std::copy(dataset[vec]+offset, dataset[vec]+offset + vector_len, rd.centroids[c_i]);
                 // compute all distances again
                 calcDists(rd, c_i);
             }
@@ -161,13 +180,13 @@ namespace puffinn
             auto &rand_gen = get_default_random_generator();
             std::uniform_int_distribution<unsigned int> random_idx(0, N-1);
             unsigned int sample_idx = random_idx(rand_gen);
-            std::copy(dataset[sample_idx], dataset[sample_idx] + vector_len, rd.centroids[0]);
+            std::copy(dataset[sample_idx]+offset, dataset[sample_idx]+offset + vector_len, rd.centroids[0]);
 
             // Calc all distances to this centroid
             for (size_t i = 0; i < N; i++) {
-                float dist = TFormat::distance(dataset[i], rd.centroids[0], vector_len);
+                float dist = TFormat::distance(dataset[i]+offset, rd.centroids[0], vector_len);
                 rd.distances[i] = dist;
-                TFormat::add_assign(rd.sums[0], dataset[i], vector_len);
+                TFormat::add_assign(rd.sums[0], dataset[i]+offset, vector_len);
                 rd.counts[0]++;
                 rd.labels[i] = 0;
             }
@@ -224,7 +243,7 @@ namespace puffinn
         {
             // for every data entry
             for (size_t i = 0; i < N; i++) {
-                float dist = TFormat::distance(dataset[i], rd.centroids[c_i], vector_len);
+                float dist = TFormat::distance(dataset[i]+offset, rd.centroids[c_i], vector_len);
                 if (dist < rd.distances[i]) {
                     updateState(rd, i, c_i);
                     rd.distances[i] = dist;
@@ -242,8 +261,8 @@ namespace puffinn
         void updateState(struct RunData& rd, size_t i, size_t c_i)
         {
             if (rd.labels[i] == c_i) return;
-            TFormat::subtract_assign(rd.sums[rd.labels[i]], dataset[i], vector_len);
-            TFormat::add_assign(rd.sums[c_i], dataset[i], vector_len);
+            TFormat::subtract_assign(rd.sums[rd.labels[i]], dataset[i]+offset, vector_len);
+            TFormat::add_assign(rd.sums[c_i], dataset[i]+offset, vector_len);
             rd.counts[rd.labels[i]]--;
             rd.counts[c_i]++;
             rd.labels[i] = c_i;
@@ -303,4 +322,4 @@ namespace puffinn
             }
         }
     };
-} // namespace puffin
+}
