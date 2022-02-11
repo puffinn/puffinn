@@ -21,13 +21,15 @@ Format for PQ:
 - We have to determine threshholds for when data entries are added to the buffer, at least for the sketch distances, not sure how we will handle the stopping criterion
 
 #### TODO:
-- Begin implementation of naive PQ with both euclidean dist optimization and mahalanobis dist.
-- Implement random permutation of data points, does it have any effect on (LSH scheme?)
-- Begin implementation of PQ class to follow format of 'filterer' in index class, and decide design for codebook. i.e. deciding sizes when $d/M \mod 2 \ne 0$ (**VIKTOR**)
-- Begin writing related work for original PQ paper and litterature related to that as well (llyod algo).
-- Begin writing formal problem definition of ANN
-- Create quick testing setup using acutal data (Investigate if ANN-Benchmark can be used through small datasample and only 1 not all datasets) (**TIM**)
-- Look at previous bsc. projects of what is included and to what level of expertize.
+- [ ] Begin implementation of naive PQ with both euclidean dist optimization and mahalanobis dist. ~ 
+- [ ] Implement random permutation of data points, does it have any effect on (LSH scheme?)
+- [x] Working implementation of PQ class to follow format of 'filterer' in index class, and decide design for codebook. i.e. 
+- [ ] deciding sizes when $d/M \mod 2 \ne 0$ (**VIKTOR**)
+- [ ] Get SIMD to work for subspaces
+- [ ] Begin writing related work for original PQ paper and litterature related to that as well (llyod algo).
+- [ ] Begin writing formal problem definition of ANN
+- [ ] Create quick testing setup using acutal data (Investigate if ANN-Benchmark can be used through small datasample and only 1 not all datasets) (**TIM**)
+-[] Look at previous bsc. projects of what is included and to what level of expertize.
 
 
 
