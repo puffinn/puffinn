@@ -113,7 +113,6 @@ namespace puffinn
                     std::copy(rd.labels, rd.labels+N, gb_labels);
                 }
             }
-
         }
 
         typename TFormat::Type* getCentroid(size_t c_i) {
@@ -124,6 +123,10 @@ namespace puffinn
             Dataset<TFormat> tmp(vector_len, K);
             tmp = gb_centroids;
             return tmp;
+        }
+
+        uint8_t * getLabels(){
+            return gb_labels;
         }
 
     private:
@@ -181,7 +184,6 @@ namespace puffinn
             std::uniform_int_distribution<unsigned int> random_idx(0, N-1);
             unsigned int sample_idx = random_idx(rand_gen);
             std::copy(dataset[sample_idx]+offset, dataset[sample_idx]+offset + vector_len, rd.centroids[0]);
-
             // Calc all distances to this centroid
             for (size_t i = 0; i < N; i++) {
                 float dist = TFormat::distance(dataset[i]+offset, rd.centroids[0], vector_len);
@@ -189,8 +191,7 @@ namespace puffinn
                 TFormat::add_assign(rd.sums[0], dataset[i]+offset, vector_len);
                 rd.counts[0]++;
                 rd.labels[i] = 0;
-            }
-
+            }            
         }
         
         int weightedRandomSTD(float * distances)
