@@ -33,12 +33,19 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 
 The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/3142c5d2c0e101bcfce119cd33d98e7250ab3aa1/bench/bench.cpp#L106-L123).
 During index construction the hash function is hidden behind a unique pointer, and the vector to be hashed as well.
-This indirection can be expensive, as shown in the table below, were we compare this invocation pattern with the invocation without virtual calls.
+This indirection may be expensive, therefore we try also a direct static implementation. 
+In all benchmarks we compute 24-bits hashes, with the exeption of the `single` calls that generate 8 bits for cross polytope and 1 for simhash.
+Therefore, for cross polytope we would expect times to be three times higher than a single invocation, for simhash 24 times higher.
 Again, the times are in nanoseconds.
 
 |               ns/op |                op/s |    err% |     total | Hashing
 |--------------------:|--------------------:|--------:|----------:|:--------
-|              297.15 |        3,365,309.01 |    0.1% |      0.00 | `FHT cross polytope`
-|              331.92 |        3,012,810.78 |    0.2% |      0.00 | `FHT cross polytope (indirection)`
-|                5.03 |      198,885,072.36 |    0.1% |      0.00 | `SimHash`
-|               16.92 |       59,109,331.51 |    0.4% |      0.00 | `SimHash (indirection)`
+|              995.79 |        1,004,225.20 |    1.2% |      0.01 | `Cross polytope (single)`
+|            3,073.02 |          325,412.89 |    1.4% |      0.04 | `Cross polytope (indirection)`
+|            3,046.00 |          328,299.19 |    0.1% |      0.04 | `Cross polytope (static)`
+|              321.03 |        3,114,996.82 |    0.0% |      0.00 | `FHT Cross polytope (single)`
+|            1,044.19 |          957,681.46 |    1.0% |      0.01 | `FHT cross polytope (indirection)`
+|              934.88 |        1,069,653.37 |    0.1% |      0.01 | `FHT cross polytope (static)`
+|                5.03 |      198,865,506.85 |    0.2% |      0.00 | `SimHash (single)`
+|              332.74 |        3,005,358.55 |    3.1% |      0.00 | `SimHash (indirection)`
+|              260.93 |        3,832,376.04 |    4.8% |      0.00 | `SimHash (static)`
