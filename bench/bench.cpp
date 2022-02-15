@@ -18,15 +18,7 @@ const unsigned int MB = 1024*1024;
 
 std::vector<std::vector<float>> read_glove(const std::string& filename);
 
-int main(int argc, char ** argv) {
-    if (argc != 2) {
-        std::cerr << "USAGE: Bench <FILE>" << std::endl;
-        return 1;
-    }
-    printf("Reading vectors\n");
-    auto dataset = read_glove(argv[1]);
-    printf("Vectors read\n");
-
+void bench_index_build(std::vector<std::vector<float>> dataset) {
     auto dimensions = dataset[0].size(); 
 
     // To benchmark the index build time we have to start from a new
@@ -34,7 +26,6 @@ int main(int argc, char ** argv) {
     // and no rebuild is triggered.
     auto bencher = ankerl::nanobench::Bench()
         .title("Index building")
-        .minEpochIterations(10)
         .timeUnit(std::chrono::milliseconds(1), "ms");
     auto index_memory = 100*MB;
 
@@ -56,6 +47,48 @@ int main(int argc, char ** argv) {
         for (auto v : dataset) { index.insert(v); }
         index.rebuild();
     });
+}
+
+void bench_query(std::vector<std::vector<float>> dataset) {
+    auto dimensions = dataset[0].size(); 
+
+    // To benchmark the index build time we have to start from a new
+    // index at each measurement iteration, otherwise the index is already populated
+    // and no rebuild is triggered.
+    auto bencher = ankerl::nanobench::Bench()
+        .title("Index query")
+        .minEpochIterations(100)
+        .timeUnit(std::chrono::nanoseconds(1), "ns");
+    auto index_memory = 100*MB;
+
+    puffinn::Index<puffinn::CosineSimilarity> index(
+        dimensions,
+        index_memory
+    );
+    for (auto v : dataset) { index.insert(v); }
+    index.rebuild();
+    
+    bencher.run("index_query (query 0)", [&] {
+        index.search(dataset[0], 11, 0.9);
+    });
+    bencher.run("index_query (query 100)", [&] {
+        index.search(dataset[100], 11, 0.9);
+    });
+    bencher.run("index_query (query 1000)", [&] {
+        index.search(dataset[1000], 11, 0.9);
+    });
+}
+
+
+int main(int argc, char ** argv) {
+    if (argc != 2) {
+        std::cerr << "USAGE: Bench <FILE>" << std::endl;
+        return 1;
+    }
+    auto dataset = read_glove(argv[1]);
+
+    bench_query(dataset);
+    bench_index_build(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {
