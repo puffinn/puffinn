@@ -21,5 +21,14 @@ add_executable(Test "test/main.cpp" "test/code.cpp")
 if (OpenMP_FOUND)
     target_link_libraries(Test ${OpenMP_CXX_LIBRARIES})
 endif()
+ 
+# Benchmark code
+include_directories("bench")
+add_library(nanobench "bench/nanobench.cpp")
+add_executable(Bench "bench/bench.cpp")
+target_link_libraries(Bench nanobench)
+if (OpenMP_FOUND)
+    target_link_libraries(Bench ${OpenMP_CXX_LIBRARIES})
+endif()
 
 add_subdirectory(docs)
