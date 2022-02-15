@@ -33,12 +33,12 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 
 The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/3142c5d2c0e101bcfce119cd33d98e7250ab3aa1/bench/bench.cpp#L106-L123).
 During index construction the hash function is hidden behind a unique pointer, and the vector to be hashed as well.
-This indirection is rather expensive, as shown in the table below, were we compare this invocation pattern with the invocation without virtual calls.
+This indirection can be expensive, as shown in the table below, were we compare this invocation pattern with the invocation without virtual calls.
 Again, the times are in nanoseconds.
 
 |               ns/op |                op/s |    err% |     total | Hashing
 |--------------------:|--------------------:|--------:|----------:|:--------
-|              348.17 |        2,872,187.65 |    0.0% |      0.00 | `FHT cross polytope`
-|            1,021.79 |          978,674.22 |    0.8% |      0.00 | `FHT cross polytope (indirection)`
-|                5.02 |      199,068,622.20 |    0.1% |      0.00 | `SimHash`
-|              254.47 |        3,929,774.42 |    0.3% |      0.00 | `SimHash (indirection)`
+|              297.15 |        3,365,309.01 |    0.1% |      0.00 | `FHT cross polytope`
+|              331.92 |        3,012,810.78 |    0.2% |      0.00 | `FHT cross polytope (indirection)`
+|                5.03 |      198,885,072.36 |    0.1% |      0.00 | `SimHash`
+|               16.92 |       59,109,331.51 |    0.4% |      0.00 | `SimHash (indirection)`

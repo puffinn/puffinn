@@ -84,8 +84,8 @@ void run_with_indirection(ankerl::nanobench::Bench * bencher, const char * name,
     auto hash_args = puffinn::IndependentHashArgs<THash>();
     auto hash_source = hash_args.build(
         dataset.get_description(),
-        10,
-        puffinn::MAX_HASHBITS);
+        1,
+        1);
     auto hash_function = hash_source->sample();
     auto state = hash_source->reset(dataset[0], true);
     bencher->run(name, [&] {
