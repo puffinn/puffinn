@@ -28,3 +28,10 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 |        1,101,686.88 |              907.70 |    0.4% |      1.33 | `index_query (query 0)`
 |        1,139,939.24 |              877.24 |    2.2% |      1.38 | `index_query (query 100)`
 |        1,076,122.38 |              929.26 |    0.9% |      1.30 | `index_query (query 1000)`
+
+## Hashing
+
+|               ns/op |                op/s |    err% |     total | Hashing
+|--------------------:|--------------------:|--------:|----------:|:--------
+|              312.50 |        3,199,961.50 |    0.1% |      0.00 | `FHT cross polytope`
+|                5.02 |      199,208,638.41 |    0.0% |      0.00 | `SimHash`

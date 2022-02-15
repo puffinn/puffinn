@@ -18,7 +18,7 @@ const unsigned int MB = 1024*1024;
 
 std::vector<std::vector<float>> read_glove(const std::string& filename);
 
-void bench_index_build(std::vector<std::vector<float>> dataset) {
+void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     auto dimensions = dataset[0].size(); 
 
     // To benchmark the index build time we have to start from a new
@@ -49,7 +49,7 @@ void bench_index_build(std::vector<std::vector<float>> dataset) {
     });
 }
 
-void bench_query(std::vector<std::vector<float>> dataset) {
+void bench_query(const std::vector<std::vector<float>> & dataset) {
     auto dimensions = dataset[0].size(); 
 
     // To benchmark the index build time we have to start from a new
@@ -79,6 +79,39 @@ void bench_query(std::vector<std::vector<float>> dataset) {
     });
 }
 
+void bench_hash(const std::vector<std::vector<float>> & vectors) {
+    auto dimensions = vectors[0].size(); 
+
+    puffinn::Dataset<puffinn::CosineSimilarity::Format> dataset(dimensions);
+    for (auto v : vectors) {
+        dataset.insert(v);
+    }
+
+    // To benchmark the index build time we have to start from a new
+    // index at each measurement iteration, otherwise the index is already populated
+    // and no rebuild is triggered.
+    auto bencher = ankerl::nanobench::Bench()
+        .title("Hashing")
+        .minEpochIterations(100)
+        .timeUnit(std::chrono::nanoseconds(1), "ns");
+    
+    // auto desc = dataset.get_description();
+    // auto stored_v = to_stored_type<puffinn::CosineSimilarity::Format>(dataset[0], desc);
+    auto vec = dataset[0];
+
+    puffinn::FHTCrossPolytopeHash fhtcp(dataset.get_description(), puffinn::FHTCrossPolytopeArgs());
+    auto hash_fhtcp = fhtcp.sample();
+    bencher.run("FHT cross polytope", [&] {
+        ankerl::nanobench::doNotOptimizeAway(hash_fhtcp(vec));
+    });
+
+    puffinn::SimHash simhash(dataset.get_description(), puffinn::SimHashArgs());
+    auto hash_simhash = simhash.sample();
+    bencher.run("SimHash", [&] {
+        ankerl::nanobench::doNotOptimizeAway(hash_simhash(vec));
+    });
+}
+
 
 int main(int argc, char ** argv) {
     if (argc != 2) {
@@ -88,7 +121,8 @@ int main(int argc, char ** argv) {
     auto dataset = read_glove(argv[1]);
 
     bench_query(dataset);
-    bench_index_build(dataset);
+    // bench_index_build(dataset);
+    bench_hash(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {
