@@ -35,7 +35,7 @@ namespace puffinn{
                 //fit to each subspace
                 kmeans.fit(m);
                 //get the resulting centroids for each subspace
-                codebook.push_back(kmeans.getCentroids());
+                codebook.push_back(kmeans.getAllCentroids());
                 //get gb_labels from fitting, the m'th fit will be the i'th index of the PQCodes
                 uint8_t * labels = kmeans.getLabels();
                 //std::cout << "gb_labels "<< std::endl;
@@ -60,7 +60,7 @@ namespace puffinn{
 
         }
 
-        vector<uint8_t> getPQCode(int index){
+        std::vector<uint8_t> getPQCode(int index){
             return pqCodes[index];
         }
 

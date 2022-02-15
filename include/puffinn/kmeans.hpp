@@ -60,7 +60,7 @@ namespace puffinn
         Dataset<TFormat> &dataset,
                           gb_centroids;
 
-        uint8_t* gb_labels;
+        uint8_t *gb_labels;
 
         // We don't need centroid, labels, sums, counts after fit has been called
         // They takeup quite a lot of space
@@ -119,7 +119,7 @@ namespace puffinn
             return gb_centroids[c_i];
         }
 
-        Dataset<TFormat> getCentroids(){
+        Dataset<TFormat> getAllCentroids(){
             Dataset<TFormat> tmp(vector_len, K);
             tmp = gb_centroids;
             return tmp;

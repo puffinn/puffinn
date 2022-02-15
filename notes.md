@@ -3,7 +3,7 @@
 - How do we even compile and run the code correctly
 - How should we choose M? (Multiple of # of elements in avx2?), or something else with padding inside vectors
 - Inertia can overflow? Should we preprocess vectors?
- 
+- 
 #### Readings
 Both [1] does some precomputation by either random permutation or multiplication with an orthonormal matrix, respectively. Why is this?
 Seems many approches require linear algebra, shouldn't we use a library? (This would create issues with the currently implemented Dataset storing format)
@@ -25,9 +25,11 @@ Format for PQ:
 - [ ] Implement random permutation of data points, does it have any effect on (LSH scheme?)
 - [x] Working implementation of PQ class to follow format of 'filterer' in index class, and decide design for codebook. i.e. 
 - [x] Implement simple PQ Code function
-- [ ] deciding sizes when $d/M \mod 2 \ne 0$ (**VIKTOR**)
-- [ ] Get SIMD to work for subspaces
+- [ ] Do not store PQ codes explicitly
+- [ ] deciding sizes when $d/M \mod 2 \ne 0$ (**VIKTOR**) -> we can avoid this issue by carefully selecting m and adding filler 0's on the vectores (this becomes better with random permutation??)
+  - [ ] Get SIMD to work for subspaces
 - [ ] Begin writing related work for original PQ paper and litterature related to that as well (llyod algo).
+- [ ] Make PQ and Kmeans work for UnitVectorFormat (and only this as realVectorFormat doesn't work for LSH indexing)
 - [ ] Test quantization error
 - [ ] Begin writing formal problem definition of ANN
 - [ ] Create quick testing setup using acutal data (Investigate if ANN-Benchmark can be used through small datasample and only 1 not all datasets) (**TIM**)
