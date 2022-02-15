@@ -31,7 +31,7 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 
 ## Hashing
 
-The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/b7b76f765faf6ad896de67b15b5a41efa11b1629/bench/bench.cpp#L96-L131).
+The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/3142c5d2c0e101bcfce119cd33d98e7250ab3aa1/bench/bench.cpp#L106-L123).
 During index construction the hash function is hidden behind a unique pointer, and the vector to be hashed as well.
 This indirection is rather expensive, as shown in the table below, were we compare this invocation pattern with the invocation without virtual calls.
 Again, the times are in nanoseconds.
