@@ -93,6 +93,16 @@ void run_with_indirection(ankerl::nanobench::Bench * bencher, const char * name,
     });
 }
 
+template<typename THash> 
+void run_no_indirection(ankerl::nanobench::Bench * bencher, const char * name, const puffinn::Dataset<puffinn::UnitVectorFormat> & dataset) {
+    auto vec = dataset[0];
+    THash hash(dataset.get_description(), typename THash::Args());
+    auto hash_fn = hash.sample();
+    bencher->run(name, [&] {
+        ankerl::nanobench::doNotOptimizeAway(hash_fn(vec));
+    });
+}
+
 void bench_hash(const std::vector<std::vector<float>> & vectors) {
     auto dimensions = vectors[0].size(); 
 
@@ -101,32 +111,14 @@ void bench_hash(const std::vector<std::vector<float>> & vectors) {
         dataset.insert(v);
     }
 
-    // To benchmark the index build time we have to start from a new
-    // index at each measurement iteration, otherwise the index is already populated
-    // and no rebuild is triggered.
     auto bencher = ankerl::nanobench::Bench()
         .title("Hashing")
         .minEpochIterations(100)
         .timeUnit(std::chrono::nanoseconds(1), "ns");
     
-    // auto desc = dataset.get_description();
-    // auto stored_v = to_stored_type<puffinn::CosineSimilarity::Format>(dataset[0], desc);
-    auto vec = dataset[0];
-
-    puffinn::FHTCrossPolytopeHash fhtcp(dataset.get_description(), puffinn::FHTCrossPolytopeArgs());
-    auto hash_fhtcp = fhtcp.sample();
-    bencher.run("FHT cross polytope", [&] {
-        ankerl::nanobench::doNotOptimizeAway(hash_fhtcp(vec));
-    });
-
+    run_no_indirection<puffinn::FHTCrossPolytopeHash>(&bencher, "FHT cross polytope", dataset);
     run_with_indirection<puffinn::FHTCrossPolytopeHash>(&bencher, "FHT cross polytope (indirection)", dataset);
-
-    puffinn::SimHash simhash(dataset.get_description(), puffinn::SimHashArgs());
-    auto hash_simhash = simhash.sample();
-    bencher.run("SimHash", [&] {
-        ankerl::nanobench::doNotOptimizeAway(hash_simhash(vec));
-    });
-
+    run_no_indirection<puffinn::SimHash>(&bencher, "SimHash", dataset);
     run_with_indirection<puffinn::SimHash>(&bencher, "SimHash (indirection)", dataset);
 }
 
