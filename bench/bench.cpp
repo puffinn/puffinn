@@ -79,6 +79,20 @@ void bench_query(const std::vector<std::vector<float>> & dataset) {
     });
 }
 
+template<typename THash>
+void run_with_indirection(ankerl::nanobench::Bench * bencher, const char * name, const puffinn::Dataset<puffinn::UnitVectorFormat> & dataset) {
+    auto hash_args = puffinn::IndependentHashArgs<THash>();
+    auto hash_source = hash_args.build(
+        dataset.get_description(),
+        10,
+        puffinn::MAX_HASHBITS);
+    auto hash_function = hash_source->sample();
+    auto state = hash_source->reset(dataset[0], true);
+    bencher->run(name, [&] {
+        ankerl::nanobench::doNotOptimizeAway((*hash_function)(state.get()));
+    });
+}
+
 void bench_hash(const std::vector<std::vector<float>> & vectors) {
     auto dimensions = vectors[0].size(); 
 
@@ -105,11 +119,15 @@ void bench_hash(const std::vector<std::vector<float>> & vectors) {
         ankerl::nanobench::doNotOptimizeAway(hash_fhtcp(vec));
     });
 
+    run_with_indirection<puffinn::FHTCrossPolytopeHash>(&bencher, "FHT cross polytope (indirection)", dataset);
+
     puffinn::SimHash simhash(dataset.get_description(), puffinn::SimHashArgs());
     auto hash_simhash = simhash.sample();
     bencher.run("SimHash", [&] {
         ankerl::nanobench::doNotOptimizeAway(hash_simhash(vec));
     });
+
+    run_with_indirection<puffinn::SimHash>(&bencher, "SimHash (indirection)", dataset);
 }
 
 

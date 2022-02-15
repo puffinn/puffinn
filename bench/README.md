@@ -33,5 +33,7 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 
 |               ns/op |                op/s |    err% |     total | Hashing
 |--------------------:|--------------------:|--------:|----------:|:--------
-|              312.50 |        3,199,961.50 |    0.1% |      0.00 | `FHT cross polytope`
-|                5.02 |      199,208,638.41 |    0.0% |      0.00 | `SimHash`
+|              348.17 |        2,872,187.65 |    0.0% |      0.00 | `FHT cross polytope`
+|            1,021.79 |          978,674.22 |    0.8% |      0.00 | `FHT cross polytope (indirection)`
+|                5.02 |      199,068,622.20 |    0.1% |      0.00 | `SimHash`
+|              254.47 |        3,929,774.42 |    0.3% |      0.00 | `SimHash (indirection)`
