@@ -31,7 +31,7 @@ Times are in nanoseconds in this table, hence we have that all queries take arou
 
 ## Hashing
 
-The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/3142c5d2c0e101bcfce119cd33d98e7250ab3aa1/bench/bench.cpp#L106-L123).
+The code for this benchmark is [here](https://github.com/Cecca/puffinn/blob/3142c5d2c0e101bcfce119cd33d98e7250ab3aa1/bench/bench.cpp#L121-L145).
 During index construction the hash function is hidden behind a unique pointer, and the vector to be hashed as well.
 This indirection may be expensive, therefore we try also a direct static implementation. 
 In all benchmarks we compute 24-bits hashes, with the exeption of the `single` calls that generate 8 bits for cross polytope and 1 for simhash.
