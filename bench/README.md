@@ -68,7 +68,7 @@ On the full Glove dataset, using tensored simhash, building the index takes 64 s
 These results are just because we are using few repetitions. 
 If we double the memory (hence 2Gb, resulting in 152 tables) we have that the time to build the index is 89 seconds:
 - 58 to compute sketches
-- 31 seconds to compute hashes, including sorting (which accounts for 20% of the frames)
+- 31 seconds to compute hashes, including sorting (which accounts for 65% of hash related frames)
 
 The image reports the time profile
 
