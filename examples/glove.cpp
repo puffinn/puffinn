@@ -52,16 +52,21 @@ int main(int argc, char* argv[]) {
     // Here we use the cosine similarity measure with the default hash functions.
     // The index expects vectors with the same dimensionality as the first row of the dataset
     // and will use at most the specified amount of memory.
-    puffinn::Index<puffinn::CosineSimilarity> index(
+    puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
         dimensions,
-        space_usage
+        space_usage,
+        puffinn::TensoredHashArgs<puffinn::SimHash>()
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }
+    auto start_index = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
     index.rebuild();
-    std::cerr << "Index built." << std::endl;
+    auto end_index = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed = (end_index - start_index);
+    auto throughput = ((float) dataset.words.size()) / elapsed.count();
+    std::cerr << "Index built in " << elapsed.count() << " s " << throughput << " vecs/s" << std::endl;
 
     // Process queries from stdin.
     std::string query;

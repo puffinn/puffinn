@@ -8,6 +8,7 @@
 #include "puffinn/hash_source/tensor.hpp"
 #include "puffinn/similarity_measure/cosine.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
+#include "alternatives.hpp"
 #include <vector>
 #include <fstream>
 #include <sstream>
@@ -18,6 +19,20 @@ const unsigned int MB = 1024*1024;
 
 std::vector<std::vector<float>> read_glove(const std::string& filename);
 
+template<typename THash, typename THashSourceArgs>
+void do_build_index(ankerl::nanobench::Bench * bencher, const char * name, const std::vector<std::vector<float>> & dataset, double index_memory) {
+    auto dimensions = dataset[0].size(); 
+    bencher->run(name, [&] {
+        puffinn::Index<puffinn::CosineSimilarity, THash> index(
+            dimensions,
+            index_memory,
+            THashSourceArgs()
+        );
+        for (auto v : dataset) { index.insert(v); }
+        index.rebuild();
+    });
+}
+
 void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     auto dimensions = dataset[0].size(); 
 
@@ -25,28 +40,22 @@ void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     // index at each measurement iteration, otherwise the index is already populated
     // and no rebuild is triggered.
     auto bencher = ankerl::nanobench::Bench()
-        .title("Index building")
-        .timeUnit(std::chrono::milliseconds(1), "ms");
+        .title("Index building");
     auto index_memory = 100*MB;
+    // auto index_memory = 0.8*MB;
 
-    // Therefore, first we bench how much time it takes to push things into the index
     bencher.run("index_insert_data", [&] {
-        puffinn::Index<puffinn::CosineSimilarity> index(
+        puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
             dimensions,
             index_memory
         );
         for (auto v : dataset) { index.insert(v); }
     });
     
-    // Therefore, first we bench how much time it takes to push things into the index
-    bencher.run("index_rebuild", [&] {
-        puffinn::Index<puffinn::CosineSimilarity> index(
-            dimensions,
-            index_memory
-        );
-        for (auto v : dataset) { index.insert(v); }
-        index.rebuild();
-    });
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 100*MB);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 100*MB);
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 96.3*MB);
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 96.3*MB);
 }
 
 void bench_query(const std::vector<std::vector<float>> & dataset) {
@@ -110,11 +119,11 @@ void run_static(ankerl::nanobench::Bench * bencher, const char * name, const puf
 
 template<typename THash> 
 void run_single_hash(ankerl::nanobench::Bench * bencher, const char * name, const puffinn::Dataset<puffinn::UnitVectorFormat> & dataset) {
-    auto vec = dataset[0];
     THash hash(dataset.get_description(), typename THash::Args());
     auto hash_fn = hash.sample();
+    size_t n = dataset.get_size();
     bencher->run(name, [&] {
-        ankerl::nanobench::doNotOptimizeAway(hash_fn(vec));
+        ankerl::nanobench::doNotOptimizeAway(hash_fn(dataset[0]));
     });
 }
 
@@ -153,8 +162,8 @@ int main(int argc, char ** argv) {
     auto dataset = read_glove(argv[1]);
 
     // bench_query(dataset);
-    // bench_index_build(dataset);
-    bench_hash(dataset);
+    bench_index_build(dataset);
+    // bench_hash(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {

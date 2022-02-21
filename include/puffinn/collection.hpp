@@ -258,6 +258,8 @@ namespace puffinn {
                 throw std::invalid_argument("insufficient memory");
             }
 
+            // printf("Building %d tables\n", num_tables);
+
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
