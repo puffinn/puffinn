@@ -6,6 +6,14 @@ The goal is to inspect the behavior of different components, so to set a baselin
 All of the following tests have been run on the first 10000 vectors of the [`glove.twitter.25B`](https://nlp.stanford.edu/data/glove.twitter.27B.zip) dataset, with 100 dimensions.
 The times reported are obtained on a Macbook Pro (Intel(R) Core(TM) i5-7360U CPU @ 2.30GHz), with code compiled with Clang 10.0.1.
 
+## Some observations
+Based on the benchmarks below
+
+- Sketching is not parallilized, but might be rather easily given that it's embarassingly parallel
+- Sorting could be done using radix sort: to sort keys of 24 bytes using 8-bit keys we need only 3 passes on the data.
+- For cross polytope, every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
+But, when using tensoring, only 12 bits are required on each side, meaning, that we need 4 invocations overall.
+
 ## Index construction
 
 We measure the time to insert the data into an emtpy index, and the time to rebuild said index with the newly added data.
@@ -51,9 +59,20 @@ The table below reports the results of the benchmark on a larger dataset, 100k p
 |   15,136,665,540.00 |                0.07 |    7.6% |    168.78 |      3,182,913,475 |      1,484,623,280              |      8,475,368,707             | :wavy_dash: `FHT CrossPolytope tensored` (Unstable with ~1.0 iters. Increase `minEpochIterations` to e.g. 10)
 
 
-**Note to self:**
-For cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
-But, when using tensoring, only 12 bits are required on each side, meaning, that we need 4 invocations overall.
+Now other components start to be more expensive: sorting the prefix maps now accounts for 17% of the time when using the tensoring approach.
+
+On the full Glove dataset, using tensored simhash, building the index takes 64 seconds (1GB size, 38 tables):
+- 56 seconds are for computing sketches
+- 7 seconds and a half are for computing the hashes and sorting prefix maps
+
+These results are just because we are using few repetitions. 
+If we double the memory (hence 2Gb, resulting in 152 tables) we have that the time to build the index is 89 seconds:
+- 58 to compute sketches
+- 31 seconds to compute hashes, including sorting (which accounts for 20% of the frames)
+
+The image reports the time profile
+
+[![independent hash functions construction](flame-tensor-simhash-full-glove.svg)](https://raw.githubusercontent.com/Cecca/puffinn/master/bench/flame-tensor-simhash-full-glove.svg)
 
 ## Querying the index
 
