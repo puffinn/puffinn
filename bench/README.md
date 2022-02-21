@@ -23,15 +23,20 @@ The index is built so that 600 repetitions are executed.
 The number of nanoseconds spent per vector are obtained by dividing the total time by the product of number of items and repetitions (i.e. `600*10000`)
 for the tensored approach the time is divided by the total number of items and the actual number of repetitions of the inner independent hash source (i.e. `50*10000`).
 
-Here are two profiles for the index construction with FHT Cross Polytope, using independent and tensored approaches.
+From the table above, we have that with the tensored approach we spend _more_ time per element than with independent hashes.
+To further investigate this behavior,
+here are two profiles for the index construction with FHT Cross Polytope, using independent and tensored approaches.
 
 **independent**
-![independent hash functions construction](flame-independent-fht-cp.svg)
+[![independent hash functions construction](flame-independent-fht-cp.svg)](https://raw.githubusercontent.com/Cecca/puffinn/master/bench/flame-independent-fht-cp.svg)
 
 **tensored**
-![tensored hash functions construction](flame-tensored-fht-cp.svg)
+[![tensored hash functions construction](flame-tensored-fht-cp.svg)](https://raw.githubusercontent.com/Cecca/puffinn/master/bench/flame-tensored-fht-cp.svg)
 
-One thing, for cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
+From the above profiles (which if clicked are interactive) we see that the code paths are very different between independent and tensored invocations.
+In particular, the tensored implementation spends a lot of time (around 38%) in estimating the collision probabilities.
+
+Furthermore, for cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
 But, when using tensoring, only 12 bits are required on each side, meaning, that we need 4 invocations overall.
 
 ## Querying the index
