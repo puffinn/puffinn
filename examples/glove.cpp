@@ -17,6 +17,7 @@ struct Dataset {
 };
 
 const unsigned long long GB = 1024*1024*1024;
+const unsigned long long MB = 1024*1024;
 
 // Takes the following arguments: filename (num_neighbors) (recall) (space_usage in GB)
 // The recall is a lower bound on the probability of finding each of the closest neighbors and is
@@ -26,9 +27,9 @@ int main(int argc, char* argv[]) {
     std::string filename;
     unsigned int k = 10;
     float recall = 0.8;
-    unsigned long long space_usage = 4*GB;
+    unsigned long long space_usage = 4*MB;
     switch (argc) {
-        case 5: space_usage = static_cast<unsigned long long>(std::atof(argv[4])*GB); 
+        case 5: space_usage = static_cast<unsigned long long>(std::atof(argv[4])*MB); 
         case 4: recall = std::atof(argv[3]); 
         case 3: k = std::atoi(argv[2]); 
         case 2: filename = argv[1];
@@ -52,10 +53,10 @@ int main(int argc, char* argv[]) {
     // Here we use the cosine similarity measure with the default hash functions.
     // The index expects vectors with the same dimensionality as the first row of the dataset
     // and will use at most the specified amount of memory.
-    puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
+    puffinn::Index<puffinn::CosineSimilarity, puffinn::FHTCrossPolytopeHash> index(
         dimensions,
         space_usage,
-        puffinn::TensoredHashArgs<puffinn::SimHash>()
+        puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>()
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }

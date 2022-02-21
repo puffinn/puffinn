@@ -52,10 +52,11 @@ void bench_index_build(const std::vector<std::vector<float>> & dataset) {
         for (auto v : dataset) { index.insert(v); }
     });
     
-    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 100*MB);
-    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 100*MB);
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 96.3*MB);
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 96.3*MB);
+    // memory is set so that we have 600 tables
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 74*MB);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 70.6*MB);
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 71.2*MB);
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 70.5*MB);
 }
 
 void bench_query(const std::vector<std::vector<float>> & dataset) {

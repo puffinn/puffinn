@@ -10,16 +10,29 @@ The times reported are obtained on a Macbook Pro (Intel(R) Core(TM) i5-7360U CPU
 
 We measure the time to insert the data into an emtpy index, and the time to rebuild said index with the newly added data.
 Therefore the time to build the prefix maps is the difference between the two.
-The index is built so that 829 repetitions are executed.
+The index is built so that 600 repetitions are executed.
 
 |               ns/op |                op/s |    err% |     total | ns/vector | Index building
 |--------------------:|--------------------:|--------:|----------:|----------:|:---------------
 |       12,983,647.00 |               77.02 |    0.5% |      0.14 |         - | `index_insert_data`
-|    2,459,179,041.00 |                0.41 |    2.4% |     27.25 |       296 | `SimHash independent`
-|    1,347,448,956.00 |                0.74 |    1.4% |     14.81 |       162 | `SimHash tensored`
-|    6,429,686,405.00 |                0.16 |    1.7% |     72.14 |       775 | `FHT CrossPolytope independent`
-|    2,941,615,287.00 |                0.34 |    1.7% |     33.80 |       354 | `FHT CrossPolytope tensored`
+|    1,820,142,505.00 |                0.55 |    2.7% |     20.73 |       303 | `SimHash independent`
+|      931,095,744.00 |                1.07 |    0.3% |     10.25 |      1862 | `SimHash tensored`
+|    5,105,854,966.00 |                0.20 |    1.2% |     57.03 |       850 | `FHT CrossPolytope independent`
+|    2,495,368,539.00 |                0.40 |    0.3% |     27.64 |      4990 | `FHT CrossPolytope tensored`
 
+The number of nanoseconds spent per vector are obtained by dividing the total time by the product of number of items and repetitions (i.e. `600*10000`)
+for the tensored approach the time is divided by the total number of items and the actual number of repetitions of the inner independent hash source (i.e. `50*10000`).
+
+Here are two profiles for the index construction with FHT Cross Polytope, using independent and tensored approaches.
+
+**independent**
+![independent hash functions construction](flame-independent-fht-cp.svg)
+
+**tensored**
+![tensored hash functions construction](flame-tensored-fht-cp.svg)
+
+One thing, for cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
+But, when using tensoring, only 12 bits are required on each side, meaning, that we need 4 invocations overall.
 
 ## Querying the index
 
