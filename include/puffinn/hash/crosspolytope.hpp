@@ -5,6 +5,7 @@
 #include "puffinn/format/unit_vector.hpp"
 #include "puffinn/math.hpp"
 #include "puffinn/similarity_measure/cosine.hpp"
+#include <chrono>
 
 namespace puffinn {
     struct CrossPolytopeCollisionEstimates {

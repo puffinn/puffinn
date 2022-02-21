@@ -53,10 +53,11 @@ int main(int argc, char* argv[]) {
     // Here we use the cosine similarity measure with the default hash functions.
     // The index expects vectors with the same dimensionality as the first row of the dataset
     // and will use at most the specified amount of memory.
-    puffinn::Index<puffinn::CosineSimilarity, puffinn::FHTCrossPolytopeHash> index(
+    puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
         dimensions,
         space_usage,
-        puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>()
+        puffinn::TensoredHashArgs<puffinn::SimHash>()
+        // puffinn::IndependentHashArgs<puffinn::SimHash>()
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }

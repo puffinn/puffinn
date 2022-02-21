@@ -34,6 +34,7 @@ void do_build_index(ankerl::nanobench::Bench * bencher, const char * name, const
 }
 
 void bench_index_build(const std::vector<std::vector<float>> & dataset) {
+    printf("Benchmarking index build\n\n");
     auto dimensions = dataset[0].size(); 
 
     // To benchmark the index build time we have to start from a new
@@ -53,10 +54,10 @@ void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     });
     
     // memory is set so that we have 600 tables
-    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 74*MB);
-    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 70.6*MB);
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 71.2*MB);
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 70.5*MB);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 537*MB); // 74 MB
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 534*MB); // 70.6 MB
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 534.5*MB); // 71.2 MB
+    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 534*MB); // 70.5 MB
 }
 
 void bench_query(const std::vector<std::vector<float>> & dataset) {

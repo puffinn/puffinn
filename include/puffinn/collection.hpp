@@ -15,6 +15,9 @@
 #include <ostream>
 #include <vector>
 
+// for debugging
+#include <chrono>
+
 namespace puffinn {
     /// Approaches to filtering candidates.
     enum class FilterType {
@@ -235,7 +238,11 @@ namespace puffinn {
         /// OMP_NUM_THREADS environment variable.
         void rebuild() {
             // Compute sketches for the new vectors.
+            auto start_sketches = std::chrono::steady_clock::now();
             filterer.add_sketches(dataset, last_rebuild);
+            auto end_sketches = std::chrono::steady_clock::now();
+            auto elapsed_sketches = std::chrono::duration_cast<std::chrono::nanoseconds>(end_sketches - start_sketches).count();
+            printf("Time to compute sketches %lld ns\n", elapsed_sketches);
 
             auto desc = dataset.get_description();
             auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
@@ -260,6 +267,7 @@ namespace puffinn {
 
             printf("Building %d tables\n", num_tables);
 
+            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
@@ -279,6 +287,7 @@ namespace puffinn {
                     lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
                 }
             }
+            auto sources_sampled = std::chrono::steady_clock::now();
 
             for (auto& map : lsh_maps) {
                 map.reserve(dataset.get_size());
@@ -304,6 +313,13 @@ namespace puffinn {
             for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
                 lsh_maps[map_idx].rebuild();
             }
+            auto end = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+            printf("Time to build the index %lld ns\n\tbuilding sources: %12lld ns\n\tcomputing hashes: %12lld ns\n", 
+                elapsed,
+                std::chrono::duration_cast<std::chrono::nanoseconds>(sources_sampled - start).count(),
+                std::chrono::duration_cast<std::chrono::nanoseconds>(end - sources_sampled).count()
+            );
             last_rebuild = dataset.get_size();
         }
 

@@ -68,7 +68,6 @@ namespace puffinn {
             for (unsigned int i=0; i < independent_hash_source.get_size(); i++) {
                 hashers.push_back(independent_hash_source.sample());
             }
-            printf("Num hashers %d\n", hashers.size());
         }
 
         TensoredHashSource(std::istream& in)

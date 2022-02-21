@@ -35,8 +35,24 @@ here are two profiles for the index construction with FHT Cross Polytope, using 
 
 From the above profiles (which if clicked are interactive) we see that the code paths are very different between independent and tensored invocations.
 In particular, the tensored implementation spends a lot of time (around 38%) in estimating the collision probabilities.
+The function estimating probabilities is invoked 334 times both by the tensored approach and the independent approach.
 
-Furthermore, for cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
+Further instrumenting the code reveals that the sampling of hash functions takes around one second and a half, irrespective of the size of the input.
+Therefore, this effect is just due to the input size being rather small.
+
+The table below reports the results of the benchmark on a larger dataset, 100k points from glove.
+
+|               ns/op |                op/s |    err% |     total | sketches | sampling | hashing | Index building
+|--------------------:|--------------------:|--------:|----------:|---------:|---------:|--------:|:---------------
+|       89,858,735.00 |               11.13 |    0.3% |      1.01 |  -       |      -   |  -      | `index_insert_data`
+|   17,366,543,710.00 |                0.06 |    0.7% |    195.62 |    2,979,594,285 |     52,946,855     |   14,054,349,816      | `SimHash independent`
+|    9,587,672,281.00 |                0.10 |    1.3% |    106.73 |     2,863,388,001 |    14,152,603      |     6,404,964,113    | `SimHash tensored`
+|   37,370,006,695.00 |                0.03 |    0.5% |    424.84 |     2,945,923,994 |     1,460,921,248     |     32,824,801,263    | `FHT CrossPolytope independent`
+|   15,136,665,540.00 |                0.07 |    7.6% |    168.78 |      3,182,913,475 |      1,484,623,280              |      8,475,368,707             | :wavy_dash: `FHT CrossPolytope tensored` (Unstable with ~1.0 iters. Increase `minEpochIterations` to e.g. 10)
+
+
+**Note to self:**
+For cross polytope, is that every invocation gets you 8 bits, so to get to 24 bits you make three invocations.
 But, when using tensoring, only 12 bits are required on each side, meaning, that we need 4 invocations overall.
 
 ## Querying the index
