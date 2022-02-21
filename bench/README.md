@@ -12,13 +12,13 @@ We measure the time to insert the data into an emtpy index, and the time to rebu
 Therefore the time to build the prefix maps is the difference between the two.
 The index is built so that 829 repetitions are executed.
 
-|               ns/op |                op/s |    err% |     total | Index building
-|--------------------:|--------------------:|--------:|----------:|:---------------
-|       12,983,647.00 |               77.02 |    0.5% |      0.14 | `index_insert_data`
-|    2,459,179,041.00 |                0.41 |    2.4% |     27.25 | `SimHash independent`
-|    1,347,448,956.00 |                0.74 |    1.4% |     14.81 | `SimHash tensored`
-|    6,429,686,405.00 |                0.16 |    1.7% |     72.14 | `FHT CrossPolytope independent`
-|    2,941,615,287.00 |                0.34 |    1.7% |     33.80 | `FHT CrossPolytope tensored`
+|               ns/op |                op/s |    err% |     total | ns/vector | Index building
+|--------------------:|--------------------:|--------:|----------:|----------:|:---------------
+|       12,983,647.00 |               77.02 |    0.5% |      0.14 |         - | `index_insert_data`
+|    2,459,179,041.00 |                0.41 |    2.4% |     27.25 |       296 | `SimHash independent`
+|    1,347,448,956.00 |                0.74 |    1.4% |     14.81 |       162 | `SimHash tensored`
+|    6,429,686,405.00 |                0.16 |    1.7% |     72.14 |       775 | `FHT CrossPolytope independent`
+|    2,941,615,287.00 |                0.34 |    1.7% |     33.80 |       354 | `FHT CrossPolytope tensored`
 
 
 ## Querying the index
