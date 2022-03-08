@@ -84,6 +84,45 @@ namespace collection {
         }
     }
 
+    TEST_CASE("Index::bf_join") {
+        const unsigned DIMENSIONS = 2;
+
+        std::vector<std::vector<float>> inserted {
+            std::vector<float>({1, 0}),
+            std::vector<float>({-1, -1}),
+            std::vector<float>({1, 0.15}),
+            std::vector<float>({1, 0.2}),
+            std::vector<float>({1, -0.1}),
+        };
+
+        Index<CosineSimilarity> table(DIMENSIONS, 1*MB);
+        for (auto &vec : inserted) {
+            table.insert(vec);
+        }
+        // No rebuilding necessary
+
+        SECTION("k = 0") {
+            auto res = table.bf_join(0);
+            REQUIRE(res.size() == 5);
+            REQUIRE(res[0].size() == 0);
+        }
+
+        SECTION("k = 1") {
+            auto res = table.bf_join(2);
+            REQUIRE(res.size() == 5);
+            for (size_t i = 0; i < inserted.size(); i++) {
+                REQUIRE(res[i][0] == table.search_bf(inserted[i], 2)[0]);
+                REQUIRE(res[i][1] == table.search_bf(inserted[i], 2)[1]);
+
+            }
+        }
+    }
+
+    TEST_CASE("Index::naive_lsh_join") {
+        REQUIRE(false);
+    }
+
+
     template <typename T, typename U>
     void test_angular_search(
         int n,

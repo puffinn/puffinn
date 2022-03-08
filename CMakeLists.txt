@@ -16,6 +16,11 @@ if (OpenMP_FOUND)
     target_link_libraries(GloveExample ${OpenMP_CXX_LIBRARIES})
 endif()
 
+add_executable(GloveJoin "examples/glove-join.cpp")
+if (OpenMP_FOUND)
+    target_link_libraries(GloveJoin ${OpenMP_CXX_LIBRARIES})
+endif()
+
 include_directories("test/include")
 add_executable(Test "test/main.cpp" "test/code.cpp")
 if (OpenMP_FOUND)

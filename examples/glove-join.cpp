@@ -27,16 +27,18 @@ int main(int argc, char* argv[]) {
     std::string filename;
     unsigned int k = 10;
     float recall = 0.8;
+    std::string method = "BF";
     unsigned long long space_usage = 100*MB;
     switch (argc) {
-        case 5: space_usage = static_cast<unsigned long long>(std::atof(argv[4])*MB); 
+        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])*MB); 
+        case 5: method = std::string(argv[4]);
         case 4: recall = std::atof(argv[3]); 
-        case 3: k = std::atoi(argv[2]); 
+        case 3: k = std::atoi(argv[2]);
         case 2: filename = argv[1];
                 break;
         default:
             std::cerr << "Usage: " << argv[0]
-                << " filename (number of neighbors) (recall) (space_usage in MB)" << std::endl;
+                << " filename (number of neighbors) (recall) (BF|LSH) (space_usage in MB)" << std::endl;
             return -1;
     }
 
@@ -61,35 +63,29 @@ int main(int argc, char* argv[]) {
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }
-    auto start_index = std::chrono::steady_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
     index.rebuild();
-    auto end_index = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed = (end_index - start_index);
+    auto end_time = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed = (end_time - start_time);
     auto throughput = ((float) dataset.words.size()) / elapsed.count();
     std::cerr << "Index built in " << elapsed.count() << " s " << throughput << " vecs/s" << std::endl;
 
-    // Process queries from stdin.
-    std::string query;
-    while (std::cin >> query) {
-        if (dataset.vectors.count(query) != 0) {
-            // Get the vector corresponding to the query word if it exists.
-            auto query_vector = dataset.vectors[query];
-
-            // Find the indices of the k nearest words, sorted by their similarity.
-            // We ignore the most similar word since it will always be the query word itself.
-            auto res = index.search(query_vector, k+1, recall); 
-
-            // Print the k closest words.
-            for (size_t i=1; i < k+1; i++) {
-                std::cout << dataset.words[res[i]] << " ";
-            }
-            std::cout << std::endl;
-        } else {
-            std::cout << query << " does not have an associated vector." << std::endl;
-        }
+    start_time = std::chrono::steady_clock::now();
+    std::cerr << "Computing the join using " << method << ". This can take a while." << std::endl;    
+    std::vector<std::vector<uint32_t>>  res;
+    if (method == "BF") {
+        res = index.bf_join(k);
+    } else if (method == "LSH") {
+        res = index.naive_lsh_join(k, recall);
     }
+    end_time = std::chrono::steady_clock::now();
+    elapsed = (end_time - start_time);
+    throughput = ((float) dataset.words.size()) / elapsed.count();
+    std::cerr << "Join computed in " << elapsed.count() << " s " << throughput << " queries/s" << std::endl;
+
+
 }
 
 // Read a vector collection in the format used by GloVe.
