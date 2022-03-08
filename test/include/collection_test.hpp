@@ -118,8 +118,71 @@ namespace collection {
         }
     }
 
+    template <typename T, typename U>
+    void test_angular_join(
+        int n,
+        int dimensions,
+        std::unique_ptr<HashSourceArgs<T>> hash_source = std::unique_ptr<HashSourceArgs<T>>()
+    ) {
+        std::vector<float> recalls = {0.2, 0.5, 0.95};
+        std::vector<unsigned int> ks = {10};
+
+        std::vector<std::vector<float>> inserted;
+        for (int i=0; i<n; i++) {
+            inserted.push_back(UnitVectorFormat::generate_random(dimensions));
+        }
+
+        Index<CosineSimilarity, T, U> table(dimensions, 10*MB);
+        if (hash_source) {
+            table = Index<CosineSimilarity, T, U>(dimensions, 10*MB, *hash_source);
+        }
+        for (auto &vec : inserted) {
+            table.insert(vec);
+        }
+        table.rebuild();
+
+
+
+        for (auto k : ks) {            
+            auto exact = table.bf_join(k);
+            for (auto recall : recalls) {
+                int num_correct = 0;
+                auto adjusted_k = std::min(k, table.get_size());
+                
+                float expected_correct = recall*adjusted_k*n;
+                auto res = table.naive_lsh_join(k, recall);
+
+                REQUIRE(res.size() == n);
+                for (size_t i = 0; i < n; i++) {
+                    for (auto idx : exact[i]) {
+                        // Each expected value is returned once.
+                        if (std::count(res[i].begin(), res[i].end(), idx) != 0) {
+                            num_correct++;
+                        }
+                    }
+                }
+                
+                // Only fail if the recall is far away from the expectation.
+                REQUIRE(num_correct >= 0.8 * expected_correct);
+                //REQUIRE(num_correct >= expected_correct);
+            }
+        }
+    }
+
     TEST_CASE("Index::naive_lsh_join") {
-        REQUIRE(false);
+        std::vector<int> dimensions = {5, 100};
+
+        for (auto d : dimensions) {
+            std::unique_ptr<HashSourceArgs<SimHash>> args =
+                std::make_unique<HashPoolArgs<SimHash>>(3000);
+            test_angular_join<SimHash, SimHash>(1000, d, std::move(args));
+
+            args = std::make_unique<IndependentHashArgs<SimHash>>();
+            test_angular_join<SimHash, SimHash>(1000, d, std::move(args));
+
+            args = std::make_unique<TensoredHashArgs<SimHash>>();
+            test_angular_join<SimHash, SimHash>(1000, d, std::move(args));
+        }
     }
 
 
