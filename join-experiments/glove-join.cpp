@@ -1,6 +1,3 @@
-// This example constructs an index from word vectors read from a file in the format used by GloVe.
-// Query words are then read from stdin, for which the closest words in the dataset are reported.
-
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -15,6 +12,24 @@ struct Dataset {
 
     static Dataset read_glove(const std::string& filename);
 };
+
+void write_result(
+    const std::string& filename, 
+    const std::vector<std::vector<uint32_t>>& res
+    ) {
+    
+    size_t n = res.size();
+    size_t k = res[0].size();
+    std::ofstream fout(filename, std::ios::out | std::ios::binary);
+    fout.write((char*) &n, sizeof(size_t));
+    fout.write((char*) &k, sizeof(size_t));
+    for (auto& v: res) {
+        fout.write((char*)&v[0], v.size() * sizeof(uint32_t));
+    }
+    fout.close();
+}
+
+
 
 const unsigned long long GB = 1024*1024*1024;
 const unsigned long long MB = 1024*1024;
@@ -84,7 +99,7 @@ int main(int argc, char* argv[]) {
     elapsed = (end_time - start_time);
     throughput = ((float) dataset.words.size()) / elapsed.count();
     std::cerr << "Join computed in " << elapsed.count() << " s " << throughput << " queries/s" << std::endl;
-
+    write_result(method, res);
 
 }
 
