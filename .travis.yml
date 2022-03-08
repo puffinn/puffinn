@@ -6,7 +6,7 @@ matrix:
                 virtualenv:
                   system_site_packages: true
                 python:
-                - '3.6'
+                - '3.5'
                 install:
                 - pip3 install numpy 
                 - python3 setup.py build
@@ -15,8 +15,7 @@ matrix:
                 - python3 examples/random-vectors.py
               - language: cpp
                 install:
-                - sudo apt-get install -y doxygen python3-pip python3-setuptools
-                - pip3 install sphinx sphinx_rtd_theme breathe
+                - sudo apt-get install -y python3-pip python3-setuptools
                 - mkdir bin && cd bin
                 - cmake .. && make
                 script:
