@@ -21,6 +21,8 @@ if (OpenMP_FOUND)
     target_link_libraries(GloveJoin ${OpenMP_CXX_LIBRARIES})
 endif()
 
+add_executable(XiaoEtAl "join-experiments/XiaoEtAl.cpp")
+
 include_directories("test/include")
 add_executable(Test "test/main.cpp" "test/code.cpp")
 if (OpenMP_FOUND)
