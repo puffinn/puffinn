@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <string>
+#include <chrono>
 #include "puffinn.hpp"
 
 struct Pair
@@ -32,13 +33,18 @@ struct Event
 {
   size_t index;
   size_t prefix;
+  size_t length;
   float similarity;
 };
 
 // Returns true if a < b
 bool cmp_events(const Event &a, const Event &b)
 {
-  return a.similarity < b.similarity;
+  if (a.similarity == b.similarity) {
+    return a.length < b.length;
+  } else {
+    return a.similarity < b.similarity;
+  }
 }
 
 struct pair_hash
@@ -53,8 +59,50 @@ struct pair_hash
     }
 };
 
+void cerr_vec(std::vector<uint32_t> & v) {
+  std::cerr << "[";
+  for (auto x : v) {
+    std::cerr << " " << x;
+  }
+  std::cerr << "]\n";
+}
+
+float jaccard(const std::vector<uint32_t> * a, const std::vector<uint32_t> * b) {
+    auto& lhs = *a;
+    auto& rhs = *b;
+    size_t a_len = lhs.size();
+    size_t b_len = rhs.size();
+    int intersection_size = 0;
+    size_t lhs_idx = 0;
+    size_t rhs_idx = 0;
+    while (lhs_idx < a_len && rhs_idx < b_len) {
+        if (lhs[lhs_idx] == rhs[rhs_idx]) {
+            intersection_size++;
+            lhs_idx++;
+            rhs_idx++;
+        } else if(lhs[lhs_idx] < rhs[rhs_idx]) {
+            lhs_idx++;
+        } else {
+            rhs_idx++;
+        }
+    }
+    float intersection = intersection_size;
+    auto divisor = lhs.size()+rhs.size()-intersection;
+    if (divisor == 0) {
+        return 0;
+    } else {
+        // float s = intersection/divisor;
+        // cerr_vec(lhs);
+        // cerr_vec(rhs);
+        // std::cerr << "similarity " << s << std::endl;
+        return intersection/divisor;
+    }
+}
+
 std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size_t k)
 {
+  // cerr_vec(*dataset[906361]);
+  // cerr_vec(*dataset[1792315]);
   size_t n = dataset.get_size();
   size_t universe = dataset.get_description().args;
   auto descr = dataset.get_description();
@@ -64,24 +112,22 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
   // Initialize the output with k arbitrary pairs
   std::vector<Pair> output;
   output.reserve(k + 1);
-  for (size_t i = 0; i < k; i++)
+  for (size_t i = 1; i < k+1; i++)
   {
-    float s = puffinn::JaccardSimilarity::compute_similarity(dataset[i], dataset[i + 1], descr);
-    output.push_back(Pair{i, i + 1, s});
-    if (s > sim_threshold)
-    {
-      sim_threshold = s;
-    }
+    // float s = puffinn::JaccardSimilarity::compute_similarity(dataset[0], dataset[i], descr);
+    float s = jaccard(dataset[0], dataset[i]);
+    output.push_back(Pair{0, i, s});
   }
   std::make_heap(output.begin(), output.end(), cmp_pairs);
-  printf("Similarity threshold %f\n", sim_threshold);
+  sim_threshold = output.front().similarity;
+  // printf("Similarity threshold %f\n", sim_threshold);
 
   // Initialize the events queue
   std::vector<Event> events;
   events.reserve(n);
   for (size_t i = 0; i < n; i++)
   {
-    events.push_back(Event{i, 0, 1.0});
+    events.push_back(Event{i, 0, dataset[i]->size(), 1.0});
   }
   std::make_heap(events.begin(), events.end(), cmp_events);
 
@@ -100,7 +146,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     events.pop_back();
 
     sim_threshold = output.front().similarity;
-    printf("Similarity threshold %f, candidate upper bound %f, prefix %lld\n", sim_threshold, e.similarity, e.prefix);
+    // printf("Similarity threshold %f, candidate upper bound %f, prefix %d\n", sim_threshold, e.similarity, e.prefix);
     // Check stopping condition
     if (e.similarity <= sim_threshold)
     {
@@ -112,18 +158,19 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     uint32_t w = x->at(e.prefix);
     // printf("Looking for matches from %d at prefix length %d\n", e.index, w);
     // Lookup in inverted index
-    for (size_t idx : inverted_index[w])
+    for (size_t idx : inverted_index.at(w))
     {
       std::vector<uint32_t> *y = dataset[idx];
       size_t size_y = y->size();
-      if (e.index != idx) {
+      if (e.index < idx) {
         if (size_x * sim_threshold <= size_y && size_y <= size_x / sim_threshold)
         { // size filtering
           size_t 
               a = std::min(e.index, idx),
               b = std::max(e.index, idx);
           if (already_seen.count(std::make_pair(a,b)) == 0) {
-            float s = puffinn::JaccardSimilarity::compute_similarity(x, y, descr);
+            // float s = puffinn::JaccardSimilarity::compute_similarity(x, y, descr);
+            float s = jaccard(x, y);
             Pair p { a, b, s };
             // Push in the heap
             output.push_back(p);
@@ -146,14 +193,17 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     // Index the current prefix
     inverted_index[w].push_back(e.index);
 
-    // Reschedule the set for the next prefix
-    float s = 1.0 - ((float)e.prefix) / x->size(); // 1 - (prefix + 1 - 2) / |x|
-    Event new_event{
-        e.index,
-        e.prefix + 1,
-        s};
-    events.push_back(new_event);
-    std::push_heap(events.begin(), events.end(), cmp_events);
+    if (e.prefix + 1 < x-> size()) {
+      // Reschedule the set for the next prefix
+      float s = 1.0 - ((float)e.prefix) / x->size(); // 1 - (prefix + 1 - 1) / |x|
+      Event new_event{
+          e.index,
+          e.prefix + 1,
+          e.length,
+          s};
+      events.push_back(new_event);
+      std::push_heap(events.begin(), events.end(), cmp_events);
+    }
   }
 
   return output;
@@ -174,7 +224,7 @@ puffinn::Dataset<puffinn::SetFormat> read_sets(const std::string &filename)
 
   size_t universe;
   line >> universe;
-  std::cout << "Universe size " << universe << std::endl;
+  std::cerr << "Universe size " << universe << std::endl;
 
   puffinn::Dataset<puffinn::SetFormat> dataset(universe);
 
@@ -200,18 +250,39 @@ puffinn::Dataset<puffinn::SetFormat> read_sets(const std::string &filename)
   return dataset;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-  auto dataset = read_sets("dblp.vecs.txt");
-  std::cout << "Read " << dataset.get_size() << " sets" << std::endl;
+  if (argc < 3) {
+    std::cerr << "USAGE: ./XiaoEtAl dataset topk (topk...)" << std::endl;
+    return 1;
+  }
+  auto dataset = read_sets(argv[1]);
+  std::cerr << "Read " << dataset.get_size() << " sets" << std::endl;
 
-  size_t k = 100;
-  auto top_pairs = topk(dataset, k);
-  while (!top_pairs.empty()) {
-    std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
-    auto pair = top_pairs.back();
-    top_pairs.pop_back();
-    std::cout << pair.a << " " << pair.b << " @ " << pair.similarity << std::endl;
+  size_t nruns = 10;
+
+  std::cout << "| dataset |    k | elapsed (ms) | similarity |" << std::endl;
+  std::cout << "| :------ | ---: | -----------: | ---------: |" << std::endl;
+  for (int i = 2; i < argc; i++) {
+    size_t k = atoi(argv[i]);
+    auto top_pairs = topk(dataset, k);
+    auto k_th_pair = top_pairs.front();
+
+    // while (!top_pairs.empty()) {
+    //   std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
+    //   auto p = top_pairs.back();
+    //   top_pairs.pop_back();
+    //   std::cerr << "  " << p.a << " " << p.b << " @ " << p.similarity << std::endl;
+    // }
+
+    // take the average time
+    auto start = std::chrono::steady_clock::now();
+    for (size_t run=0; run < nruns; run++) {
+      topk(dataset, k);
+    }
+    auto end = std::chrono::steady_clock::now();
+    double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / nruns;
+    std::cout << "| " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
   }
 
   return 0;

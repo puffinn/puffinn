@@ -54,7 +54,7 @@ class FirstPassHandler(ContentHandler):
     def dictionary(self):
         """Returns all the words in decreasing order of frequency"""
         print("building dictionary")
-        for tok, _c in sorted(self.tokens.items(), key=lambda pair: pair[1], reverse=True):
+        for tok, _c in sorted(self.tokens.items(), key=lambda pair: pair[1], reverse=False):
             yield tok
 
 class SecondPassHandler(ContentHandler):
@@ -62,7 +62,8 @@ class SecondPassHandler(ContentHandler):
         self.dictionary = dictionary
         self.file_output = file_output
         self.current_tag = None
-        self.current_vec = []
+        self.current_vec = set()
+        self.already_emitted = set()
 
     def startElement(self, tag, attrs):
         self.current_tag = tag
@@ -72,20 +73,22 @@ class SecondPassHandler(ContentHandler):
         if self.current_tag == "author":
             content = content.strip(" \n").lower()
             if len(content) > 0:
-                self.current_vec.append(self.dictionary[content])
+                self.current_vec.add(self.dictionary[content])
         elif self.current_tag == "title":
             for tok in content.split():
                 if len(tok) > 0:
                     tok = tok.strip(" \n").lower()
-                    self.current_vec.append(self.dictionary[tok])
+                    self.current_vec.add(self.dictionary[tok])
         return super().characters(content)
 
     def endElement(self, tag):
         if tag == "article":
-            self.current_vec.sort()
-            self.file_output.write(" ".join(str(i) for i in self.current_vec))
-            self.file_output.write("\n")
-            self.current_vec = []
+            to_emit = " ".join(str(i) for i in sorted(self.current_vec))
+            if to_emit not in self.already_emitted:
+                self.file_output.write(to_emit)
+                self.file_output.write("\n")
+                self.current_vec = set()
+                self.already_emitted.add(to_emit)
         return super().endElement(tag)
 
 # First pass, to build the dictionary
@@ -116,7 +119,7 @@ with open(DICTIONARY_FILE, "r") as fp:
 OUTPUT_FILE = "dblp.vecs.txt"
 
 with open(OUTPUT_FILE, "w") as ofp:
-    print(str(len(dictionary)), file=ofp)
+    print(str(len(dictionary)+1), file=ofp)
     with gzip.open(LOCAL, 'rt', encoding='utf-8') as fp:
         handler = SecondPassHandler(dictionary, ofp)
         parser = xml.sax.make_parser()
