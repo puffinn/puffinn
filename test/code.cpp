@@ -8,3 +8,4 @@
 #include "hash_source_test.hpp"
 #include "filterer_test.hpp"
 #include "math_test.hpp"
+#include "sorthash_test.hpp"
