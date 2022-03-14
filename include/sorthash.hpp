@@ -17,6 +17,41 @@ namespace puffinn {
     } \
     printf("\n\n");
 
+#define do_pass_simple(arr_in, arr_out, bx, get_byte) \
+    for (size_t i = 0; i < n; i++) {           \
+        const uint32_t hi = arr_in[i];     \
+        const uint32_t pos = get_byte(hi);       \
+        arr_out[bx[pos]++] = hi;           \
+    }
+
+#define do_pass_unrolled(arr_in, arr_out, bx, get_byte)       \
+    {                                                         \
+    size_t off = 0;                                           \
+    for (; off + 4 < n; off += 4) {                           \
+        const uint32_t hi0 = arr_in[off    ];                 \
+        const uint32_t hi1 = arr_in[off + 1];                 \
+        const uint32_t hi2 = arr_in[off + 2];                 \
+        const uint32_t hi3 = arr_in[off + 3];                 \
+                                                              \
+        const uint32_t pos0 = get_byte(hi0);                  \
+        const uint32_t pos1 = get_byte(hi1);                  \
+        const uint32_t pos2 = get_byte(hi2);                  \
+        const uint32_t pos3 = get_byte(hi3);                  \
+                                                              \
+        arr_out[bx[pos0]++] = hi0;                            \
+        arr_out[bx[pos1]++] = hi1;                            \
+        arr_out[bx[pos2]++] = hi2;                            \
+        arr_out[bx[pos3]++] = hi3;                            \
+    }                                                         \
+    for (; off < n; off++) {                                  \
+        const uint32_t hi = arr_in[off];                      \
+        const uint32_t pos = get_byte(hi);                    \
+        arr_out[bx[pos]++] = hi;                              \
+    }                                                         \
+    }              
+
+#define do_pass do_pass_unrolled
+
 //! Sort the given vector of hash values, with n bytes of auxiliary space, using MSB Radix Sort
 //! with three passes over the data. Assumes that the hash values are stored in 
 //! the 24 least significant bits of each 32 bit integer.
@@ -67,25 +102,13 @@ void sort_hashes_24(std::vector<uint32_t> & hashes, std::vector<uint32_t> & out)
     }
 
     // First sorting pass
-    for (size_t i = 0; i < n; i++) {
-        const uint32_t hi = hashes[i];
-        const uint32_t pos = _0(hi);
-        out[b0[pos]++] = hi;
-    }
+    do_pass(hashes, out, b0, _0);
 
     // Second sorting pass
-    for (size_t i = 0; i < n; i++) {
-        const uint32_t hi = out[i];
-        const uint32_t pos = _1(hi);
-        hashes[b1[pos]++] = hi;
-    }
-    
+    do_pass(out, hashes, b1, _1);
+
     // Third sorting pass
-    for (size_t i = 0; i < n; i++) {
-        const uint32_t hi = hashes[i];
-        const uint32_t pos = _2(hi);
-        out[b2[pos]++] = hi;
-    }
+    do_pass(hashes, out, b2, _2);
 }
 
 } // namespace puffinn
