@@ -1,10 +1,14 @@
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <map>
 #include <vector>
+#include <highfive/H5Attribute.hpp>
+#include <highfive/H5File.hpp>
 #include "puffinn.hpp"
+#include "puffinn/performance.hpp"
 
 struct Dataset {
     std::vector<std::string> words;
@@ -14,19 +18,44 @@ struct Dataset {
 };
 
 void write_result(
-    const std::string& filename, 
-    const std::vector<std::vector<uint32_t>>& res
+    const std::string& method_name,
+    const std::string& ds_name,
+    const std::vector<std::vector<uint32_t>>& res,
+    const uint32_t num_tables,
+    const float recall,
+    const uint32_t k,
+    const double time,
+    const std::string& details
     ) {
-    
-    size_t n = res.size();
-    size_t k = res[0].size();
-    std::ofstream fout(filename, std::ios::out | std::ios::binary);
-    fout.write((char*) &n, sizeof(size_t));
-    fout.write((char*) &k, sizeof(size_t));
-    for (auto& v: res) {
-        fout.write((char*)&v[0], v.size() * sizeof(uint32_t));
+
+    using namespace HighFive;
+
+    try {
+
+        std::stringstream ss;
+        ss << ds_name << "/" << k << "/" << method_name;
+
+        std::filesystem::create_directories(ss.str());
+        
+        ss << "/" << recall << "_" << num_tables << ".hdf5";
+        File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
+
+        DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
+        results.write(res);
+        Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
+        a.write(k);
+        a = file.createAttribute<float>("recall", DataSpace::From(recall));
+        a.write(recall);
+        a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
+        a.write(num_tables);
+        a = file.createAttribute<double>("time", DataSpace::From(time));
+        a.write(time);
+        a = file.createAttribute<std::string>("details", DataSpace::From(details));
+        a.write(details);
+
+    } catch (Exception& err) {
+        std::cerr << err.what() << std::endl;
     }
-    fout.close();
 }
 
 
@@ -45,7 +74,7 @@ int main(int argc, char* argv[]) {
     std::string method = "BF";
     unsigned long long space_usage = 100*MB;
     switch (argc) {
-        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])*MB); 
+        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])); 
         case 5: method = std::string(argv[4]);
         case 4: recall = std::atof(argv[3]); 
         case 3: k = std::atoi(argv[2]);
@@ -53,7 +82,7 @@ int main(int argc, char* argv[]) {
                 break;
         default:
             std::cerr << "Usage: " << argv[0]
-                << " filename (number of neighbors) (recall) (BF|LSH) (space_usage in MB)" << std::endl;
+                << " filename (number of neighbors) (recall) (BF|LSH|LSHJoin|LSHJoinGlobal) (number_of_tables)" << std::endl;
             return -1;
     }
 
@@ -92,14 +121,49 @@ int main(int argc, char* argv[]) {
     std::vector<std::vector<uint32_t>>  res;
     if (method == "BF") {
         res = index.bf_join(k);
+    } else if (method == "BFGlobal") {
+        index.global_bf_join(k);
     } else if (method == "LSH") {
         res = index.naive_lsh_join(k, recall);
+    } else if (method == "LSHJoin") {
+        res = index.lsh_join(k, recall);
+    } else if (method == "LSHJoinGlobal") {
+        index.global_lsh_join(k, recall);
     }
     end_time = std::chrono::steady_clock::now();
-    elapsed = (end_time - start_time);
-    throughput = ((float) dataset.words.size()) / elapsed.count();
-    std::cerr << "Join computed in " << elapsed.count() << " s " << throughput << " queries/s" << std::endl;
-    write_result(method, res);
+    std::chrono::duration<double> elapsed_join = (end_time - start_time);
+    throughput = ((float) dataset.words.size()) / elapsed_join.count();
+    std::cerr << "Join computed in " << elapsed_join.count() << " s " << throughput << " queries/s" << std::endl;
+
+    std::string dataset_fn(filename);
+    auto slash_pos = dataset_fn.find_last_of("/");
+    auto suffix_pos = dataset_fn.find_last_of(".");
+
+    auto total_time =  puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total);
+    auto search_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Search);
+    auto filter_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Filtering);
+    auto init_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::SearchInit);
+
+    std::stringstream ss;
+
+    ss << "search_time=" <<  search_time
+        << "; filter_time=" << filter_time
+        << "; init_time=" << init_time 
+        << "; total_time=" << total_time;
+
+    std::cout << "search_time:" <<  search_time
+        << "\nfilter_time=" << filter_time
+        << "\ninit_time=" << init_time 
+        << "\ntotal_time=" << total_time << std::endl;
+
+    write_result(method, 
+        dataset_fn.substr(slash_pos + 1, suffix_pos - slash_pos - 1), 
+        res, 
+        index.get_repetitions(), 
+        recall, 
+        k, 
+        elapsed.count() + elapsed_join.count(),
+        ss.str());
 
 }
 

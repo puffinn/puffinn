@@ -6,8 +6,8 @@
 
 #include "puffinn/typedefs.hpp"
 
-const bool PUFFINN_PERFORMANCE = false;
-const bool PUFFINN_PERFORMANCE_TIME = false;
+const bool PUFFINN_PERFORMANCE = true;
+const bool PUFFINN_PERFORMANCE_TIME = true;
 
 namespace puffinn {
     const size_t NUM_TIMED_COMPUTATIONS = 11;

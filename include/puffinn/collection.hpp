@@ -6,13 +6,16 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/hash_source/independent.hpp"
 #include "puffinn/maxbuffer.hpp"
+#include "puffinn/maxpairbuffer.hpp"
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
 
 #include <cassert>
 #include <istream>
+#include <iostream>
 #include <memory>
 #include <ostream>
+#include <unordered_set>
 #include <vector>
 
 // for debugging
@@ -384,10 +387,43 @@ namespace puffinn {
             }
             return res;
         }
+
+        bool check_active_counts(const std::vector<uint32_t>& indices, const std::vector<uint32_t>& segments,
+            const bool* active, const std::vector<uint32_t>& active_counts) {
+
+            std::cout << active_counts.size() << std::endl;
+            std::cout << segments.size() - 1 << std::endl;
+            std::cout << segments[segments.size() - 1] << std::endl;
+            for (uint32_t j = 2; j < segments.size(); j++) {
+                auto left = segments[j - 1];
+                auto right = segments[j] - 1;
+                auto cnt = 0;
+
+                std::cout << j << " (" << left << " --- " << right << ") of " << segments.size() - 1 << std::endl;
+                for (size_t l = left; l <= right; l++) {
+                    if (l <= 0 || l >= indices.size()) {
+                        std::cout << l << std::endl;
+                    }
+                    if (active[indices[l]]) {
+                        cnt++;
+                        if (indices[l] == 0) {
+                            cnt = active_counts[j - 1];
+                            break;
+                        }
+                    }
+                }
+                if (cnt != active_counts[j-1]) {
+                    std::cout << "error at " << j << ": " << cnt << " " << active_counts[j-1] << std::endl;
+                    return false;
+                }
+            }
+            std::cout << "Finished check!" << std::endl;
+            return true;
+        }
         
         /// Compute a per-point top-K self-join on the current index with ``recall``.
         ///
-        /// 
+        /// This carries out an individual  query for each point in the index.
         std::vector<std::vector<uint32_t>> naive_lsh_join(
             unsigned int k,
             float recall,
@@ -399,6 +435,369 @@ namespace puffinn {
             }
             return res;
         }
+
+    public:
+        /// Compute a per-point top-K self-join on the current index with ``recall``.
+        ///
+        /// 
+        std::vector<std::pair<uint32_t, uint32_t>> global_lsh_join(
+            unsigned int k,
+            float recall,
+            FilterType filter_type = FilterType::Default
+        ) {
+            g_performance_metrics.new_query();
+            g_performance_metrics.start_timer(Computation::Total);
+            
+            // Allocate a buffer for each data point.
+            auto maxbuffer = MaxPairBuffer(k);
+
+            // Store segments efficiently (?).
+            // indices in segments[i][j-1], ..., segments[i][j]-1 in lsh_maps[i]
+            // share the same hash code.
+            std::vector<std::vector<uint32_t>> segments (lsh_maps.size());
+
+            g_performance_metrics.start_timer(Computation::SearchInit);
+
+            // Set up data structures. Create segments for initial hash codes.
+            for (size_t i = 0; i < lsh_maps.size(); i++) {
+                segments[i].push_back(0);
+                for (size_t j = 1; j < lsh_maps[i].hashes.size(); j++) {
+                    if (lsh_maps[i].hashes[j] != lsh_maps[i].hashes[j-1]) {
+                        segments[i].push_back(j);
+                    }
+                }                
+                // Carry out initial all-to-all comparisons within a segment.
+                // We leave out the first and last segment since it's filled up with filler elements.
+                for (size_t j = 2; j < segments[i].size() - 1; j++) { 
+                    auto range = lsh_maps[i].get_segment(segments[i][j-1], segments[i][j]);
+                    for (auto r = range.first; r != range.second; r++) {
+                        for (auto s = r + 1; s != range.second; s++) {
+                            auto R = *r;
+                            auto S = *s;
+                            // std::cout << "Comparing " << R << " and " << S << std::endl;
+                            // comparisons++;
+                            auto dist = TSim::compute_similarity(
+                                dataset[R], 
+                                dataset[S], 
+                                dataset.get_description());
+                            maxbuffer.insert(std::make_pair(R, S), dist);
+                        }
+                    }
+                }            
+            }
+            g_performance_metrics.store_time(Computation::SearchInit);
+            
+            uint32_t prefix_mask = 0xffffffff;
+            for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
+                // check current level
+                g_performance_metrics.start_timer(Computation::Search);
+                std::cout << "Checking level " << depth << std::endl;
+                std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
+
+                for (size_t i = 0; i < lsh_maps.size(); i++) {
+                    new_segments[i].push_back(0);
+
+                    // check each pair of adjacent segments in lsh_maps[i] in ``depth``.
+                    for (size_t j = 2; j < segments[i].size() - 1; j++) {
+                        auto left = (lsh_maps[i].hashes[segments[i][j - 1]]) & prefix_mask;
+                        auto actual = (lsh_maps[i].hashes[segments[i][j]]) & prefix_mask;
+                        if (left == actual) {
+                            for (uint32_t r = segments[i][j-1]; r < segments[i][j]; r++) {
+                                for (uint32_t s = segments[i][j]; s < segments[i][j + 1]; s++) {
+                                    auto R = lsh_maps[i].indices[r];
+                                    auto S = lsh_maps[i].indices[s];
+
+                                    auto dist = TSim::compute_similarity(
+                                        dataset[R], 
+                                        dataset[S], 
+                                        dataset.get_description());
+                                    maxbuffer.insert(std::make_pair(R, S), dist);
+                                }
+                            }
+                        } else {
+                            new_segments[i].push_back(segments[i][j]);
+                        }
+                    }
+                } 
+                g_performance_metrics.store_time(Computation::Search);   
+
+                std::cout << " Check termination." << std::endl;
+
+                // remove inactive nodes
+                auto kth_similarity = maxbuffer.smallest_value();
+                auto table_idx = lsh_maps.size();
+                auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
+                float failure_prob = hash_source->failure_probability(
+                    depth,
+                    table_idx,
+                    last_tables,
+                    kth_similarity
+                );
+                // g_performance_metrics.store_time(Computation::CheckTermination);
+                if (failure_prob <= 1-recall) {
+                    break;
+                }
+
+                // prepare next round
+                segments = new_segments;
+                prefix_mask <<= 1;
+            }
+            g_performance_metrics.store_time(Computation::Total);
+            std::cout << k << "-th largest similarity: " << maxbuffer.smallest_value() << std::endl;
+            return maxbuffer.best_indices();
+        }
+
+        std::vector<std::pair<uint32_t, uint32_t>> global_bf_join(unsigned int k) {
+            MaxPairBuffer maxbuffer(k);
+            g_performance_metrics.new_query();
+            g_performance_metrics.start_timer(Computation::Total);
+            for (size_t r = 0; r < dataset.get_size(); r++) {
+                for (size_t s = r + 1; s < dataset.get_size(); s++) {
+                    auto dist = TSim::compute_similarity(
+                        dataset[r], 
+                        dataset[s], 
+                        dataset.get_description());
+                    maxbuffer.insert(std::make_pair(r, s), dist);
+                }
+            }
+            g_performance_metrics.store_time(Computation::Total);
+            std::cout << k << "-th distance: " << maxbuffer.smallest_value() << std::endl;
+            return maxbuffer.best_indices();
+        }
+
+        /// Compute a per-point top-K self-join on the current index with ``recall``.
+        ///
+        /// 
+        std::vector<std::vector<uint32_t>> lsh_join(
+            unsigned int k,
+            float recall,
+            FilterType filter_type = FilterType::Default
+        ) {
+            std::vector<std::vector<uint32_t>> res;
+
+            g_performance_metrics.new_query();
+            g_performance_metrics.start_timer(Computation::Total);
+            
+            // Allocate a buffer for each data point.
+            std::vector<MaxBuffer> maxbuffers;
+
+            // Is a point still active?
+            bool active[dataset.get_size()];
+
+            // The set of active points.
+            std::unordered_set<uint32_t> active_nodes;
+            
+            for (size_t i = 0; i < dataset.get_size(); i++) {
+                maxbuffers.push_back(MaxBuffer(k));
+                active[i] = true;
+                active_nodes.insert(i);
+            }
+
+            // Store segments efficiently (?).
+            // indices in segments[i][j-1], ..., segments[i][j]-1 in lsh_maps[i]
+            // share the same hash code.
+            std::vector<std::vector<uint32_t>> segments (lsh_maps.size());
+            // Store count of active nodes in each segment.
+            // active_count[i][j] = number of active nodes in 
+            // segments[i][j-1], ..., segments[i][j]-1.
+            // std::vector<std::vector<uint32_t>> active_count (lsh_maps.size());
+
+            // node_positions[i][j]: position of node i in lsh_maps[j]
+            // std::vector<std::vector<uint32_t>> node_positions (dataset.get_size());
+
+
+            // int comparisons = 0;
+            g_performance_metrics.start_timer(Computation::SearchInit);
+
+
+            // Set up data structures. Create segments for initial hash codes.
+            for (size_t i = 0; i < lsh_maps.size(); i++) {
+                segments[i].push_back(0);
+                for (size_t j = 1; j < lsh_maps[i].hashes.size(); j++) {
+                    if (lsh_maps[i].hashes[j] != lsh_maps[i].hashes[j-1]) {
+                        segments[i].push_back(j);
+                        //active_count[i].push_back(j - segments[segments.size() - 2]);
+                    }
+                    //node_positions[indices[j]].push_back(j);
+                }    
+
+                // Carry out initial all-to-all comparisons within a segment.
+                // We leave out the first and last segment since it's filled up with filler elements.
+                for (size_t j = 2; j < segments[i].size() - 1; j++) { 
+                    auto range = lsh_maps[i].get_segment(segments[i][j-1], segments[i][j]);
+                    for (auto r = range.first; r != range.second; r++) {
+                        for (auto s = r; s != range.second; s++) {
+                            auto R = *r;
+                            auto S = *s;
+                            auto dist = TSim::compute_similarity(
+                                dataset[R], 
+                                dataset[S], 
+                                dataset.get_description());
+                            maxbuffers[R].insert(S, dist);
+                            maxbuffers[S].insert(R, dist);
+                        }
+                    }
+                }
+
+
+
+            }
+            g_performance_metrics.store_time(Computation::SearchInit);
+            std::cout << "Initial scan done" << std::endl;
+
+            // std::cout << "Current segments: " << std::endl;
+            // for (auto& s: segments) {
+            //         std::cout << s << " ";
+            // }
+            // std::cout << std::endl;
+
+            // for (auto& idx: lsh_maps[0].indices) {
+            //      std::cout << idx << " ";
+            // }
+            // std::cout << std::endl;
+            // for (auto& h: lsh_maps[0].hashes) {
+            //     std::cout << h << " ";
+            // }
+            // std::cout << std::endl;
+
+            
+            uint32_t prefix_mask = 0xffffffff;
+            for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
+                // check current level
+                g_performance_metrics.start_timer(Computation::Search);
+                std::cout << "Checking level " << depth << std::endl;
+                std::cout << "Active nodes: " << active_nodes.size() << std::endl;
+                if (active_nodes.size() == 0) {
+                    break;
+                }
+                std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
+                // std::vector<std::vector<uint32_t>> new_active_count (lsh_maps.size());
+
+                // std::cout << "Current segments: " << std::endl;
+                // for (auto& s: segments[0]) {
+                //      std::cout << s << " ";
+                // }
+                // std::cout << std::endl;
+
+                for (size_t i = 0; i < lsh_maps.size(); i++) {
+                    new_segments[i].push_back(0);
+
+                    // check each pair of adjacent segments in lsh_maps[i] in ``depth``.
+                    for (size_t j = 2; j < segments[i].size() - 1; j++) {
+                        auto left = (lsh_maps[i].hashes[segments[i][j - 1]]) & prefix_mask;
+                        auto actual = (lsh_maps[i].hashes[segments[i][j]]) & prefix_mask;
+                        if (left == actual) {
+                            // if (active_count[i][j - 1] == 0 && active_count[i][j] == 0) {
+                            //     continue;
+                            // }
+                            for (auto r = segments[i][j-1]; r < segments[i][j]; r++) {
+                                for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
+                                    auto R = lsh_maps[i].indices[r];
+                                    auto S = lsh_maps[i].indices[s];
+                                    // std::cout << "Comparing " << R << " and " << S << std::endl;
+                                    // comparisons++;
+                                    if (!active[R] && !active[S]) {
+                                         continue;
+                                    }
+                                    // auto sketch_idx = j%NUM_SKETCHES;
+                                    // auto r_sketch = filterer.get_sketch(R, sketch_idx);
+                                    // auto s_sketch = filterer.get_sketch(S, sketch_idx);
+                                
+                                    // if (filterer.passes_filter(r_sketch, s_sketch, filterer.get_max_sketch_diff(maxbuffers[R]->smallest_value()))) {
+                                        auto dist = TSim::compute_similarity(
+                                            dataset[R], 
+                                            dataset[S], 
+                                            dataset.get_description());
+                                        maxbuffers[R].insert(S, dist);
+                                        maxbuffers[S].insert(R, dist);
+                                    // }
+                                    // collisions[R]++;
+                                    // collisions[S]++;
+                                }
+                            }
+                            // active_count[i][j] += active_count[i][j-1];                            
+                        } else {
+                            new_segments[i].push_back(segments[i][j]);
+                            // new_active_count[i].push_back(active_count[i][j-1]);
+
+                        }
+                    }
+                }    
+                g_performance_metrics.store_time(Computation::Search);   
+
+                // std::cout << new_segments.size() << std::endl;
+                // for (auto& h: lsh_maps[0].hashes) {
+                //      std::cout << (h & prefix_mask) << " ";
+                // }
+                // std::cout << std::endl;
+                
+                // for (auto& s: segments) {
+                //     std::cout << s << ";";
+                // }
+                // std::cout << std::endl;
+
+                std::unordered_set<uint32_t> new_active (active_nodes.size());
+
+                std::cout << " Removing inactive nodes." << std::endl;
+                
+                g_performance_metrics.start_timer(Computation::Filtering);
+                // remove inactive nodes
+                for (auto& v: active_nodes) {
+                    auto kth_similarity = maxbuffers[v].smallest_value();
+                    auto table_idx = lsh_maps.size();
+                    auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
+                    float failure_prob = hash_source->failure_probability(
+                        depth,
+                        table_idx,
+                        last_tables,
+                        kth_similarity
+                    );
+                    // g_performance_metrics.store_time(Computation::CheckTermination);
+                    if (failure_prob > 1-recall) {
+                        // g_performance_metrics.set_hash_length(depth);
+                        // g_performance_metrics.set_considered_maps(
+                            // (MAX_HASHBITS-depth+1)*lsh_maps.size());
+                        // return;
+                        //std::cout << kth_similarity << std::endl;
+                        new_active.insert(v);
+                    } else {
+                        //std::cout << failure_prob << std::endl;
+                        active[v] = false;
+                        // std::cout << "Removing " << v << std::endl;
+                        // TODO: 0 seems to be used by the filler segments, but is also the first actual data point.
+                        // if (v == 0)
+                        //     continue;
+                        // for (size_t i = 0; i < node_positions[v].size(); i++) {
+                        //     auto pos = node_positions[v][i];
+                        //     auto it = std::upper_bound(new_segments[i].begin(), new_segments[i].end(), pos);
+                        //     auto j = (it - new_segments[i].begin());
+                        //     new_active_count[i][j-1]--;
+                        // }
+                    }
+                }
+                g_performance_metrics.store_time(Computation::Filtering);
+
+                // prepare next round
+                segments = new_segments;
+                active_nodes = new_active;
+                // active_count = new_active_count;
+                //check_active_counts(lsh_maps[0].indices, segments[0], active, active_count[0]);
+                prefix_mask <<= 1;
+            }
+            // auto n = dataset.get_size();
+            // std::cout << "comparisons: " << comparisons << "; should be " << (n * (n - 1) / 2 + n) << std::endl;
+            g_performance_metrics.store_time(Computation::Total);
+
+            for (size_t i = 0; i < dataset.get_size(); i++) {
+                auto best = maxbuffers[i].best_indices();
+                // if (best.size() != k) {
+                    // std::cout << "error! " << best.size() << " " << collisions[i] << std::endl;
+                // }
+                res.push_back(best);
+            }
+            return res;
+        }
+
 
         /// Search for the k nearest neighbors to a query by 
         /// computing the similarity of each inserted value.

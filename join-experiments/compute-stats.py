@@ -1,3 +1,4 @@
+import h5py
 import numpy
 import sys
 
@@ -9,9 +10,8 @@ gt = sys.argv[1]
 actual = sys.argv[2]
 
 def parsefile(f):
-    n, k = numpy.fromfile(f, dtype="uint64", count=2)
-    arr = numpy.fromfile(f, dtype="uint32", offset=16).reshape(n, k)
-    return arr
+    f = h5py.File(f, "r")
+    return numpy.array(f['results']), f.attrs['time']
 
 def compute_recall(arr1, arr2):
     n, k = arr1.shape
@@ -22,8 +22,9 @@ def compute_recall(arr1, arr2):
     return found / expected
 
 
-gt = parsefile(gt)
-ac = parsefile(actual)
+gt, tgt = parsefile(gt)
+ac, tac = parsefile(actual)
 
 print(f"Recall: {compute_recall(gt, ac)}")
+print(f"Speedup: {tgt/tac}")
 
