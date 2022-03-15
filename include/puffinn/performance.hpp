@@ -16,6 +16,8 @@ namespace puffinn {
         Total,
             Hashing,
             Sketching,
+            Rebuilding,
+                Sorting,
             Search,
                 SearchInit,
                     CreateQuery, // Also includes hashing

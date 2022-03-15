@@ -160,6 +160,7 @@ namespace puffinn {
         }
 
         void rebuild() {
+            g_performance_metrics.start_timer(Computation::Rebuilding);
             // A value whose prefix will never match that of a query vector, as long as less than 32
             // hash bits are used.
             static const LshDatatype IMPOSSIBLE_PREFIX = 0xffffffff;
@@ -172,6 +173,7 @@ namespace puffinn {
                 }
             }
             
+            g_performance_metrics.start_timer(Computation::Sorting);
             std::sort(
                 rebuilding_data.begin(),
                 rebuilding_data.end(),
@@ -179,6 +181,7 @@ namespace puffinn {
                     return a.second < b.second;
                 }
             );
+            g_performance_metrics.store_time(Computation::Sorting);
             std::vector<LshDatatype> new_hashes;
             new_hashes.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
             std::vector<uint32_t> new_indices;
@@ -216,6 +219,8 @@ namespace puffinn {
 
             rebuilding_data.clear();
             rebuilding_data.shrink_to_fit();
+
+            g_performance_metrics.store_time(Computation::Rebuilding);
         }
 
         // Construct a query object to search for the nearest neighbors of the given vector.
