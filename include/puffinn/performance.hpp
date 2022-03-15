@@ -13,11 +13,14 @@ namespace puffinn {
     const size_t NUM_TIMED_COMPUTATIONS = 11;
     // Indented to match subgroups
     enum class Computation {
+        Indexing,
+            IndexSketching,
+            IndexHashing,
+            Rebuilding,
+                Sorting,
         Total,
             Hashing,
             Sketching,
-            Rebuilding,
-                Sorting,
             Search,
                 SearchInit,
                     CreateQuery, // Also includes hashing

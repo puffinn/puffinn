@@ -240,12 +240,11 @@ namespace puffinn {
         /// The number of threads used can be specified using the
         /// OMP_NUM_THREADS environment variable.
         void rebuild() {
+            g_performance_metrics.start_timer(Computation::Indexing);
             // Compute sketches for the new vectors.
-            auto start_sketches = std::chrono::steady_clock::now();
+            g_performance_metrics.start_timer(Computation::IndexSketching);
             filterer.add_sketches(dataset, last_rebuild);
-            auto end_sketches = std::chrono::steady_clock::now();
-            auto elapsed_sketches = std::chrono::duration_cast<std::chrono::nanoseconds>(end_sketches - start_sketches).count();
-            printf("Time to compute sketches %ld ns\n", elapsed_sketches);
+            g_performance_metrics.store_time(Computation::IndexSketching);
 
             auto desc = dataset.get_description();
             auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
@@ -268,9 +267,6 @@ namespace puffinn {
                 throw std::invalid_argument("insufficient memory");
             }
 
-            printf("Building %d tables\n", num_tables);
-
-            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
@@ -290,12 +286,12 @@ namespace puffinn {
                     lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
                 }
             }
-            auto sources_sampled = std::chrono::steady_clock::now();
 
             for (auto& map : lsh_maps) {
                 map.reserve(dataset.get_size());
             }
 
+            g_performance_metrics.start_timer(Computation::IndexHashing);
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
@@ -312,18 +308,13 @@ namespace puffinn {
                     }
                 }
             }
+            g_performance_metrics.store_time(Computation::IndexHashing);
 
             for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
                 lsh_maps[map_idx].rebuild();
             }
-            auto end = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-            printf("Time to build the index %ld ns\n\tbuilding sources: %12ld ns\n\tcomputing hashes: %12ld ns\n", 
-                elapsed,
-                std::chrono::duration_cast<std::chrono::nanoseconds>(sources_sampled - start).count(),
-                std::chrono::duration_cast<std::chrono::nanoseconds>(end - sources_sampled).count()
-            );
             last_rebuild = dataset.get_size();
+            g_performance_metrics.store_time(Computation::Indexing);
         }
 
         /// Search for the approximate ``k`` nearest neighbors to a query.
