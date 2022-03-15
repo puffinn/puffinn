@@ -109,8 +109,8 @@ Again, the times are in nanoseconds.
 
 # Sorting
 
-Here we play with sorting 24-bits hash values using the standard `std::sort` and a simple implementation
-of radix sort, that performs only 4 passes on the data: the first to compute the histograms of byte counts, and the other three to sort on the three bytes of the hashes.
+Here we play with sorting 24-bits hash values using the standard `std::sort` and a [simple implementation
+of radix sort](https://github.com/Cecca/puffinn/blob/0e5eaa7d6c4345b6e7c3ef167d5e235db2f4d8a2/include/sorthash.hpp#L58), that performs only 4 passes on the data: the first to compute the histograms of byte counts, and the other three to sort on the three bytes of the hashes.
 
 On uniformly distributed 24-bit integers, these are the performance numbers.
 
