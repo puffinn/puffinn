@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include <filesystem>
+// #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -17,46 +17,46 @@ struct Dataset {
     static Dataset read_glove(const std::string& filename);
 };
 
-void write_result(
-    const std::string& method_name,
-    const std::string& ds_name,
-    const std::vector<std::vector<uint32_t>>& res,
-    const uint32_t num_tables,
-    const float recall,
-    const uint32_t k,
-    const double time,
-    const std::string& details
-    ) {
+// void write_result(
+//     const std::string& method_name,
+//     const std::string& ds_name,
+//     const std::vector<std::vector<uint32_t>>& res,
+//     const uint32_t num_tables,
+//     const float recall,
+//     const uint32_t k,
+//     const double time,
+//     const std::string& details
+//     ) {
 
-    using namespace HighFive;
+//     using namespace HighFive;
 
-    try {
+//     try {
 
-        std::stringstream ss;
-        ss << ds_name << "/" << k << "/" << method_name;
+//         std::stringstream ss;
+//         ss << ds_name << "/" << k << "/" << method_name;
 
-        std::filesystem::create_directories(ss.str());
+//         std::filesystem::create_directories(ss.str());
         
-        ss << "/" << recall << "_" << num_tables << ".hdf5";
-        File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
+//         ss << "/" << recall << "_" << num_tables << ".hdf5";
+//         File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
 
-        DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
-        results.write(res);
-        Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
-        a.write(k);
-        a = file.createAttribute<float>("recall", DataSpace::From(recall));
-        a.write(recall);
-        a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
-        a.write(num_tables);
-        a = file.createAttribute<double>("time", DataSpace::From(time));
-        a.write(time);
-        a = file.createAttribute<std::string>("details", DataSpace::From(details));
-        a.write(details);
+//         DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
+//         results.write(res);
+//         Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
+//         a.write(k);
+//         a = file.createAttribute<float>("recall", DataSpace::From(recall));
+//         a.write(recall);
+//         a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
+//         a.write(num_tables);
+//         a = file.createAttribute<double>("time", DataSpace::From(time));
+//         a.write(time);
+//         a = file.createAttribute<std::string>("details", DataSpace::From(details));
+//         a.write(details);
 
-    } catch (Exception& err) {
-        std::cerr << err.what() << std::endl;
-    }
-}
+//     } catch (Exception& err) {
+//         std::cerr << err.what() << std::endl;
+//     }
+// }
 
 
 
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     std::string method = "BF";
     unsigned long long space_usage = 100*MB;
     switch (argc) {
-        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])); 
+        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])) * MB; 
         case 5: method = std::string(argv[4]);
         case 4: recall = std::atof(argv[3]); 
         case 3: k = std::atoi(argv[2]);
@@ -143,6 +143,11 @@ int main(int argc, char* argv[]) {
     auto search_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Search);
     auto filter_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Filtering);
     auto init_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::SearchInit);
+    auto indexing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Indexing);
+    auto rebuild_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Rebuilding);
+    auto sorting_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Sorting);
+    auto index_hashing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexHashing);
+    auto index_sketching_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexSketching);
 
     std::stringstream ss;
 
@@ -151,19 +156,25 @@ int main(int argc, char* argv[]) {
         << "; init_time=" << init_time 
         << "; total_time=" << total_time;
 
-    std::cout << "search_time:" <<  search_time
+    std::cout 
+        << "indexing_time=" << indexing_time
+        << "\n\tsketching_time=" << index_sketching_time
+        << "\n\thashing_time=" << index_hashing_time
+        << "\n\trebuilding_time=" << rebuild_time
+        << "\n\tsorting_time" << sorting_time
+        << "\nsearch_time=" <<  search_time
         << "\nfilter_time=" << filter_time
         << "\ninit_time=" << init_time 
         << "\ntotal_time=" << total_time << std::endl;
 
-    write_result(method, 
-        dataset_fn.substr(slash_pos + 1, suffix_pos - slash_pos - 1), 
-        res, 
-        index.get_repetitions(), 
-        recall, 
-        k, 
-        elapsed.count() + elapsed_join.count(),
-        ss.str());
+    // write_result(method, 
+    //     dataset_fn.substr(slash_pos + 1, suffix_pos - slash_pos - 1), 
+    //     res, 
+    //     index.get_repetitions(), 
+    //     recall, 
+    //     k, 
+    //     elapsed.count() + elapsed_join.count(),
+    //     ss.str());
 
 }
 
