@@ -52,7 +52,7 @@ namespace puffinn {
 
 #define do_pass do_pass_unrolled
 
-//! Sort the given vector of hash values, with n bytes of auxiliary space, using MSB Radix Sort
+//! Sort the given vector of hash values, with n bytes of auxiliary space, using adix Sort
 //! with three passes over the data. Assumes that the hash values are stored in 
 //! the 24 least significant bits of each 32 bit integer.
 void sort_hashes_24(std::vector<uint32_t> & hashes, std::vector<uint32_t> & out) {
@@ -110,5 +110,88 @@ void sort_hashes_24(std::vector<uint32_t> & hashes, std::vector<uint32_t> & out)
     // Third sorting pass
     do_pass(hashes, out, b2, _2);
 }
+
+#define do_pass_simple(arr_in, arr_out, idx_in, idx_out, bx, get_byte) \
+    for (size_t i = 0; i < n; i++) {           \
+        const uint32_t hi = arr_in[i];     \
+        const uint32_t pos = get_byte(hi);       \
+        const uint32_t t = bx[pos]++;   \
+        arr_out[t] = hi;           \
+        idx_out[t] = idx_in[i]; \
+    }
+
+#define do_pass do_pass_simple
+
+//! Sort the given vector of hash values, along with the corresponding vector of 
+//! identifiers, with n bytes of auxiliary space, using Radix Sort
+//! with three passes over the data. Assumes that the hash values are stored in 
+//! the 24 least significant bits of each 32 bit integer.
+//!
+//! In this sort routine, the indices provided in the `idx_in` argument are considered
+//! as forming a pair with the hashes in `hashes_in`, and will be sorted along with them
+//! as if we were sorting an array of std::pair using the hash as key.
+void sort_hashes_pairs_24(
+    std::vector<uint32_t> & hashes_in,
+    std::vector<uint32_t> & hashes_out,
+    std::vector<uint32_t> & idx_in,
+    std::vector<uint32_t> & idx_out
+) {
+    const size_t n = hashes_in.size();
+    const size_t n_bytes = 256;
+    hashes_out.clear();
+    hashes_out.resize(n, 0);
+    idx_out.clear();
+    idx_out.resize(n, 0);
+
+    // Histograms on the stack
+    uint32_t b0[n_bytes], b1[n_bytes], b2[n_bytes];
+    for (size_t i = 0; i < n_bytes; i++) {
+        b0[i] = 0;
+        b1[i] = 0;
+        b2[i] = 0;
+    }
+
+    // One-pass histogram computation
+    for (size_t i = 0; i < n; i++) {
+        const uint32_t hi = hashes_in[i];
+        b0[_0(hi)]++;
+        b1[_1(hi)]++;
+        b2[_2(hi)]++;
+    }
+
+    // Cumulative sum of the histograms, which then keep track 
+    // of the write head position for each byte
+    {
+        uint32_t tsum = 0; // Re-set and reused for all three histograms
+        uint32_t
+            sum0 = 0,
+            sum1 = 0,
+            sum2 = 0;
+
+        for (size_t i = 0; i < n_bytes; i++) {
+            tsum = sum0 + b0[i];
+            b0[i] = sum0;
+            sum0 = tsum;
+
+            tsum = sum1 + b1[i];
+            b1[i] = sum1;
+            sum1 = tsum;
+
+            tsum = sum2 + b2[i];
+            b2[i] = sum2;
+            sum2 = tsum;
+        }
+    }
+
+    // First sorting pass
+    do_pass(hashes_in, hashes_out, idx_in, idx_out, b0, _0);
+
+    // Second sorting pass
+    do_pass(hashes_out, hashes_in, idx_out, idx_in, b1, _1);
+
+    // Third sorting pass
+    do_pass(hashes_in, hashes_out, idx_in, idx_out, b2, _2);
+}
+
 
 } // namespace puffinn

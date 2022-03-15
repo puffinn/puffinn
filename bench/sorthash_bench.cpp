@@ -104,55 +104,117 @@ int main(int argc, char ** argv) {
         printf("| puffinn::sort_hashes_24 | %10lu | %12.0f | %10.2f | %12.2f |\n", hashes.size(), avg_ns, per_element, throughput);
     }
 
-
-
-    // Benchmark uniform random numbers
-    std::mt19937 generator (1234);
-    std::uniform_int_distribution<uint32_t> distribution(0,1 << 23);
-
-    std::vector<uint32_t> aux;
-    std::vector<uint32_t> numbers;
-
-    printf("\n\n# Sorting uniformly distributed data\n\n");
+    printf("\n\n# Sorting actual Glove hashe/index pairs\n\n");
     printf("| algorithm               |          n |    time (ns) |    ns/elem |    throghput |\n");
     printf("| :---------------------- | ---------: | -----------: | ---------: | -----------: |\n");
-    size_t ns[] = {1000, 10000, 100000, 1000000, 10000000};
-    for (const size_t n : ns) {
-        numbers.clear();
-        for (size_t i = 0; i < n; i++) {
-            numbers.push_back(distribution(generator));
-        }
-        
-        // std::sort
-        {
-            uint64_t total_ns = 0;
-            for (size_t run = 0; run < runs; run++) {
-                std::vector<uint32_t> tosort(numbers);
-                auto start = std::chrono::steady_clock::now();
-                std::sort(tosort.begin(), tosort.end());
-                auto end = std::chrono::steady_clock::now();
-                total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    {
+        size_t n = hashes.size();
+        uint64_t total_ns = 0;
+        for (size_t run = 0; run < runs; run++) {
+            std::vector<uint32_t> tosort(hashes);
+            std::vector<uint32_t> indices;
+            for (size_t i = 0; i < n; i++) {
+                indices.push_back(i);
             }
-            double avg_ns = total_ns / runs;
-            double per_element = avg_ns / numbers.size();
-            double throughput = ((double)numbers.size()) / (avg_ns / 1000000000.0);
-            printf("| std::sort               | %10lu | %12.0f | %10.2f | %12.2f |\n", numbers.size(), avg_ns, per_element, throughput);
-        }
+            std::vector<std::pair<uint32_t, uint32_t>> rebuilding_data; // This is akin to `rebuilding_data` in prefixmap.hpp
+            auto start = std::chrono::steady_clock::now();
 
-        // puffinn::sort_hashes_24
-        {
-            uint64_t total_ns = 0;
-            for (size_t run = 0; run < runs; run++) {
-                std::vector<uint32_t> tosort(numbers);
-                auto start = std::chrono::steady_clock::now();
-                puffinn::sort_hashes_24(tosort, aux);
-                auto end = std::chrono::steady_clock::now();
-                total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+            // Init pairs (we measure this because that's an overhead we don't have with radix sort)
+            rebuilding_data.reserve(hashes.size());
+            for (size_t i=0; i < hashes.size(); i++) {
+                rebuilding_data.push_back({ indices[i], hashes[i] });
             }
-            double avg_ns = total_ns / runs;
-            double per_element = avg_ns / numbers.size();
-            double throughput = ((double)numbers.size()) / (avg_ns / 1000000000.0);
-            printf("| puffinn::sort_hashes_24 | %10lu | %12.0f | %10.2f | %12.2f |\n", numbers.size(), avg_ns, per_element, throughput);
+
+            std::sort(
+                rebuilding_data.begin(),
+                rebuilding_data.end(),
+                [](std::pair<uint32_t, uint32_t>& a, std::pair<uint32_t, uint32_t>& b) {
+                    return a.second < b.second;
+                }
+            );
+            auto end = std::chrono::steady_clock::now();
+            total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
         }
+        double avg_ns = total_ns / runs;
+        double per_element = avg_ns / hashes.size();
+        double throughput = ((double)hashes.size()) / (avg_ns / 1000000000.0);
+        printf("| std::sort               | %10lu | %12.0f | %10.2f | %12.2f |\n", hashes.size(), avg_ns, per_element, throughput);
     }
+    {
+        size_t n = hashes.size();
+        uint64_t total_ns = 0;
+        for (size_t run = 0; run < runs; run++) {
+            std::vector<uint32_t> tosort(hashes);
+            std::vector<uint32_t> indices;
+            for (size_t i = 0; i < n; i++) {
+                indices.push_back(i);
+            }
+
+            std::vector<uint32_t> hashes_out;
+            std::vector<uint32_t> indices_out;
+
+            auto start = std::chrono::steady_clock::now();
+            
+            puffinn::sort_hashes_pairs_24(tosort, hashes_out, indices, indices_out);
+
+            auto end = std::chrono::steady_clock::now();
+            total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        }
+        double avg_ns = total_ns / runs;
+        double per_element = avg_ns / hashes.size();
+        double throughput = ((double)hashes.size()) / (avg_ns / 1000000000.0);
+        printf("| puffinn::sort_hashes_24 | %10lu | %12.0f | %10.2f | %12.2f |\n", hashes.size(), avg_ns, per_element, throughput);
+    }
+
+
+    // // Benchmark uniform random numbers
+    // std::mt19937 generator (1234);
+    // std::uniform_int_distribution<uint32_t> distribution(0,1 << 23);
+
+    // std::vector<uint32_t> aux;
+    // std::vector<uint32_t> numbers;
+
+    // printf("\n\n# Sorting uniformly distributed data\n\n");
+    // printf("| algorithm               |          n |    time (ns) |    ns/elem |    throghput |\n");
+    // printf("| :---------------------- | ---------: | -----------: | ---------: | -----------: |\n");
+    // size_t ns[] = {1000, 10000, 100000, 1000000, 10000000};
+    // for (const size_t n : ns) {
+    //     numbers.clear();
+    //     for (size_t i = 0; i < n; i++) {
+    //         numbers.push_back(distribution(generator));
+    //     }
+        
+    //     // std::sort
+    //     {
+    //         uint64_t total_ns = 0;
+    //         for (size_t run = 0; run < runs; run++) {
+    //             std::vector<uint32_t> tosort(numbers);
+    //             auto start = std::chrono::steady_clock::now();
+    //             std::sort(tosort.begin(), tosort.end());
+    //             auto end = std::chrono::steady_clock::now();
+    //             total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    //         }
+    //         double avg_ns = total_ns / runs;
+    //         double per_element = avg_ns / numbers.size();
+    //         double throughput = ((double)numbers.size()) / (avg_ns / 1000000000.0);
+    //         printf("| std::sort               | %10lu | %12.0f | %10.2f | %12.2f |\n", numbers.size(), avg_ns, per_element, throughput);
+    //     }
+
+    //     // puffinn::sort_hashes_24
+    //     {
+    //         uint64_t total_ns = 0;
+    //         for (size_t run = 0; run < runs; run++) {
+    //             std::vector<uint32_t> tosort(numbers);
+    //             auto start = std::chrono::steady_clock::now();
+    //             puffinn::sort_hashes_24(tosort, aux);
+    //             auto end = std::chrono::steady_clock::now();
+    //             total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    //         }
+    //         double avg_ns = total_ns / runs;
+    //         double per_element = avg_ns / numbers.size();
+    //         double throughput = ((double)numbers.size()) / (avg_ns / 1000000000.0);
+    //         printf("| puffinn::sort_hashes_24 | %10lu | %12.0f | %10.2f | %12.2f |\n", numbers.size(), avg_ns, per_element, throughput);
+    //     }
+    // }
+
 }
