@@ -105,3 +105,23 @@ Again, the times are in nanoseconds.
 |                5.03 |      198,865,506.85 |    0.2% |      0.00 | `SimHash (single)`
 |              332.74 |        3,005,358.55 |    3.1% |      0.00 | `SimHash (indirection)`
 |              260.93 |        3,832,376.04 |    4.8% |      0.00 | `SimHash (static)`
+
+
+# Sorting
+
+Uniformly distributed 24-bit integers
+
+| algorithm               |          n |    time (ns) |    ns/elem |  throghput |
+| :---------------------- | ---------: | -----------: | ---------: | ---------: |
+| std::sort               |       1000 |        15095 |      15.00 |       0.00 |
+| puffinn::sort_hashes_24 |       1000 |         8979 |       8.00 |       0.00 |
+| std::sort               |      10000 |        57783 |       5.00 |       0.00 |
+| puffinn::sort_hashes_24 |      10000 |        73050 |       7.00 |       0.00 |
+| std::sort               |     100000 |       725061 |       7.00 |       0.00 |
+| puffinn::sort_hashes_24 |     100000 |       864273 |       8.00 |       0.00 |
+| std::sort               |    1000000 |      8725148 |       8.00 |       0.00 |
+| puffinn::sort_hashes_24 |    1000000 |      7068055 |       7.00 |       0.00 |
+| std::sort               |   10000000 |     97970046 |       9.00 |       0.00 |
+| puffinn::sort_hashes_24 |   10000000 |     71361956 |       7.00 |       0.00 |
+| std::sort               |  100000000 |   1164716873 |      11.00 |       0.00 |
+| puffinn::sort_hashes_24 |  100000000 |    826945743 |       8.00 |       0.00 |
