@@ -281,7 +281,7 @@ int main(int argc, char **argv)
   auto dataset = read_sets(argv[1]);
   std::cerr << "Read " << dataset.get_size() << " sets" << std::endl;
 
-  size_t nruns = 10;
+  size_t nruns = 1;
 
   std::cout << "| dataset |    k | elapsed (ms) | similarity |" << std::endl;
   std::cout << "| :------ | ---: | -----------: | ---------: |" << std::endl;
@@ -308,8 +308,8 @@ int main(int argc, char **argv)
     std::cout << "| " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
 
     // If the dataset is small enough, check for correctness using the all-2-all algorithm
-    printf("Exact all to all computation");
     if (dataset.get_size() <= 10000) {
+      printf("Exact all to all computation");
       auto check = all_2_all(dataset, k);
 
       while (!check.empty()) {

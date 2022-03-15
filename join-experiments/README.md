@@ -25,7 +25,7 @@ The table below reports some running times for different values of k, along with
 
 | dataset |    k | elapsed (ms) | similarity |
 | :------ | ---: | -----------: | ---------: |
-| dblp.vecs.txt | 10 | 4465 | 0.966667 |
-| dblp.vecs.txt | 100 | 4672 | 0.952381 |
-| dblp.vecs.txt | 1000 | 7097 | 0.928571 |
-| dblp.vecs.txt | 10000 | 72652 | 0.833333 |
+| dblp.vecs.txt | 10 | 7224 | 0.96875 |
+| dblp.vecs.txt | 100 | 7972 | 0.956522 |
+| dblp.vecs.txt | 1000 | 10370 | 0.9375 |
+| dblp.vecs.txt | 10000 | 85000 | 0.866667 |
