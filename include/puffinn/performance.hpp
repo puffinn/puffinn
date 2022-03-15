@@ -10,7 +10,7 @@ const bool PUFFINN_PERFORMANCE = true;
 const bool PUFFINN_PERFORMANCE_TIME = true;
 
 namespace puffinn {
-    const size_t NUM_TIMED_COMPUTATIONS = 11;
+    const size_t NUM_TIMED_COMPUTATIONS = 16;
     // Indented to match subgroups
     enum class Computation {
         Indexing,
