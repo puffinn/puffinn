@@ -67,7 +67,7 @@ int main(int argc, char ** argv) {
     auto hash_function = hash_source->sample();
     std::vector<uint32_t> hashes;
     for (size_t i = 0; i < dataset.get_size(); i++) {
-        auto state = hash_source->reset(dataset[0], true);
+        auto state = hash_source->reset(dataset[i], true);
         hashes.push_back((*hash_function)(state.get()));
     }
 
