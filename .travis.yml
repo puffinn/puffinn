@@ -6,7 +6,7 @@ matrix:
                 virtualenv:
                   system_site_packages: true
                 python:
-                - '3.5'
+                - '3.8'
                 install:
                 - pip3 install numpy 
                 - python3 setup.py build
