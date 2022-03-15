@@ -162,7 +162,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     {
       std::vector<uint32_t> *y = dataset[idx];
       size_t size_y = y->size();
-      if (e.index < idx) {
+      if (e.index != idx) {
         if (size_x * sim_threshold <= size_y && size_y <= size_x / sim_threshold)
         { // size filtering
           size_t 
@@ -179,6 +179,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
             // Remove from the output the pair in excess, if any
             if (output.size() > k) {
               std::pop_heap(output.begin(), output.end(), cmp_pairs);
+              auto popped = output.back();
               output.pop_back();
             }
 
@@ -250,6 +251,27 @@ puffinn::Dataset<puffinn::SetFormat> read_sets(const std::string &filename)
   return dataset;
 }
 
+std::vector<Pair> all_2_all(const puffinn::Dataset<puffinn::SetFormat> &dataset, size_t k) {
+  std::vector<Pair> out;
+  const size_t n = dataset.get_size();
+  for (size_t i = 0; i < n; i++) {
+    auto x = dataset[i];
+    for (size_t j = i + 1; j < n; j++) {
+      auto y = dataset[j];
+      float s = jaccard(x, y);
+      out.push_back(Pair{i, j, s});
+      std::push_heap(out.begin(), out.end(), cmp_pairs);
+
+      if (out.size() > k) {
+        std::pop_heap(out.begin(), out.end(), cmp_pairs);
+        out.pop_back();
+      }
+    }
+  }
+
+  return out;
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 3) {
@@ -274,6 +296,7 @@ int main(int argc, char **argv)
     //   top_pairs.pop_back();
     //   std::cerr << "  " << p.a << " " << p.b << " @ " << p.similarity << std::endl;
     // }
+    // printf("\n");
 
     // take the average time
     auto start = std::chrono::steady_clock::now();
@@ -283,7 +306,21 @@ int main(int argc, char **argv)
     auto end = std::chrono::steady_clock::now();
     double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / nruns;
     std::cout << "| " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
+
+    // If the dataset is small enough, check for correctness using the all-2-all algorithm
+    printf("Exact all to all computation");
+    if (dataset.get_size() <= 10000) {
+      auto check = all_2_all(dataset, k);
+
+      while (!check.empty()) {
+        std::pop_heap(check.begin(), check.end(), cmp_pairs);
+        auto p = check.back();
+        check.pop_back();
+        std::cerr << "  " << p.a << " " << p.b << " @ " << p.similarity << std::endl;
+      }
+    }
   }
+
 
   return 0;
 }
