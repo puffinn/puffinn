@@ -4,6 +4,7 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/typedefs.hpp"
 #include "puffinn/performance.hpp"
+#include "puffinn/sorthash.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -165,43 +166,54 @@ namespace puffinn {
             // hash bits are used.
             static const LshDatatype IMPOSSIBLE_PREFIX = 0xffffffff;
 
-            rebuilding_data.reserve(hashes.size()+rebuilding_data.size());
+            std::vector<LshDatatype> tmp_hashes;
+            std::vector<uint32_t> tmp_indices;
+            std::vector<LshDatatype> out_hashes;
+            std::vector<uint32_t> out_indices;
+            tmp_hashes.reserve(hashes.size() + rebuilding_data.size());
+            tmp_indices.reserve(hashes.size() + rebuilding_data.size());
+            out_hashes.reserve(hashes.size() + rebuilding_data.size());
+            out_indices.reserve(hashes.size() + rebuilding_data.size());
+
             if (hashes.size() != 0) {
                 // Move data to temporary vector for sorting.
                 for (size_t i=SEGMENT_SIZE; i < hashes.size()-SEGMENT_SIZE; i++) {
-                    rebuilding_data.push_back({ indices[i], hashes[i] });
+                    tmp_hashes.push_back(hashes[i]);
+                    tmp_indices.push_back(indices[i]);
                 }
+            }
+            for (auto pair : rebuilding_data) {
+                tmp_indices.push_back(pair.first);
+                tmp_hashes.push_back(pair.second);
             }
             
             g_performance_metrics.start_timer(Computation::Sorting);
-            std::sort(
-                rebuilding_data.begin(),
-                rebuilding_data.end(),
-                [](HashedVecIdx& a, HashedVecIdx& b) {
-                    return a.second < b.second;
-                }
+            puffinn::sort_hashes_pairs_24(
+                tmp_hashes,
+                out_hashes,
+                tmp_indices,
+                out_indices
             );
             g_performance_metrics.store_time(Computation::Sorting);
-            std::vector<LshDatatype> new_hashes;
-            new_hashes.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
-            std::vector<uint32_t> new_indices;
-            new_indices.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
 
             // Pad with SEGMENT_SIZE values on each size to remove need for bounds check.
+            hashes.clear();
+            hashes.reserve(out_hashes.size() + 2*SEGMENT_SIZE);
+            indices.clear();
+            indices.reserve(out_hashes.size() + 2*SEGMENT_SIZE);
+
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                new_hashes.push_back(IMPOSSIBLE_PREFIX);
-                new_indices.push_back(0);
+                hashes.push_back(IMPOSSIBLE_PREFIX);
+                indices.push_back(0);
             }
-            for (auto v : rebuilding_data) {
-                new_indices.push_back(v.first);
-                new_hashes.push_back(v.second);
+            for (size_t i = 0; i < out_hashes.size(); i++) {
+                indices.push_back(out_indices[i]);
+                hashes.push_back(out_hashes[i]);
             }
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                new_hashes.push_back(IMPOSSIBLE_PREFIX);
-                new_indices.push_back(0);
+                hashes.push_back(IMPOSSIBLE_PREFIX);
+                indices.push_back(0);
             }
-            hashes = std::move(new_hashes);
-            indices = std::move(new_indices);
 
             // Build prefix_index data structure.
             // Index of the first occurence of the prefix
