@@ -15,7 +15,7 @@ matrix:
                 - python3 examples/random-vectors.py
               - language: cpp
                 install:
-                - sudo apt-get install -y python3-pip python3-setuptools
+                - sudo apt-get install -y python3-pip python3-setuptools libhdf5-dev
                 - mkdir bin && cd bin
                 - cmake .. && make
                 script:
