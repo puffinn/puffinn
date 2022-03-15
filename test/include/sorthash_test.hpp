@@ -1,7 +1,7 @@
 #pragma once
 
 #include "catch.hpp"
-#include "sorthash.hpp"
+#include "puffinn/sorthash.hpp"
 #include <random>
 #include <algorithm>
 

@@ -1,5 +1,5 @@
 #include "nanobench.h"
-#include "sorthash.hpp"
+#include "puffinn/sorthash.hpp"
 #include "puffinn/hash/simhash.hpp"
 #include "puffinn/hash/crosspolytope.hpp"
 #include "puffinn/hash_source/pool.hpp"
