@@ -283,8 +283,8 @@ int main(int argc, char **argv)
 
   size_t nruns = 1;
 
-  std::cout << "| dataset |    k | elapsed (ms) | similarity |" << std::endl;
-  std::cout << "| :------ | ---: | -----------: | ---------: |" << std::endl;
+  std::cout << "| method | dataset |    k | elapsed (ms) | similarity |" << std::endl;
+  std::cout << "| :----- | :------ | ---: | -----------: | ---------: |" << std::endl;
   for (int i = 2; i < argc; i++) {
     size_t k = atoi(argv[i]);
     auto top_pairs = topk(dataset, k);
@@ -305,7 +305,8 @@ int main(int argc, char **argv)
     }
     auto end = std::chrono::steady_clock::now();
     double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / nruns;
-    std::cout << "| " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
+
+    std::cout << "| Xiao et al. | " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
 
     // If the dataset is small enough, check for correctness using the all-2-all algorithm
     if (dataset.get_size() <= 10000) {
@@ -320,6 +321,40 @@ int main(int argc, char **argv)
       }
     }
   }
+  
+  auto universe_size = dataset.get_description().args;
+  puffinn::Index<puffinn::JaccardSimilarity, puffinn::MinHash1Bit> index(
+    universe_size,
+    1e9,
+    puffinn::TensoredHashArgs<puffinn::MinHash1Bit>());
+
+  for (size_t i = 0; i < dataset.get_size(); i++) {
+    index.insert(*dataset[i]);
+  }
+  index.rebuild();
+  
+  for (int i = 2; i < argc; i++) {
+    size_t k = atoi(argv[i]);
+    auto buffer = index.global_lsh_join(k, 0.8);  
+    auto best_entries = buffer.best_entries();
+
+    std::cout << "| LSHJoin | " << argv[1] << " | " << k << " | " << 
+      puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total) * 1000 << " | " <<
+      buffer.smallest_value() << " | " << std::endl;
+    // for (int j = k - 1; j >= 0; j--) {
+    //   std::cout << best_entries[j].first.first << " " << best_entries[j].first.second << " @ " 
+    //     << best_entries[j].second << " " << std::endl;
+    // }
+  }
+
+  // for (int i = 2; i < argc; i++) {
+  //   size_t k = atoi(argv[i]);
+  //   auto buffer = index.global_bf_join(k);  
+  //   auto best_entries = buffer.best_entries();
+  //   std::cout << "| BF | " << argv[1] << " | " << k << " | " << 
+  //     puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total) * 1000 << " | " <<
+  //     buffer.smallest_value() << " | " << std::endl;
+  // }
 
 
   return 0;

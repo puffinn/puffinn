@@ -10,7 +10,7 @@ namespace puffinn {
     using FilterLshDatatype = uint64_t;
 
     // Number of bits used in hashes.
-    const static unsigned int MAX_HASHBITS = 24;
+    const static unsigned int MAX_HASHBITS = 30;
     // The hash_pool concatenates hashes into a type twice as large to avoid overflow errors.
     using LshDatatype = uint32_t;
 
