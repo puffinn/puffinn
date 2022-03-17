@@ -17,7 +17,9 @@ namespace puffinn {
     // truncated to `LshDatatype` when push_back is called on `rebuilding_data`.
     using LshDatatype = uint32_t;
 
-    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    // std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    // for reproducibility, fix the seed of the random number generator
+    std::default_random_engine generator(1234);
 
     // Retrieve the default random engine, seeded once by the system clock.
     std::default_random_engine& get_default_random_generator() {

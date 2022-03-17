@@ -43,8 +43,8 @@ namespace hash_source {
         REQUIRE(hashes.size() == num_tables);
 
         for (size_t rep = 0; rep < num_tables; rep++) {
-            auto hash1 = expected[0];
-            auto hash2 = hashes[0];
+            auto hash1 = expected[rep];
+            auto hash2 = hashes[rep];
             REQUIRE(hash1 == hash2);
         }
     }
@@ -130,6 +130,30 @@ namespace hash_source {
             num_bits
         );
         test_new_api<FHTCrossPolytopeHash, IndependentHashSource<FHTCrossPolytopeHash>>(dimensions, cp_source, num_tables);
+    }
+
+    TEST_CASE("TensoredHashSource new api") {
+        Dataset<UnitVectorFormat> dataset(100);
+        auto dimensions = dataset.get_description();
+
+        size_t num_tables = 50;
+        size_t num_bits = MAX_HASHBITS;
+
+        TensoredHashSource<SimHash> simhash_source(
+            dimensions,
+            SimHashArgs(),
+            num_tables,
+            num_bits
+        );
+        test_new_api<SimHash, TensoredHashSource<SimHash>>(dimensions, simhash_source, num_tables);
+
+        TensoredHashSource<FHTCrossPolytopeHash> cp_source(
+            dimensions,
+            FHTCrossPolytopeArgs(),
+            num_tables,
+            num_bits
+        );
+        test_new_api<FHTCrossPolytopeHash, TensoredHashSource<FHTCrossPolytopeHash>>(dimensions, cp_source, num_tables);
     }
 
     TEST_CASE("TensoredHash reset") {

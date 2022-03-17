@@ -46,6 +46,7 @@ namespace puffinn {
     class TensoredHashSource : public HashSource<T> {
         IndependentHashSource<T> independent_hash_source;
         std::vector<std::unique_ptr<Hash>> hashers;
+        unsigned int num_hashers;
         unsigned int next_hash_idx = 0;
         unsigned int num_bits;
 
@@ -63,6 +64,7 @@ namespace puffinn {
                 args,
                 2*std::ceil(std::sqrt(static_cast<float>(num_hashers))),
                 (num_bits+1)/2),
+            num_hashers(num_hashers),
             num_bits(num_bits)
         {
             for (unsigned int i=0; i < independent_hash_source.get_size(); i++) {
@@ -81,6 +83,7 @@ namespace puffinn {
                 // it does not matter that it is not the 'correct' arguments.
                 hashers.push_back(independent_hash_source.deserialize_hash(in));
             }
+            in.read(reinterpret_cast<char*>(&num_hashers), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&next_hash_idx), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&num_bits), sizeof(unsigned int));
         }
@@ -92,6 +95,7 @@ namespace puffinn {
             for (auto& h : hashers) {
                 h->serialize(out);
             }
+            out.write(reinterpret_cast<const char*>(&num_hashers), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&next_hash_idx), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&num_bits), sizeof(unsigned int));
         }
@@ -103,6 +107,41 @@ namespace puffinn {
                 this,
                 index_pair.first,
                 index_pair.second);
+        }
+
+        void hash_repetitions(
+            // TODO: Make this argument const. Currently it does not compile if we make it 
+            // const because the hash function accepts a mutable pointer
+            typename T::Sim::Format::Type * input,
+            std::vector<LshDatatype> & output
+        ) const {
+            output.clear();
+            // TODO: reuse this allocation by: place it in thread local storage?
+            std::vector<LshDatatype> tensored_hashes;
+            independent_hash_source.hash_repetitions(input, tensored_hashes);
+            for (size_t i=0; i<tensored_hashes.size(); i++) {
+                tensored_hashes[i] = intersperse_zero(tensored_hashes[i]);
+            }
+            size_t right_start = tensored_hashes.size() / 2;
+
+            if (num_bits % 2 == 0) {
+                for (size_t i=0; i < tensored_hashes.size() / 2; i++) {
+                    tensored_hashes[i] <<= 1;
+                }
+            } else {
+                for (size_t i=right_start; i < tensored_hashes.size(); i++) {
+                    tensored_hashes[i] >>= 1;
+                }
+            }
+
+            for(size_t rep=0; rep < num_hashers; rep++) {
+                auto index_pair = get_minimal_index_pair(rep);
+                uint32_t h_left = tensored_hashes[index_pair.first];
+                uint32_t h_right = tensored_hashes[right_start + index_pair.second];
+                uint32_t h = h_left | h_right;
+                output.push_back(h);
+            }
+
         }
 
         std::unique_ptr<HashSourceState> reset(

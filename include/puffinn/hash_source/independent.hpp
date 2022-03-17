@@ -3,6 +3,8 @@
 #include "puffinn/dataset.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
 
+#include <iostream>
+
 #include <memory>
 #include <vector>
 
@@ -57,6 +59,7 @@ namespace puffinn {
             for (size_t i=0; i < funcs_len; i++) {
                 hash_functions.push_back(typename T::Function(in));
             }
+            in.read(reinterpret_cast<char*>(&num_hashers), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&functions_per_hasher), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&bits_per_function), sizeof(uint_fast8_t));
             in.read(reinterpret_cast<char*>(&next_function), sizeof(unsigned int));
@@ -70,6 +73,7 @@ namespace puffinn {
             for (auto& h : hash_functions) {
                 h.serialize(out);
             }
+            out.write(reinterpret_cast<const char*>(&num_hashers), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&functions_per_hasher), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
             out.write(reinterpret_cast<const char*>(&next_function), sizeof(unsigned int));
@@ -85,10 +89,11 @@ namespace puffinn {
             output.clear();
             // Iterate through all the functions, accumulating bits
             for (size_t rep = 0; rep < num_hashers; rep++) {
+                size_t offset = rep * functions_per_hasher;
                 LshDatatype res = 0;
                 for (unsigned int i=0; i < functions_per_hasher; i++) {
                     res <<= bits_per_function;
-                    res |= hash_functions[rep+i](input);
+                    res |= hash_functions[offset+i](input);
                 }
                 res >>= bits_to_cut;
                 output.push_back(res);
@@ -104,7 +109,7 @@ namespace puffinn {
                 res <<= bits_per_function;
                 res |= hash_functions[first_hash+i](hashed_vec);
             }
-            return (res >> bits_to_cut);
+            return res >> bits_to_cut;
         }
 
         std::unique_ptr<HashSourceState> reset(
