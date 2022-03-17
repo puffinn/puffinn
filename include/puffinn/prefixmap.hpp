@@ -77,8 +77,6 @@ namespace puffinn {
 
         // Length of the hash values used.
         unsigned int hash_length;
-        // TODO: remove this, the responsibility of hashing should go to the collection: the prefixmap should only be responsible of arranging data
-        std::unique_ptr<Hash> hash_function;
 
         // index of the first value with each prefix.
         // If there is no such value, it is the first higher prefix instead.
@@ -87,9 +85,8 @@ namespace puffinn {
 
     public:
         // Construct a new prefix map over the specified dataset using the given hash functions.
-        PrefixMap(std::unique_ptr<Hash> hash, unsigned int hash_length)
-          : hash_length(hash_length),
-            hash_function(std::move(hash))
+        PrefixMap(unsigned int hash_length)
+          : hash_length(hash_length)
         {
             // Ensure that the map can be queried even if nothing is inserted.
             rebuild();
@@ -115,7 +112,6 @@ namespace puffinn {
             }
 
             in.read(reinterpret_cast<char*>(&hash_length), sizeof(unsigned int));
-            hash_function = source.deserialize_hash(in);
 
             in.read(
                 reinterpret_cast<char*>(&prefix_index[0]),
@@ -139,21 +135,14 @@ namespace puffinn {
             }
 
             out.write(reinterpret_cast<const char*>(&hash_length), sizeof(unsigned int));
-            hash_function->serialize(out);
 
             out.write(reinterpret_cast<const char*>(
                 &prefix_index),
                 ((1 << PREFIX_INDEX_BITS)+1)*sizeof(uint32_t));
         }
 
-        // Add a vector to be included next time rebuild is called. 
-        // Expects that the hash source was last reset with that vector.
-        void insert(uint32_t idx, HashSourceState* hash_state) {
-            rebuilding_data.push_back({ idx, (*hash_function)(hash_state) });
-        }
-
-        // Insert a hash value computed elsewhere
-        void insert_direct(uint32_t idx, LshDatatype hash_value) {
+        // Add a hash value, and associated index, to be included next time rebuild is called. 
+        void insert(uint32_t idx, LshDatatype hash_value) {
             rebuilding_data.push_back({ idx, hash_value });
         }
 
