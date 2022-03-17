@@ -23,17 +23,22 @@ namespace puffinn {
     class HashPool : public HashSource<T> {
         T hash_family;
         std::vector<typename T::Function> hash_functions;
+        std::vector<std::vector<unsigned int>> indices;
+        unsigned int num_tables;
         uint_fast8_t bits_per_function;
         unsigned int bits_per_hasher;
+        unsigned int current_sampling_rep = 0;
 
     public:
         HashPool(
             DatasetDescription<typename T::Sim::Format> desc,
             typename T::Args args,
             unsigned int num_functions,
+            unsigned int num_tables,
             unsigned int bits_per_hasher
         )
           : hash_family(desc, args),
+            num_tables(num_tables),
             bits_per_function(hash_family.bits_per_function()),
             bits_per_hasher(bits_per_hasher)
         {
@@ -42,6 +47,23 @@ namespace puffinn {
             for (unsigned int i=0; i < num_functions; i++) {
                 hash_functions.push_back(hash_family.sample());
             }
+
+            auto& rand_gen = get_default_random_generator();
+            std::uniform_int_distribution<unsigned int> random_idx(0, num_functions-1);
+            
+            indices.reserve(num_tables);
+            for (size_t rep = 0; rep < num_tables; rep++) {
+                std::vector<unsigned int> rep_indices;
+                rep_indices.reserve(bits_per_hasher);
+                for (size_t i=0; i < bits_per_hasher; i += bits_per_function) {
+                    rep_indices.push_back(random_idx(rand_gen));
+                }
+                indices.push_back(rep_indices);
+            }
+
+            // TODO: remove this is needed just to reset the state when testing, so
+            // that if we call sample many times, we get the same sequences of indices we just constructed 
+            reset_random_generator();
         }
 
         HashPool(std::istream& in)
@@ -58,6 +80,7 @@ namespace puffinn {
         }
 
         void serialize(std::ostream& out) const {
+            // TODO serialize indices
             hash_family.serialize(out);
             size_t len = hash_functions.size();
             out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
@@ -69,7 +92,7 @@ namespace puffinn {
         }
 
         std::unique_ptr<Hash> sample() {
-            return std::make_unique<PooledHasher<T>>(this, bits_per_hasher);
+            return std::make_unique<PooledHasher<T>>(this, indices[current_sampling_rep++]);
         }
 
         uint64_t concatenate_hash(
@@ -90,6 +113,27 @@ namespace puffinn {
 
         uint_fast8_t get_bits_per_function() const {
             return bits_per_function;
+        }
+
+        uint_fast8_t get_bits_per_hasher() const {
+            return bits_per_hasher;
+        }
+
+        void hash_repetitions(
+            // TODO: Make this argument const. Currently it does not compile if we make it 
+            // const because the hash function accepts a mutable pointer
+            typename T::Sim::Format::Type * input,
+            std::vector<LshDatatype> & output
+        ) const {
+            output.clear();
+
+            // TODO: remove this allocation and reuse the scratch space
+            std::vector<LshDatatype> pool;
+            pool.reserve(hash_functions.size());
+
+            for (size_t i = 0; i < hash_functions.size(); i++) {
+                pool.push_back(hash_functions[i](input));
+            }
         }
 
         // Recompute hashes for a new vector.
@@ -157,17 +201,10 @@ namespace puffinn {
     public:
         // Create a hash function reusing the given pool.
         // The resulting hash consists of exactly the given number of bits.
-        PooledHasher(const HashPool<T> *pool, size_t hash_length)
-          : pool(pool)
+        PooledHasher(const HashPool<T> *pool, std::vector<unsigned int> & indices)
+          : pool(pool), indices(indices)
         {
-            auto& rand_gen = get_default_random_generator();
-            int bits_per_function = pool->get_bits_per_function();
-            std::uniform_int_distribution<unsigned int> random_idx(0, pool->get_size()-1);
-            for (size_t i=0; i < hash_length; i += bits_per_function) {
-                indices.push_back(random_idx(rand_gen));
-            }
-            indices.shrink_to_fit();
-            bits_to_cut = pool->get_bits_per_function()*indices.size()-hash_length;
+            bits_to_cut = pool->get_bits_per_function()*indices.size()-pool->get_bits_per_hasher();
         }
 
         PooledHasher(std::istream& in, const HashPool<T>* pool)
@@ -232,13 +269,14 @@ namespace puffinn {
 
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
-            unsigned int /* num_tables */,
+            unsigned int num_tables,
             unsigned int num_bits_per_function
         ) const {
             return std::make_unique<HashPool<T>> (
                 desc,
                 args,
                 pool_size,
+                num_tables,
                 num_bits_per_function
             );
         }

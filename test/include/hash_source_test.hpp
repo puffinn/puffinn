@@ -91,10 +91,10 @@ namespace hash_source {
         auto dimensions = dataset.get_description();
         test_reset<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(50).build(dimensions, 0, 24));
+            HashPoolArgs<SimHash>(50).build(dimensions, 1, 24));
         test_reset<FHTCrossPolytopeHash>(
             dimensions,
-            HashPoolArgs<FHTCrossPolytopeHash>(80).build(dimensions, 0, 20));
+            HashPoolArgs<FHTCrossPolytopeHash>(80).build(dimensions, 1, 20));
     }
 
     TEST_CASE("IndependentSource reset") {
@@ -154,6 +154,33 @@ namespace hash_source {
             num_bits
         );
         test_new_api<FHTCrossPolytopeHash, TensoredHashSource<FHTCrossPolytopeHash>>(dimensions, cp_source, num_tables);
+    }
+
+    TEST_CASE("HashPool new api") {
+        Dataset<UnitVectorFormat> dataset(100);
+        auto dimensions = dataset.get_description();
+
+        size_t pool_size = 3000;
+        size_t num_tables = 2;
+        size_t num_bits = MAX_HASHBITS;
+
+        HashPool<SimHash> simhash_source(
+            dimensions,
+            SimHashArgs(),
+            pool_size,
+            num_tables,
+            num_bits
+        );
+        test_new_api<SimHash, HashPool<SimHash>>(dimensions, simhash_source, num_tables);
+
+        HashPool<FHTCrossPolytopeHash> cp_source(
+            dimensions,
+            FHTCrossPolytopeArgs(),
+            pool_size,
+            num_tables,
+            num_bits
+        );
+        test_new_api<FHTCrossPolytopeHash, HashPool<FHTCrossPolytopeHash>>(dimensions, cp_source, num_tables);
     }
 
     TEST_CASE("TensoredHash reset") {

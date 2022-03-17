@@ -21,6 +21,10 @@ namespace puffinn {
     // for reproducibility, fix the seed of the random number generator
     std::default_random_engine generator(1234);
 
+    void reset_random_generator() {
+        generator = std::default_random_engine(1234);
+    }
+
     // Retrieve the default random engine, seeded once by the system clock.
     std::default_random_engine& get_default_random_generator() {
         return generator;
