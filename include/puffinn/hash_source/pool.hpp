@@ -134,6 +134,16 @@ namespace puffinn {
             for (size_t i = 0; i < hash_functions.size(); i++) {
                 pool.push_back(hash_functions[i](input));
             }
+
+            for (size_t rep = 0; rep < num_tables; rep++) {
+                // Concatenate the hashes
+                uint32_t res = 0;
+                for (auto idx : indices[rep]) {
+                    res <<= bits_per_function;
+                    res |= pool[idx];
+                }
+                output.push_back(res);
+            }
         }
 
         // Recompute hashes for a new vector.
