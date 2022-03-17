@@ -78,20 +78,48 @@ namespace puffinn {
             for (size_t i=0; i < len; i++) {
                 hash_functions.emplace_back(in);
             }
+            size_t len_indices;
+            in.read(reinterpret_cast<char*>(&len_indices), sizeof(size_t));
+            for (size_t i=0; i < len_indices; i++) {
+                std::vector<unsigned int> rep_indices;
+                size_t len_index_array;
+                in.read(reinterpret_cast<char*>(&len_index_array), sizeof(size_t));
+                for (size_t j=0; j < len_index_array; j++) {
+                    unsigned int idx;
+                    in.read(reinterpret_cast<char*>(&idx), sizeof(unsigned int));
+                    rep_indices.push_back(idx);
+                }
+                indices.push_back(rep_indices);
+            }
+
+            in.read(reinterpret_cast<char*>(&num_tables), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&bits_per_function), sizeof(uint_fast8_t));
             in.read(reinterpret_cast<char*>(&bits_per_hasher), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&current_sampling_rep), sizeof(unsigned int));
+            in.read(reinterpret_cast<char*>(&bits_to_cut), sizeof(unsigned int));
         }
 
         void serialize(std::ostream& out) const {
-            // TODO serialize indices
             hash_family.serialize(out);
             size_t len = hash_functions.size();
             out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
             for (auto& h : hash_functions) {
                 h.serialize(out);
             }
+            size_t len_indices = indices.size();
+            out.write(reinterpret_cast<char*>(&len_indices), sizeof(size_t));
+            for (auto& index_vec : indices) {
+                size_t len_index_vec = index_vec.size();
+                out.write(reinterpret_cast<char*>(&len_index_vec), sizeof(size_t));
+                for (auto i : index_vec) {
+                    out.write(reinterpret_cast<const char*>(&i), sizeof(unsigned int));
+                }
+            }
+            out.write(reinterpret_cast<const char*>(&num_tables), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
             out.write(reinterpret_cast<const char*>(&bits_per_hasher), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&current_sampling_rep), sizeof(unsigned int));
+            out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(unsigned int));
         }
 
         std::unique_ptr<Hash> sample() {
