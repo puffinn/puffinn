@@ -25,6 +25,30 @@ namespace hash_source {
         REQUIRE(hash1 != hash2);
     }
 
+    //! Check that the new API produces the same hash values as the old API
+    template <typename T, typename HS>
+    void test_new_api(DatasetDescription<typename T::Sim::Format> dimensions, HS & source, size_t num_tables) {
+        auto vec = UnitVectorFormat::generate_random(dimensions.args);
+        auto stored = to_stored_type<typename T::Sim::Format>(vec, dimensions);
+
+        std::vector<uint32_t> expected;
+        for (size_t rep = 0; rep < num_tables; rep++) {
+            auto hasher = source.sample();
+            auto state = source.reset(stored.get(), false);
+            auto h = (*hasher)(state.get());
+            expected.push_back(h);
+        }
+        std::vector<uint32_t> hashes;
+        source.hash_repetitions(stored.get(), hashes);
+        REQUIRE(hashes.size() == num_tables);
+
+        for (size_t rep = 0; rep < num_tables; rep++) {
+            auto hash1 = expected[0];
+            auto hash2 = hashes[0];
+            REQUIRE(hash1 == hash2);
+        }
+    }
+
     template <typename T>
     void test_hashes(
         DatasetDescription<typename T::Sim::Format> dimensions,
@@ -82,6 +106,30 @@ namespace hash_source {
         test_reset<FHTCrossPolytopeHash>(
             dimensions,
             IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, 2, 20));
+    }
+
+    TEST_CASE("IndependentSource new api") {
+        Dataset<UnitVectorFormat> dataset(100);
+        auto dimensions = dataset.get_description();
+
+        size_t num_tables = 5;
+        size_t num_bits = MAX_HASHBITS;
+
+        IndependentHashSource<SimHash> simhash_source(
+            dimensions,
+            SimHashArgs(),
+            num_tables,
+            num_bits
+        );
+        test_new_api<SimHash, IndependentHashSource<SimHash>>(dimensions, simhash_source, num_tables);
+
+        IndependentHashSource<FHTCrossPolytopeHash> cp_source(
+            dimensions,
+            FHTCrossPolytopeArgs(),
+            num_tables,
+            num_bits
+        );
+        test_new_api<FHTCrossPolytopeHash, IndependentHashSource<FHTCrossPolytopeHash>>(dimensions, cp_source, num_tables);
     }
 
     TEST_CASE("TensoredHash reset") {

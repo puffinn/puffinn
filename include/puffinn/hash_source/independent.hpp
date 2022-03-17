@@ -20,6 +20,7 @@ namespace puffinn {
     class IndependentHashSource : public HashSource<T> {
         T hash_family;
         std::vector<typename T::Function> hash_functions;
+        unsigned int num_hashers;
         unsigned int functions_per_hasher;
         uint_fast8_t bits_per_function;
         unsigned int next_function = 0;
@@ -34,7 +35,7 @@ namespace puffinn {
             // Number of bits per hasher.
             unsigned int num_bits
         ) 
-          : hash_family(desc, args)
+          : hash_family(desc, args), num_hashers(num_hashers)
         {
             bits_per_function = hash_family.bits_per_function();
             functions_per_hasher =
@@ -73,6 +74,25 @@ namespace puffinn {
             out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
             out.write(reinterpret_cast<const char*>(&next_function), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(unsigned int));
+        }
+
+        void hash_repetitions(
+            // TODO: Make this argument const. Currently it does not compile if we make it 
+            // const because the hash function accepts a mutable pointer
+            typename T::Sim::Format::Type * input,
+            std::vector<LshDatatype> & output
+        ) const {
+            output.clear();
+            // Iterate through all the functions, accumulating bits
+            for (size_t rep = 0; rep < num_hashers; rep++) {
+                LshDatatype res = 0;
+                for (unsigned int i=0; i < functions_per_hasher; i++) {
+                    res <<= bits_per_function;
+                    res |= hash_functions[rep+i](input);
+                }
+                res >>= bits_to_cut;
+                output.push_back(res);
+            }
         }
 
         uint64_t hash(

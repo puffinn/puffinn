@@ -12,6 +12,9 @@ namespace puffinn {
     // Number of bits used in hashes.
     const static unsigned int MAX_HASHBITS = 24;
     // The hash_pool concatenates hashes into a type twice as large to avoid overflow errors.
+    // TODO: Check how to avoid this "twice as large": using 64 bits to store 24-bits hash values.
+    // To me it seems that when inserting into a prefix-map, 64 bits are automatically 
+    // truncated to `LshDatatype` when push_back is called on `rebuilding_data`.
     using LshDatatype = uint32_t;
 
     std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
