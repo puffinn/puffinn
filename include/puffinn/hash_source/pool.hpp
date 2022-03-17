@@ -28,6 +28,7 @@ namespace puffinn {
         uint_fast8_t bits_per_function;
         unsigned int bits_per_hasher;
         unsigned int current_sampling_rep = 0;
+        unsigned int bits_to_cut;
 
     public:
         HashPool(
@@ -60,6 +61,8 @@ namespace puffinn {
                 }
                 indices.push_back(rep_indices);
             }
+
+            bits_to_cut = bits_per_function * indices[0].size() - bits_per_hasher;
 
             // TODO: remove this is needed just to reset the state when testing, so
             // that if we call sample many times, we get the same sequences of indices we just constructed 
@@ -142,7 +145,7 @@ namespace puffinn {
                     res <<= bits_per_function;
                     res |= pool[idx];
                 }
-                output.push_back(res);
+                output.push_back(res >> bits_to_cut);
             }
         }
 

@@ -302,19 +302,27 @@ namespace puffinn {
             g_performance_metrics.start_timer(Computation::IndexHashing);
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
+            std::vector<LshDatatype> hash_values;
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
-                auto hash_state = this->hash_source->reset(dataset[idx], true);
-                // Only parallelize if this step is computationally expensive.
-                if (hash_source->precomputed_hashes()) {
-                    for (auto& map : lsh_maps) {
-                        map.insert(idx, hash_state.get());
-                    }
-                } else {
-                    #pragma omp parallel for
-                    for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                        lsh_maps[map_idx].insert(idx, hash_state.get());
-                    }
+                // auto hash_state = this->hash_source->reset(dataset[idx], true);
+                // Write the hash values in the vector
+                this->hash_source->hash_repetitions(dataset[idx], hash_values);
+                // Copy the hash values in the appropriate prefix maps
+                for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
+                    lsh_maps[map_idx].insert_direct(idx, hash_values[map_idx]);
                 }
+
+                // Only parallelize if this step is computationally expensive.
+                // if (hash_source->precomputed_hashes()) {
+                //     for (auto& map : lsh_maps) {
+                //         map.insert(idx, hash_state.get());
+                //     }
+                // } else {
+                //     #pragma omp parallel for
+                //     for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
+                //         lsh_maps[map_idx].insert(idx, hash_state.get());
+                //     }
+                // }
             }
             g_performance_metrics.store_time(Computation::IndexHashing);
 
@@ -873,6 +881,8 @@ namespace puffinn {
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
             auto hash_state = hash_source->reset(query, false);
+            std::vector<LshDatatype> query_hashes;
+            hash_source->hash_repetitions(query, query_hashes);
             g_performance_metrics.store_time(Computation::Hashing);
             g_performance_metrics.start_timer(Computation::Sketching);
             auto sketches = filterer.reset(query);
@@ -886,7 +896,7 @@ namespace puffinn {
                         maxbuffer,
                         recall,
                         sketches,
-                        hash_state.get());
+                        query_hashes);
                     break;
                 case FilterType::Simple:
                     search_maps_simple_filter(
@@ -894,10 +904,12 @@ namespace puffinn {
                         maxbuffer,
                         recall,
                         sketches,
-                        hash_state.get());
+                        query_hashes);
+                        // hash_state.get());
                     break;
                 default:
-                    search_maps(query, maxbuffer, recall, sketches, hash_state.get());
+                    search_maps(query, maxbuffer, recall, sketches, query_hashes);
+                    // search_maps(query, maxbuffer, recall, sketches, hash_state.get());
             }
             g_performance_metrics.store_time(Computation::Search);
 
@@ -934,7 +946,8 @@ namespace puffinn {
             SearchBuffers(
                 const std::vector<PrefixMap<THash>>& maps,
                 QuerySketches sketches,
-                HashSourceState* hash_state
+                // HashSourceState* hash_state
+                std::vector<LshDatatype> & hashes
             )
               : sketches(sketches)
             {
@@ -946,8 +959,11 @@ namespace puffinn {
                     std::make_unique<uint_fast32_t[]>(maps.size()+1);
 
                 query_objects.reserve(maps.size());
-                std::transform(maps.begin(), maps.end(), std::back_inserter(query_objects),
-                    [hash_state](auto& map) { return map.create_query(hash_state); });
+                for (size_t i = 0; i < maps.size(); i++) {
+                    query_objects.push_back(maps[i].create_query(hashes[i]));
+                }
+                // std::transform(maps.begin(), maps.end(), std::back_inserter(query_objects),
+                //     [hash_state](auto& map) { return map.create_query(hash_state); });
 
                 g_performance_metrics.store_time(Computation::SearchInit);
             }
@@ -978,9 +994,11 @@ namespace puffinn {
             MaxBuffer& maxbuffer,
             float recall,
             QuerySketches sketches,
-            HashSourceState* hash_state
+            std::vector<LshDatatype> & query_hashes
+            // HashSourceState* hash_state
         ) const {
-            SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            // SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            SearchBuffers buffers(lsh_maps, sketches, query_hashes);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
                 buffers.fill_ranges(lsh_maps);
                 g_performance_metrics.start_timer(Computation::Consider);
@@ -1023,9 +1041,11 @@ namespace puffinn {
             MaxBuffer& maxbuffer,
             float recall,
             QuerySketches sketches,
-            HashSourceState* hash_state
+            std::vector<LshDatatype> & query_hashes
+            // HashSourceState* hash_state
         ) const {
-            SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            // SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            SearchBuffers buffers(lsh_maps, sketches, query_hashes);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
                 buffers.fill_ranges(lsh_maps);
                 g_performance_metrics.start_timer(Computation::Consider);
@@ -1074,11 +1094,13 @@ namespace puffinn {
             MaxBuffer& maxbuffer,
             float recall,
             QuerySketches sketches,
-            HashSourceState* hash_state
+            std::vector<LshDatatype> & query_hashes
+            // HashSourceState* hash_state
         ) const {
             const size_t FILTER_BUFFER_SIZE = 128;
 
-            SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            // SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            SearchBuffers buffers(lsh_maps, sketches, query_hashes);
             // Buffer for values passing filtering and should have distances computed.
             // 8*RING_SIZE is necessary additional space as that is the maximum that can be added
             // between the last check of the size and it being emptied.

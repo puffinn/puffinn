@@ -77,6 +77,7 @@ namespace puffinn {
 
         // Length of the hash values used.
         unsigned int hash_length;
+        // TODO: remove this, the responsibility of hashing should go to the collection: the prefixmap should only be responsible of arranging data
         std::unique_ptr<Hash> hash_function;
 
         // index of the first value with each prefix.
@@ -149,6 +150,11 @@ namespace puffinn {
         // Expects that the hash source was last reset with that vector.
         void insert(uint32_t idx, HashSourceState* hash_state) {
             rebuilding_data.push_back({ idx, (*hash_function)(hash_state) });
+        }
+
+        // Insert a hash value computed elsewhere
+        void insert_direct(uint32_t idx, LshDatatype hash_value) {
+            rebuilding_data.push_back({ idx, hash_value });
         }
 
         // Reserve the correct amount of memory before inserting.
@@ -236,10 +242,8 @@ namespace puffinn {
         }
 
         // Construct a query object to search for the nearest neighbors of the given vector.
-        PrefixMapQuery create_query(HashSourceState* hash_state) const {
-            g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash = (*hash_function)(hash_state);
-            g_performance_metrics.store_time(Computation::Hashing);
+        PrefixMapQuery create_query(LshDatatype hash) const {
+        // PrefixMapQuery create_query(HashSourceState* hash_state) const {
             g_performance_metrics.start_timer(Computation::CreateQuery);
             auto prefix = hash >> (hash_length-PREFIX_INDEX_BITS);
             PrefixMapQuery res(

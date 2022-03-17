@@ -330,13 +330,12 @@ namespace collection {
         std::vector<int> dimensions = {100};
 
         for (auto d : dimensions) {
-            std::unique_ptr<HashSourceArgs<MinHash>> args =
-                std::make_unique<HashPoolArgs<MinHash>>(3000);
+            std::unique_ptr<HashSourceArgs<MinHash>> 
+            args = std::make_unique<HashPoolArgs<MinHash>>(3000);
             test_jaccard_search(500, d, std::move(args));
 
             args = std::make_unique<IndependentHashArgs<MinHash>>();
             test_jaccard_search(500, d, std::move(args));
-
 
             args = std::make_unique<TensoredHashArgs<MinHash>>();
             test_jaccard_search(500, d, std::move(args));

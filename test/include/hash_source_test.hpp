@@ -196,17 +196,17 @@ namespace hash_source {
 
     TEST_CASE("HashPool hashes") {
         const unsigned int HASH_LENGTH = 24;
-        unsigned int samples = 100;
+        unsigned int samples = 2900;
         Dataset<UnitVectorFormat> dataset(100);
         auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(60).build(dimensions, samples, HASH_LENGTH),
+            HashPoolArgs<SimHash>(3000).build(dimensions, samples, HASH_LENGTH),
             samples,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, samples, HASH_LENGTH),
+            HashPoolArgs<FHTCrossPolytopeHash>(3000).build(dimensions, samples, HASH_LENGTH),
             samples,
             HASH_LENGTH);
     }
