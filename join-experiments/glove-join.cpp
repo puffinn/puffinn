@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include <filesystem>
+// #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -28,34 +28,34 @@ void write_result(
     const std::string& details
     ) {
 
-    using namespace HighFive;
+    // using namespace HighFive;
 
-    try {
+    // try {
 
-        std::stringstream ss;
-        ss << ds_name << "/" << k << "/" << method_name;
+    //     std::stringstream ss;
+    //     ss << ds_name << "/" << k << "/" << method_name;
 
-        std::filesystem::create_directories(ss.str());
+    //     std::filesystem::create_directories(ss.str());
         
-        ss << "/" << recall << "_" << num_tables << ".hdf5";
-        File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
+    //     ss << "/" << recall << "_" << num_tables << ".hdf5";
+    //     File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
 
-        DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
-        results.write(res);
-        Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
-        a.write(k);
-        a = file.createAttribute<float>("recall", DataSpace::From(recall));
-        a.write(recall);
-        a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
-        a.write(num_tables);
-        a = file.createAttribute<double>("time", DataSpace::From(time));
-        a.write(time);
-        a = file.createAttribute<std::string>("details", DataSpace::From(details));
-        a.write(details);
+    //     DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
+    //     results.write(res);
+    //     Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
+    //     a.write(k);
+    //     a = file.createAttribute<float>("recall", DataSpace::From(recall));
+    //     a.write(recall);
+    //     a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
+    //     a.write(num_tables);
+    //     a = file.createAttribute<double>("time", DataSpace::From(time));
+    //     a.write(time);
+    //     a = file.createAttribute<std::string>("details", DataSpace::From(details));
+    //     a.write(details);
 
-    } catch (Exception& err) {
-        std::cerr << err.what() << std::endl;
-    }
+    // } catch (Exception& err) {
+    //     std::cerr << err.what() << std::endl;
+    // }
 }
 
 

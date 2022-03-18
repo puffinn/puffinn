@@ -239,13 +239,15 @@ namespace puffinn {
         /// This is done in parallel by default.
         /// The number of threads used can be specified using the
         /// OMP_NUM_THREADS environment variable.
-        void rebuild() {
-            // Compute sketches for the new vectors.
-            auto start_sketches = std::chrono::steady_clock::now();
-            //filterer.add_sketches(dataset, last_rebuild);
-            auto end_sketches = std::chrono::steady_clock::now();
-            auto elapsed_sketches = std::chrono::duration_cast<std::chrono::nanoseconds>(end_sketches - start_sketches).count();
-            printf("Time to compute sketches %ld ns\n", elapsed_sketches);
+        void rebuild(bool with_sketches = true) {
+            if (with_sketches) {
+                // Compute sketches for the new vectors.
+                auto start_sketches = std::chrono::steady_clock::now();
+                filterer.add_sketches(dataset, last_rebuild);
+                auto end_sketches = std::chrono::steady_clock::now();
+                auto elapsed_sketches = std::chrono::duration_cast<std::chrono::nanoseconds>(end_sketches - start_sketches).count();
+                printf("Time to compute sketches %ld ns\n", elapsed_sketches);
+            }
 
             auto desc = dataset.get_description();
             auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
@@ -353,6 +355,10 @@ namespace puffinn {
             float recall,
             FilterType filter_type = FilterType::Default
         ) const {
+            if (filter_type != FilterType::None && filterer.size() != NUM_SKETCHES * dataset.get_size()) {
+                std::cout << "Filterer size " << filterer.size() << " dataset size " << dataset.get_size() << std::endl;
+                throw std::invalid_argument("Asked for a filtered search, but sketches have not been computed in the `rebuild` call.");
+            }
             auto desc = dataset.get_description();
             auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
             return search_formatted_query(stored_query.get(), k, recall, filter_type);
