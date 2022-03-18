@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
     auto start_time = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
-    index.rebuild();
+    index.rebuild(false);
     auto end_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed = (end_time - start_time);
     auto throughput = ((float) dataset.words.size()) / elapsed.count();
