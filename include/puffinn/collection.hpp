@@ -10,6 +10,7 @@
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
 
+#include "omp.h"
 #include <cassert>
 #include <istream>
 #include <iostream>
@@ -274,7 +275,6 @@ namespace puffinn {
                 num_tables = 1000;
             }
 
-            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
