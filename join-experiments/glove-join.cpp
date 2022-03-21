@@ -27,7 +27,6 @@ void write_result(
     const double time,
     const std::string& details
     ) {
-
     // using namespace HighFive;
 
     // try {
@@ -74,7 +73,7 @@ int main(int argc, char* argv[]) {
     std::string method = "BF";
     unsigned long long space_usage = 100*MB;
     switch (argc) {
-        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])); 
+        case 6: space_usage = static_cast<unsigned long long>(std::atof(argv[5])) * MB; 
         case 5: method = std::string(argv[4]);
         case 4: recall = std::atof(argv[3]); 
         case 3: k = std::atoi(argv[2]);
@@ -143,6 +142,11 @@ int main(int argc, char* argv[]) {
     auto search_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Search);
     auto filter_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Filtering);
     auto init_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::SearchInit);
+    auto indexing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Indexing);
+    auto rebuild_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Rebuilding);
+    auto sorting_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Sorting);
+    auto index_hashing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexHashing);
+    auto index_sketching_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexSketching);
 
     std::stringstream ss;
 
@@ -151,7 +155,13 @@ int main(int argc, char* argv[]) {
         << "; init_time=" << init_time 
         << "; total_time=" << total_time;
 
-    std::cout << "search_time:" <<  search_time
+    std::cout 
+        << "indexing_time=" << indexing_time
+        << "\n\tsketching_time=" << index_sketching_time
+        << "\n\thashing_time=" << index_hashing_time
+        << "\n\trebuilding_time=" << rebuild_time
+        << "\n\tsorting_time" << sorting_time
+        << "\nsearch_time=" <<  search_time
         << "\nfilter_time=" << filter_time
         << "\ninit_time=" << init_time 
         << "\ntotal_time=" << total_time << std::endl;

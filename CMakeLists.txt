@@ -29,6 +29,9 @@ if (OpenMP_FOUND)
 endif()
 
 add_executable(XiaoEtAl "join-experiments/XiaoEtAl.cpp")
+if (OpenMP_FOUND)
+    target_link_libraries(XiaoEtAl ${OpenMP_CXX_LIBRARIES})
+endif()
 
 include_directories("test/include")
 add_executable(Test "test/main.cpp" "test/code.cpp")
@@ -39,10 +42,14 @@ endif()
 # Benchmark code
 include_directories("bench")
 add_library(nanobench "bench/nanobench.cpp")
+
 add_executable(Bench "bench/bench.cpp")
 target_link_libraries(Bench nanobench)
 if (OpenMP_FOUND)
     target_link_libraries(Bench ${OpenMP_CXX_LIBRARIES})
 endif()
+
+add_executable(SortBench "bench/sorthash_bench.cpp")
+target_link_libraries(SortBench nanobench)
 
 add_subdirectory(docs)

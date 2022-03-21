@@ -105,3 +105,34 @@ Again, the times are in nanoseconds.
 |                5.03 |      198,865,506.85 |    0.2% |      0.00 | `SimHash (single)`
 |              332.74 |        3,005,358.55 |    3.1% |      0.00 | `SimHash (indirection)`
 |              260.93 |        3,832,376.04 |    4.8% |      0.00 | `SimHash (static)`
+
+
+# Sorting
+
+Here we play with sorting 24-bits hash values using the standard `std::sort` and a [simple implementation
+of radix sort](https://github.com/Cecca/puffinn/blob/0e5eaa7d6c4345b6e7c3ef167d5e235db2f4d8a2/include/sorthash.hpp#L58), that performs only 4 passes on the data: the first to compute the histograms of byte counts, and the other three to sort on the three bytes of the hashes.
+
+On uniformly distributed 24-bit integers, these are the performance numbers.
+
+| algorithm               |          n |    time (ns) |    ns/elem |    throghput |
+| :---------------------- | ---------: | -----------: | ---------: | -----------: |
+| std::sort               |       1000 |        16789 |      16.79 |  59562808.98 |
+| puffinn::sort_hashes_24 |       1000 |         4248 |       4.25 | 235404896.42 |
+| std::sort               |      10000 |       534201 |      53.42 |  18719545.64 |
+| puffinn::sort_hashes_24 |      10000 |        41958 |       4.20 | 238333571.67 |
+| std::sort               |     100000 |      6060907 |      60.61 |  16499180.73 |
+| puffinn::sort_hashes_24 |     100000 |       469230 |       4.69 | 213115103.47 |
+| std::sort               |    1000000 |     74252900 |      74.25 |  13467487.47 |
+| puffinn::sort_hashes_24 |    1000000 |      5087787 |       5.09 | 196549108.68 |
+| std::sort               |   10000000 |    857581005 |      85.76 |  11660706.03 |
+| puffinn::sort_hashes_24 |   10000000 |     53536645 |       5.35 | 186787946.84 |
+
+Our implementation of radix sort is clearly faster. But hash values are not uniformly distributed, usually.
+The following table reports on the performance of sorting the hash values of `glove.twitter.27B.25d.txt`.
+
+| algorithm               |          n |    time (ns) |    ns/elem |    throghput |
+| :---------------------- | ---------: | -----------: | ---------: | -----------: |
+| std::sort               |    1193514 |     77611374 |      65.03 |  15378081.05 |
+| puffinn::sort_hashes_24 |    1193514 |      7626085 |       6.39 | 156504156.46 |
+
+Using radix sort is an order of magnitude faster.
