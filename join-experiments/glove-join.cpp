@@ -101,8 +101,8 @@ int main(int argc, char* argv[]) {
     puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
         dimensions,
         space_usage,
-        puffinn::TensoredHashArgs<puffinn::SimHash>()
-        // puffinn::IndependentHashArgs<puffinn::SimHash>()
+        // puffinn::TensoredHashArgs<puffinn::SimHash>()
+        puffinn::IndependentHashArgs<puffinn::SimHash>()
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }

@@ -19,6 +19,41 @@ const unsigned int MB = 1024*1024;
 
 std::vector<std::vector<float>> read_glove(const std::string& filename);
 
+void bench_api_simhash(
+    const std::vector<std::vector<float>> & dataset
+) {
+    auto bencher = ankerl::nanobench::Bench()
+        .title("Simhash computations")
+        .minEpochIterations(100)
+        .batch(dataset.size())
+        .timeUnit(std::chrono::nanoseconds(1), "ns");
+
+    auto dimensions = dataset[0].size(); 
+    puffinn::Dataset<puffinn::UnitVectorFormat> dat(dimensions);
+    for (auto v : dataset) { dat.insert(v); }
+    size_t n = dataset.size();
+
+    auto source = puffinn::IndependentHashArgs<puffinn::SimHash>().build(
+        dat.get_description(), 1, 24
+    );
+
+    auto hash_fn = source->sample();
+
+    bencher.run("old API", [&] {
+        for (size_t i=0; i<n; i++) {
+            auto state = source->reset(dat[i], false);
+            ankerl::nanobench::doNotOptimizeAway((*hash_fn)(state.get()));
+        }
+    });
+
+    std::vector<uint32_t> hashes;
+    bencher.run("new API", [&] {
+        for (size_t i=0; i<n; i++) {
+            source->hash_repetitions(dat[i], hashes);
+        }
+    });
+}
+
 template<typename THash, typename THashSourceArgs>
 void do_build_index(ankerl::nanobench::Bench * bencher, const char * name, const std::vector<std::vector<float>> & dataset, double index_memory) {
     auto dimensions = dataset[0].size(); 
@@ -163,8 +198,9 @@ int main(int argc, char ** argv) {
     }
     auto dataset = read_glove(argv[1]);
 
+    bench_api_simhash(dataset);
     // bench_query(dataset);
-    bench_index_build(dataset);
+    // bench_index_build(dataset);
     // bench_hash(dataset);
 }
 
