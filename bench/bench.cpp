@@ -198,9 +198,9 @@ int main(int argc, char ** argv) {
     }
     auto dataset = read_glove(argv[1]);
 
-    bench_api_simhash(dataset);
+    // bench_api_simhash(dataset);
     // bench_query(dataset);
-    // bench_index_build(dataset);
+    bench_index_build(dataset);
     // bench_hash(dataset);
 }
 

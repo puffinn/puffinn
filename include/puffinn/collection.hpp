@@ -302,8 +302,12 @@ namespace puffinn {
             g_performance_metrics.start_timer(Computation::IndexHashing);
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
-            std::vector<LshDatatype> hash_values;
+            std::vector<std::vector<LshDatatype>> tl_hash_values;
+            tl_hash_values.resize(omp_get_max_threads());
+            #pragma omp parallel for
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
+                auto tid = omp_get_thread_num();
+                auto & hash_values = tl_hash_values[tid];
                 // Write the hash values in the vector
                 this->hash_source->hash_repetitions(dataset[idx], hash_values);
                 // Copy the hash values in the appropriate prefix maps
