@@ -29,6 +29,9 @@ if (OpenMP_FOUND)
 endif()
 
 add_executable(XiaoEtAl "join-experiments/XiaoEtAl.cpp")
+if (OpenMP_FOUND)
+    target_link_libraries(XiaoEtAl ${OpenMP_CXX_LIBRARIES})
+endif()
 
 include_directories("test/include")
 add_executable(Test "test/main.cpp" "test/code.cpp")

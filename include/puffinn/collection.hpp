@@ -239,12 +239,14 @@ namespace puffinn {
         /// This is done in parallel by default.
         /// The number of threads used can be specified using the
         /// OMP_NUM_THREADS environment variable.
-        void rebuild() {
+        void rebuild(bool with_sketches = true) {
             g_performance_metrics.start_timer(Computation::Indexing);
-            // Compute sketches for the new vectors.
-            g_performance_metrics.start_timer(Computation::IndexSketching);
-            filterer.add_sketches(dataset, last_rebuild);
-            g_performance_metrics.store_time(Computation::IndexSketching);
+            if (with_sketches) {
+                // Compute sketches for the new vectors.
+                g_performance_metrics.start_timer(Computation::IndexSketching);
+                filterer.add_sketches(dataset, last_rebuild);
+                g_performance_metrics.store_time(Computation::IndexSketching);
+            }
 
             auto desc = dataset.get_description();
             auto table_bytes = PrefixMap<THash>::memory_usage(dataset.get_size(), hash_args->function_memory_usage(desc, MAX_HASHBITS));
@@ -267,6 +269,12 @@ namespace puffinn {
                 throw std::invalid_argument("insufficient memory");
             }
 
+            if (num_tables > 1000) {
+                std::cerr << "Capping tables to max 1000." << std::endl;
+                num_tables = 1000;
+            }
+
+            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
@@ -339,6 +347,10 @@ namespace puffinn {
             float recall,
             FilterType filter_type = FilterType::Default
         ) const {
+            if (filter_type != FilterType::None && filterer.size() != NUM_SKETCHES * dataset.get_size()) {
+                std::cout << "Filterer size " << filterer.size() << " dataset size " << dataset.get_size() << std::endl;
+                throw std::invalid_argument("Asked for a filtered search, but sketches have not been computed in the `rebuild` call.");
+            }
             auto desc = dataset.get_description();
             auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
             return search_formatted_query(stored_query.get(), k, recall, filter_type);
@@ -431,11 +443,12 @@ namespace puffinn {
         /// Compute a per-point top-K self-join on the current index with ``recall``.
         ///
         /// 
-        std::vector<std::pair<uint32_t, uint32_t>> global_lsh_join(
+        MaxPairBuffer global_lsh_join(
             unsigned int k,
             float recall,
             FilterType filter_type = FilterType::Default
         ) {
+            g_performance_metrics.clear();
             g_performance_metrics.new_query();
             g_performance_metrics.start_timer(Computation::Total);
             
@@ -484,6 +497,7 @@ namespace puffinn {
                 g_performance_metrics.start_timer(Computation::Search);
                 std::cout << "Checking level " << depth << std::endl;
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
+                std::cout << "Current k-th NN distance: " << maxbuffer.smallest_value() << std::endl;
 
                 for (size_t i = 0; i < lsh_maps.size(); i++) {
                     new_segments[i].push_back(0);
@@ -524,6 +538,7 @@ namespace puffinn {
                     last_tables,
                     kth_similarity
                 );
+                std::cout <<  failure_prob << std::endl;
                 // g_performance_metrics.store_time(Computation::CheckTermination);
                 if (failure_prob <= 1-recall) {
                     break;
@@ -535,10 +550,10 @@ namespace puffinn {
             }
             g_performance_metrics.store_time(Computation::Total);
             std::cout << k << "-th largest similarity: " << maxbuffer.smallest_value() << std::endl;
-            return maxbuffer.best_indices();
+            return maxbuffer;//.best_indices();
         }
 
-        std::vector<std::pair<uint32_t, uint32_t>> global_bf_join(unsigned int k) {
+        MaxPairBuffer global_bf_join(unsigned int k) {
             MaxPairBuffer maxbuffer(k);
             g_performance_metrics.new_query();
             g_performance_metrics.start_timer(Computation::Total);
@@ -552,8 +567,7 @@ namespace puffinn {
                 }
             }
             g_performance_metrics.store_time(Computation::Total);
-            std::cout << k << "-th distance: " << maxbuffer.smallest_value() << std::endl;
-            return maxbuffer.best_indices();
+            return maxbuffer;//.best_indices();
         }
 
         /// Compute a per-point top-K self-join on the current index with ``recall``.

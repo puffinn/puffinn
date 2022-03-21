@@ -78,6 +78,10 @@ namespace puffinn {
             out.write(reinterpret_cast<const char*>(sketches.data()), len*sizeof(FilterLshDatatype));
         }
 
+        size_t size() const {
+            return sketches.size();
+        }
+
         uint64_t memory_usage(DatasetDescription<typename T::Sim::Format> dataset) {
             return sketch_args->memory_usage(dataset, NUM_SKETCHES, NUM_FILTER_HASHBITS)
                 + sketches.size()*sizeof(FilterLshDatatype)

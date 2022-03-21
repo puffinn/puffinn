@@ -139,7 +139,7 @@ namespace collection {
         for (auto &vec : inserted) {
             table.insert(vec);
         }
-        table.rebuild();
+        table.rebuild(false);
 
 
 
@@ -150,7 +150,7 @@ namespace collection {
                 auto adjusted_k = std::min(k, table.get_size());
                 
                 float expected_correct = recall*adjusted_k*n;
-                auto res = table.naive_lsh_join(k, recall);
+                auto res = table.naive_lsh_join(k, recall, FilterType::None);
 
                 REQUIRE(res.size() == n);
                 for (size_t i = 0; i < n; i++) {

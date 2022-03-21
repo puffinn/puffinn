@@ -1,12 +1,12 @@
 sudo: required
-dist: xenial
+dist: focal 
 matrix:
         include:
               - language: python
                 virtualenv:
                   system_site_packages: true
                 python:
-                - '3.5'
+                - '3.8'
                 install:
                 - pip3 install numpy 
                 - python3 setup.py build
@@ -15,7 +15,7 @@ matrix:
                 - python3 examples/random-vectors.py
               - language: cpp
                 install:
-                - sudo apt-get install -y python3-pip python3-setuptools
+                - sudo apt-get install -y python3-pip python3-setuptools libhdf5-dev
                 - mkdir bin && cd bin
                 - cmake .. && make
                 script:

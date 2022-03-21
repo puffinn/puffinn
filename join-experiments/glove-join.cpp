@@ -17,46 +17,45 @@ struct Dataset {
     static Dataset read_glove(const std::string& filename);
 };
 
-// void write_result(
-//     const std::string& method_name,
-//     const std::string& ds_name,
-//     const std::vector<std::vector<uint32_t>>& res,
-//     const uint32_t num_tables,
-//     const float recall,
-//     const uint32_t k,
-//     const double time,
-//     const std::string& details
-//     ) {
+void write_result(
+    const std::string& method_name,
+    const std::string& ds_name,
+    const std::vector<std::vector<uint32_t>>& res,
+    const uint32_t num_tables,
+    const float recall,
+    const uint32_t k,
+    const double time,
+    const std::string& details
+    ) {
+    // using namespace HighFive;
 
-//     using namespace HighFive;
+    // try {
 
-//     try {
+    //     std::stringstream ss;
+    //     ss << ds_name << "/" << k << "/" << method_name;
 
-//         std::stringstream ss;
-//         ss << ds_name << "/" << k << "/" << method_name;
-
-//         std::filesystem::create_directories(ss.str());
+    //     std::filesystem::create_directories(ss.str());
         
-//         ss << "/" << recall << "_" << num_tables << ".hdf5";
-//         File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
+    //     ss << "/" << recall << "_" << num_tables << ".hdf5";
+    //     File file(ss.str(), File::ReadWrite | File::Create | File::Truncate);
 
-//         DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
-//         results.write(res);
-//         Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
-//         a.write(k);
-//         a = file.createAttribute<float>("recall", DataSpace::From(recall));
-//         a.write(recall);
-//         a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
-//         a.write(num_tables);
-//         a = file.createAttribute<double>("time", DataSpace::From(time));
-//         a.write(time);
-//         a = file.createAttribute<std::string>("details", DataSpace::From(details));
-//         a.write(details);
+    //     DataSet results = file.createDataSet<uint32_t>("results", DataSpace::From(res));
+    //     results.write(res);
+    //     Attribute a = file.createAttribute<uint32_t>("k", DataSpace::From(k));
+    //     a.write(k);
+    //     a = file.createAttribute<float>("recall", DataSpace::From(recall));
+    //     a.write(recall);
+    //     a = file.createAttribute<uint32_t>("num_tables", DataSpace::From(num_tables));
+    //     a.write(num_tables);
+    //     a = file.createAttribute<double>("time", DataSpace::From(time));
+    //     a.write(time);
+    //     a = file.createAttribute<std::string>("details", DataSpace::From(details));
+    //     a.write(details);
 
-//     } catch (Exception& err) {
-//         std::cerr << err.what() << std::endl;
-//     }
-// }
+    // } catch (Exception& err) {
+    //     std::cerr << err.what() << std::endl;
+    // }
+}
 
 
 
@@ -110,7 +109,7 @@ int main(int argc, char* argv[]) {
     auto start_time = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
-    index.rebuild();
+    index.rebuild(false);
     auto end_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed = (end_time - start_time);
     auto throughput = ((float) dataset.words.size()) / elapsed.count();
@@ -167,14 +166,14 @@ int main(int argc, char* argv[]) {
         << "\ninit_time=" << init_time 
         << "\ntotal_time=" << total_time << std::endl;
 
-    // write_result(method, 
-    //     dataset_fn.substr(slash_pos + 1, suffix_pos - slash_pos - 1), 
-    //     res, 
-    //     index.get_repetitions(), 
-    //     recall, 
-    //     k, 
-    //     elapsed.count() + elapsed_join.count(),
-    //     ss.str());
+    write_result(method, 
+        dataset_fn.substr(slash_pos + 1, suffix_pos - slash_pos - 1), 
+        res, 
+        index.get_repetitions(), 
+        recall, 
+        k, 
+        elapsed.count() + elapsed_join.count(),
+        ss.str());
 
 }
 
