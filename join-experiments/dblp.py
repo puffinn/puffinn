@@ -63,6 +63,9 @@ class FirstPassHandler(ContentHandler):
         counts_dataset = self.hdf_file.create_dataset('dictionary/counts', shape=(len(dictionary),), dtype=np.int32)
         words_dataset[:] = [w for w, _ in dictionary]
         counts_dataset[:] = [c for _, c in dictionary]
+        self.hdf_file.attrs['universe'] = len(dictionary)
+        self.hdf_file.attrs['type'] = 'sparse'
+        self.hdf_file.attrs['distance'] = 'jaccard'
         self.hdf_file.flush()
 
     def dictionary(self):

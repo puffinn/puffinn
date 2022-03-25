@@ -16,7 +16,17 @@ std::vector<DataFormat> load_dataset(char * hdf5_path);
 template <>
 std::vector<std::vector<uint32_t>> load_dataset(char * hdf5_path) {
     HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    std::vector<std::vector<uint32_t>> vectors = H5Easy::load<std::vector<std::vector<uint32_t>>>(file, "vectors");
+    std::vector<uint32_t> items = H5Easy::load<std::vector<uint32_t>>(file, "vectors/items");
+    std::vector<uint32_t> offsets = H5Easy::load<std::vector<uint32_t>>(file, "vectors/offsets");
+    std::vector<uint32_t> lengths = H5Easy::load<std::vector<uint32_t>>(file, "vectors/lengths");
+
+    std::vector<std::vector<uint32_t>> vectors;
+    for (size_t i = 0; i < offsets.size(); i++) {
+        auto start = items.begin() + offsets[i];
+        auto end = start + lengths[i];
+        std::vector<uint32_t> v(start, end);
+        vectors.push_back(v);
+    }
     return vectors;
 }
 
