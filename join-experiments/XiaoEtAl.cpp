@@ -91,21 +91,14 @@ float jaccard(const std::vector<uint32_t> * a, const std::vector<uint32_t> * b) 
     if (divisor == 0) {
         return 0;
     } else {
-        // float s = intersection/divisor;
-        // cerr_vec(lhs);
-        // cerr_vec(rhs);
-        // std::cerr << "similarity " << s << std::endl;
         return intersection/divisor;
     }
 }
 
 std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size_t k)
 {
-  // cerr_vec(*dataset[906361]);
-  // cerr_vec(*dataset[1792315]);
   size_t n = dataset.get_size();
   size_t universe = dataset.get_description().args;
-  auto descr = dataset.get_description();
 
   float sim_threshold = 0.0;
 
@@ -114,13 +107,11 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
   output.reserve(k + 1);
   for (size_t i = 1; i < k+1; i++)
   {
-    // float s = puffinn::JaccardSimilarity::compute_similarity(dataset[0], dataset[i], descr);
     float s = jaccard(dataset[0], dataset[i]);
     output.push_back(Pair{0, i, s});
   }
   std::make_heap(output.begin(), output.end(), cmp_pairs);
   sim_threshold = output.front().similarity;
-  // printf("Similarity threshold %f\n", sim_threshold);
 
   // Initialize the events queue
   std::vector<Event> events;
@@ -146,7 +137,6 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     events.pop_back();
 
     sim_threshold = output.front().similarity;
-    // printf("Similarity threshold %f, candidate upper bound %f, prefix %d\n", sim_threshold, e.similarity, e.prefix);
     // Check stopping condition
     if (e.similarity <= sim_threshold)
     {
@@ -156,7 +146,6 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
     std::vector<uint32_t> *x = dataset[e.index];
     size_t size_x = x->size();
     uint32_t w = x->at(e.prefix);
-    // printf("Looking for matches from %d at prefix length %d\n", e.index, w);
     // Lookup in inverted index
     for (size_t idx : inverted_index.at(w))
     {
@@ -169,7 +158,6 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
               a = std::min(e.index, idx),
               b = std::max(e.index, idx);
           if (already_seen.count(std::make_pair(a,b)) == 0) {
-            // float s = puffinn::JaccardSimilarity::compute_similarity(x, y, descr);
             float s = jaccard(x, y);
             Pair p { a, b, s };
             // Push in the heap
@@ -179,7 +167,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
             // Remove from the output the pair in excess, if any
             if (output.size() > k) {
               std::pop_heap(output.begin(), output.end(), cmp_pairs);
-              auto popped = output.back();
+              output.back();
               output.pop_back();
             }
 

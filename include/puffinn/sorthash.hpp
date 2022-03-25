@@ -17,14 +17,14 @@ namespace puffinn {
     } \
     printf("\n\n");
 
-#define do_pass_simple(arr_in, arr_out, bx, get_byte) \
+#define do_pass_simple1(arr_in, arr_out, bx, get_byte) \
     for (size_t i = 0; i < n; i++) {           \
         const uint32_t hi = arr_in[i];     \
         const uint32_t pos = get_byte(hi);       \
         arr_out[bx[pos]++] = hi;           \
     }
 
-#define do_pass_unrolled(arr_in, arr_out, bx, get_byte)       \
+#define do_pass_unrolled1(arr_in, arr_out, bx, get_byte)       \
     {                                                         \
     size_t off = 0;                                           \
     for (; off + 4 < n; off += 4) {                           \
@@ -50,7 +50,7 @@ namespace puffinn {
     }                                                         \
     }              
 
-#define do_pass do_pass_unrolled
+#define do_pass1 do_pass_unrolled1
 
 //! Sort the given vector of hash values, with n bytes of auxiliary space, using adix Sort
 //! with three passes over the data. Assumes that the hash values are stored in 
@@ -102,13 +102,13 @@ void sort_hashes_24(std::vector<uint32_t> & hashes, std::vector<uint32_t> & out)
     }
 
     // First sorting pass
-    do_pass(hashes, out, b0, _0);
+    do_pass1(hashes, out, b0, _0);
 
     // Second sorting pass
-    do_pass(out, hashes, b1, _1);
+    do_pass1(out, hashes, b1, _1);
 
     // Third sorting pass
-    do_pass(hashes, out, b2, _2);
+    do_pass1(hashes, out, b2, _2);
 }
 
 #define do_pass_simple(arr_in, arr_out, idx_in, idx_out, bx, get_byte) \

@@ -153,7 +153,7 @@ namespace collection {
                 auto res = table.naive_lsh_join(k, recall, FilterType::None);
 
                 REQUIRE(res.size() == n);
-                for (size_t i = 0; i < n; i++) {
+                for (int i = 0; i < n; i++) {
                     for (auto idx : exact[i]) {
                         // Each expected value is returned once.
                         if (std::count(res[i].begin(), res[i].end(), idx) != 0) {

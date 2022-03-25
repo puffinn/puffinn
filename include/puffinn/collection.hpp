@@ -274,7 +274,6 @@ namespace puffinn {
                 num_tables = 1000;
             }
 
-            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
@@ -382,7 +381,7 @@ namespace puffinn {
         /// 
         std::vector<std::vector<uint32_t>> bf_join(
             unsigned int k,
-            FilterType filter_type = FilterType::Default
+            FilterType /*filter_type*/ = FilterType::Default
         ) const {
             std::vector<std::vector<uint32_t>> res;
             for (size_t i = 0; i < dataset.get_size(); i++) {
@@ -446,7 +445,7 @@ namespace puffinn {
         MaxPairBuffer global_lsh_join(
             unsigned int k,
             float recall,
-            FilterType filter_type = FilterType::Default
+            FilterType /*filter_type*/ = FilterType::Default
         ) {
             g_performance_metrics.clear();
             g_performance_metrics.new_query();
@@ -576,7 +575,7 @@ namespace puffinn {
         std::vector<std::vector<uint32_t>> lsh_join(
             unsigned int k,
             float recall,
-            FilterType filter_type = FilterType::Default
+            FilterType /*filter_type*/ = FilterType::Default
         ) {
             std::vector<std::vector<uint32_t>> res;
 

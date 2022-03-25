@@ -16,7 +16,6 @@ struct Dataset {
     static Dataset read_glove(const std::string& filename);
 };
 
-const unsigned long long GB = 1024*1024*1024;
 const unsigned long long MB = 1024*1024;
 
 // Takes the following arguments: filename (num_neighbors) (recall) (space_usage in MB)

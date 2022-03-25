@@ -123,7 +123,6 @@ template<typename THash>
 void run_single_hash(ankerl::nanobench::Bench * bencher, const char * name, const puffinn::Dataset<puffinn::UnitVectorFormat> & dataset) {
     THash hash(dataset.get_description(), typename THash::Args());
     auto hash_fn = hash.sample();
-    size_t n = dataset.get_size();
     bencher->run(name, [&] {
         ankerl::nanobench::doNotOptimizeAway(hash_fn(dataset[0]));
     });

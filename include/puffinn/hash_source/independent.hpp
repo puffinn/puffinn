@@ -89,7 +89,7 @@ namespace puffinn {
 
         std::unique_ptr<HashSourceState> reset(
                 typename T::Sim::Format::Type* vec,
-                bool parallelize
+                bool /*parallelize*/
         ) const {
             auto state = std::make_unique<IndependentHashSourceState<T>>();
             state->hashed_vec = vec;
