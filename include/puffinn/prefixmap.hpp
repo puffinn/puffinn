@@ -154,19 +154,16 @@ namespace puffinn {
         }
 
         // Add a hash value, and associated index, to be included next time rebuild is called. 
-        void insert(uint32_t idx, LshDatatype hash_value) {
-            auto tid = omp_get_thread_num();
+        void insert(int tid, uint32_t idx, LshDatatype hash_value) {
             parallel_rebuilding_data[tid].push_back({ idx, hash_value });
         }
 
         // Reserve the correct amount of memory before inserting.
         void reserve(size_t size) {
             // TODO Divide equally across the vectors
-            // if (hashes.size() == 0) {
-            //     rebuilding_data.reserve(size);
-            // } else {
-            //     rebuilding_data.reserve(size-(hashes.size()-2*SEGMENT_SIZE));
-            // }
+            for (auto & rd : parallel_rebuilding_data) {
+                rd.reserve(size);
+            }
         }
 
         void rebuild() {
@@ -175,15 +172,19 @@ namespace puffinn {
             // hash bits are used.
             static const LshDatatype IMPOSSIBLE_PREFIX = 0xffffffff;
 
+            size_t rebuilding_data_size = 0;
+            for (auto & rd : parallel_rebuilding_data) {
+                rebuilding_data_size += rd.size();
+            }
+
             std::vector<LshDatatype> tmp_hashes;
             std::vector<uint32_t> tmp_indices;
             std::vector<LshDatatype> out_hashes;
             std::vector<uint32_t> out_indices;
-            // TODO Reserve the right output of space
-            // tmp_hashes.reserve(hashes.size() + rebuilding_data.size());
-            // tmp_indices.reserve(hashes.size() + rebuilding_data.size());
-            // out_hashes.reserve(hashes.size() + rebuilding_data.size());
-            // out_indices.reserve(hashes.size() + rebuilding_data.size());
+            tmp_hashes.reserve(hashes.size() + rebuilding_data_size);
+            tmp_indices.reserve(hashes.size() + rebuilding_data_size);
+            out_hashes.reserve(hashes.size() + rebuilding_data_size);
+            out_indices.reserve(hashes.size() + rebuilding_data_size);
 
             if (hashes.size() != 0) {
                 // Move data to temporary vector for sorting.
@@ -225,11 +226,6 @@ namespace puffinn {
             for (int i=0; i < SEGMENT_SIZE; i++) {
                 hashes.push_back(IMPOSSIBLE_PREFIX);
                 indices.push_back(0);
-            }
-
-            size_t rebuilding_data_size = 0;
-            for (auto & rd : parallel_rebuilding_data) {
-                rebuilding_data_size += rd.size();
             }
 
             // Build prefix_index data structure.
