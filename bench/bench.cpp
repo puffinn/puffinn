@@ -65,7 +65,7 @@ void do_build_index(ankerl::nanobench::Bench * bencher, const char * name, const
             THashSourceArgs()
         );
         for (auto v : dataset) { index.insert(v); }
-        index.rebuild();
+        index.rebuild(false);
     });
 }
 
