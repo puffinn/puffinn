@@ -14,6 +14,7 @@
 #include <sstream>
 #include <iostream>
 #include <chrono>
+#include <omp.h>
 
 const unsigned int MB = 1024*1024;
 
@@ -75,24 +76,41 @@ void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     // To benchmark the index build time we have to start from a new
     // index at each measurement iteration, otherwise the index is already populated
     // and no rebuild is triggered.
-    auto bencher = ankerl::nanobench::Bench()
-        .title("Index building");
-    auto index_memory = 100*MB;
-    // auto index_memory = 0.8*MB;
-
-    bencher.run("index_insert_data", [&] {
-        puffinn::Index<puffinn::CosineSimilarity, puffinn::SimHash> index(
-            dimensions,
-            index_memory
-        );
-        for (auto v : dataset) { index.insert(v); }
-    });
+    auto bencher = ankerl::nanobench::Bench();
+    // auto index_memory = 100*MB;
     
     // memory is set so that we have 600 tables
-    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "SimHash independent", dataset, 537*MB); // 74 MB
-    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 534*MB); // 70.6 MB
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 534.5*MB); // 71.2 MB
-    do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 534*MB); // 70.5 MB
+    bencher.title("Simhash independent");
+    omp_set_num_threads(1);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "1 thread", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(2);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "2 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(4);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "4 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(8);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "8 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(16);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "16 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(32);
+    do_build_index<puffinn::SimHash, puffinn::IndependentHashArgs<puffinn::SimHash>>(&bencher, "32 threads", dataset, 537*MB); // 74 MB
+
+    bencher.title("Simhash tensored");
+    omp_set_num_threads(1);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "1 thread", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(2);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "2 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(4);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "4 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(8);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "8 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(16);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "16 threads", dataset, 537*MB); // 74 MB
+    omp_set_num_threads(32);
+    do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "32 threads", dataset, 537*MB); // 74 MB
+
+    // do_build_index<puffinn::SimHash, puffinn::TensoredHashArgs<puffinn::SimHash>>(&bencher, "SimHash tensored", dataset, 534*MB); // 70.6 MB
+    // do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::IndependentHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope independent", dataset, 534.5*MB); // 71.2 MB
+    // do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 534*MB); // 70.5 MB
 }
 
 void bench_query(const std::vector<std::vector<float>> & dataset) {
