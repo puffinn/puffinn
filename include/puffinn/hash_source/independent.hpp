@@ -86,7 +86,7 @@ namespace puffinn {
             typename T::Sim::Format::Type * input,
             std::vector<LshDatatype> & output
         ) const {
-            output.clear();
+            output.resize(num_hashers);
             // Iterate through all the functions, accumulating bits
             for (size_t rep = 0; rep < num_hashers; rep++) {
                 size_t offset = rep * functions_per_hasher;
@@ -96,7 +96,7 @@ namespace puffinn {
                     res |= hash_functions[offset+i](input);
                 }
                 res >>= bits_to_cut;
-                output.push_back(res);
+                output[rep] = res;
             }
         }
 

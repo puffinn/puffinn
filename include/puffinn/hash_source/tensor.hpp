@@ -115,33 +115,41 @@ namespace puffinn {
             typename T::Sim::Format::Type * input,
             std::vector<LshDatatype> & output
         ) const {
-            output.clear();
-            // TODO: reuse this allocation by: place it in thread local storage?
-            std::vector<LshDatatype> tensored_hashes;
-            independent_hash_source.hash_repetitions(input, tensored_hashes);
-            for (size_t i=0; i<tensored_hashes.size(); i++) {
-                tensored_hashes[i] = intersperse_zero(tensored_hashes[i]);
+            // In order to avoid allocating a new vector to hold the tensored data
+            // every time we hash something, we make the output vector a little bit larger:
+            // enough to store both the output **and** the tensored repetitions.
+            // After computing the tensored repetitions directly in the output
+            // vector, we move them to the end, and place the actual output hashes
+            // in the first part of `output`. Finally, we trim the size so that
+            // the caller does not see the scratch work. Note that calling `resize`
+            // does not de-allocate the memory, so on the next call we will not make
+            // an allocation again.
+            size_t tensored_hashers = independent_hash_source.get_size();
+            independent_hash_source.hash_repetitions(input, output);
+            output.resize(num_hashers + tensored_hashers);
+            for (size_t i=0; i<tensored_hashers; i++) {
+                output[num_hashers+i] = intersperse_zero(output[i]);
             }
-            size_t right_start = tensored_hashes.size() / 2;
+            size_t right_start = tensored_hashers / 2;
 
             if (num_bits % 2 == 0) {
-                for (size_t i=0; i < tensored_hashes.size() / 2; i++) {
-                    tensored_hashes[i] <<= 1;
+                for (size_t i=0; i < tensored_hashers / 2; i++) {
+                    output[num_hashers + i] <<= 1;
                 }
             } else {
-                for (size_t i=right_start; i < tensored_hashes.size(); i++) {
-                    tensored_hashes[i] >>= 1;
+                for (size_t i=right_start; i < tensored_hashers; i++) {
+                    output[num_hashers + i] >>= 1;
                 }
             }
 
             for(size_t rep=0; rep < num_hashers; rep++) {
                 auto index_pair = get_minimal_index_pair(rep);
-                uint32_t h_left = tensored_hashes[index_pair.first];
-                uint32_t h_right = tensored_hashes[right_start + index_pair.second];
+                uint32_t h_left = output[num_hashers + index_pair.first];
+                uint32_t h_right = output[num_hashers + right_start + index_pair.second];
                 uint32_t h = h_left | h_right;
-                output.push_back(h);
+                output[rep] = h;
             }
-
+            output.resize(num_hashers);
         }
 
         std::unique_ptr<HashSourceState> reset(

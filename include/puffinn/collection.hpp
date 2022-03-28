@@ -10,6 +10,7 @@
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
 
+#include "omp.h"
 #include <cassert>
 #include <istream>
 #include <iostream>
@@ -272,9 +273,10 @@ namespace puffinn {
             if (num_tables > 1000) {
                 std::cerr << "Capping tables to max 1000." << std::endl;
                 num_tables = 1000;
+            } else {
+                std::cerr << "Number of tables: " << num_tables << std::endl;
             }
 
-            auto start = std::chrono::steady_clock::now();
             // if rebuild has been called before
             if (hash_source) {
                 // Resize the number of tables
@@ -302,18 +304,27 @@ namespace puffinn {
             g_performance_metrics.start_timer(Computation::IndexHashing);
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
-            std::vector<LshDatatype> hash_values;
+            std::vector<std::vector<LshDatatype>> tl_hash_values;
+            tl_hash_values.resize(omp_get_max_threads());
+            for (size_t i=0; i < tl_hash_values.size(); i++) {
+                tl_hash_values[i].resize(lsh_maps.size());
+            }
+            #pragma omp parallel for
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
+                auto tid = omp_get_thread_num();
+                auto & hash_values = tl_hash_values[tid];
                 // Write the hash values in the vector
                 this->hash_source->hash_repetitions(dataset[idx], hash_values);
                 // Copy the hash values in the appropriate prefix maps
                 for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                    lsh_maps[map_idx].insert(idx, hash_values[map_idx]);
+                    lsh_maps[map_idx].insert(tid, idx, hash_values[map_idx]);
                 }
             }
             g_performance_metrics.store_time(Computation::IndexHashing);
 
-            for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
+            size_t n_maps = lsh_maps.size();
+            #pragma omp parallel for
+            for (size_t map_idx = 0; map_idx < n_maps; map_idx++) {
                 lsh_maps[map_idx].rebuild();
             }
             last_rebuild = dataset.get_size();

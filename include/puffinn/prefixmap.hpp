@@ -6,6 +6,7 @@
 #include "puffinn/performance.hpp"
 #include "puffinn/sorthash.hpp"
 
+#include "omp.h"
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -73,7 +74,8 @@ namespace puffinn {
         std::vector<uint32_t> indices;
         std::vector<LshDatatype> hashes;
         // Scratch space for use when rebuilding. The length and capacity is set to 0 otherwise.
-        std::vector<HashedVecIdx> rebuilding_data;
+        // std::vector<HashedVecIdx> rebuilding_data;
+        std::vector<std::vector<HashedVecIdx>> parallel_rebuilding_data;
 
         // Length of the hash values used.
         unsigned int hash_length;
@@ -90,6 +92,8 @@ namespace puffinn {
         {
             // Ensure that the map can be queried even if nothing is inserted.
             rebuild();
+            auto max_threads = omp_get_max_threads();
+            parallel_rebuilding_data.resize(max_threads);
         }
 
         PrefixMap(std::istream& in, HashSource<T>& source) {
@@ -102,13 +106,16 @@ namespace puffinn {
                 in.read(reinterpret_cast<char*>(&hashes[0]), len*sizeof(LshDatatype));
             }
 
+            // TODO Handle serialization
             size_t rebuilding_len;
             in.read(reinterpret_cast<char*>(&rebuilding_len), sizeof(size_t));
-            rebuilding_data.resize(rebuilding_len);
+            // rebuilding_data.resize(rebuilding_len);
             if (rebuilding_len != 0) {
-                in.read(
-                    reinterpret_cast<char*>(&rebuilding_data[0]), 
-                    rebuilding_len*sizeof(HashedVecIdx));
+                for (size_t i=0; i<rebuilding_len; i++) {
+                    HashedVecIdx v;
+                    in.read(reinterpret_cast<char*>(&v), sizeof(HashedVecIdx));
+                    parallel_rebuilding_data[0].push_back(v);
+                }
             }
 
             in.read(reinterpret_cast<char*>(&hash_length), sizeof(unsigned int));
@@ -126,12 +133,17 @@ namespace puffinn {
                 out.write(reinterpret_cast<const char*>(&hashes[0]), len*sizeof(LshDatatype));
             }
 
-            size_t rebuilding_len = rebuilding_data.size();
+            size_t rebuilding_len = 0;
+            for (auto & rd : parallel_rebuilding_data) {
+                rebuilding_len += rd.size();
+            }
             out.write(reinterpret_cast<const char*>(&rebuilding_len), sizeof(size_t));
             if (rebuilding_len != 0) {
-                out.write(
-                    reinterpret_cast<const char*>(&rebuilding_data[0]),
-                    rebuilding_len*sizeof(HashedVecIdx));
+                for (auto & rd : parallel_rebuilding_data) {
+                    for (size_t i = 0; i <rd.size(); i++) {
+                        out.write(reinterpret_cast<const char*>(&rd[i]), sizeof(HashedVecIdx));
+                    }
+                }
             }
 
             out.write(reinterpret_cast<const char*>(&hash_length), sizeof(unsigned int));
@@ -142,16 +154,15 @@ namespace puffinn {
         }
 
         // Add a hash value, and associated index, to be included next time rebuild is called. 
-        void insert(uint32_t idx, LshDatatype hash_value) {
-            rebuilding_data.push_back({ idx, hash_value });
+        void insert(int tid, uint32_t idx, LshDatatype hash_value) {
+            parallel_rebuilding_data[tid].push_back({ idx, hash_value });
         }
 
         // Reserve the correct amount of memory before inserting.
         void reserve(size_t size) {
-            if (hashes.size() == 0) {
-                rebuilding_data.reserve(size);
-            } else {
-                rebuilding_data.reserve(size-(hashes.size()-2*SEGMENT_SIZE));
+            // TODO Divide equally across the vectors
+            for (auto & rd : parallel_rebuilding_data) {
+                rd.reserve(size);
             }
         }
 
@@ -161,14 +172,19 @@ namespace puffinn {
             // hash bits are used.
             static const LshDatatype IMPOSSIBLE_PREFIX = 0xffffffff;
 
+            size_t rebuilding_data_size = 0;
+            for (auto & rd : parallel_rebuilding_data) {
+                rebuilding_data_size += rd.size();
+            }
+
             std::vector<LshDatatype> tmp_hashes;
             std::vector<uint32_t> tmp_indices;
             std::vector<LshDatatype> out_hashes;
             std::vector<uint32_t> out_indices;
-            tmp_hashes.reserve(hashes.size() + rebuilding_data.size());
-            tmp_indices.reserve(hashes.size() + rebuilding_data.size());
-            out_hashes.reserve(hashes.size() + rebuilding_data.size());
-            out_indices.reserve(hashes.size() + rebuilding_data.size());
+            tmp_hashes.reserve(hashes.size() + rebuilding_data_size);
+            tmp_indices.reserve(hashes.size() + rebuilding_data_size);
+            out_hashes.reserve(hashes.size() + rebuilding_data_size);
+            out_indices.reserve(hashes.size() + rebuilding_data_size);
 
             if (hashes.size() != 0) {
                 // Move data to temporary vector for sorting.
@@ -177,9 +193,11 @@ namespace puffinn {
                     tmp_indices.push_back(indices[i]);
                 }
             }
-            for (auto pair : rebuilding_data) {
-                tmp_indices.push_back(pair.first);
-                tmp_hashes.push_back(pair.second);
+            for (auto & rebuilding_data : parallel_rebuilding_data) {
+                for (auto pair : rebuilding_data) {
+                    tmp_indices.push_back(pair.first);
+                    tmp_hashes.push_back(pair.second);
+                }
             }
             
             g_performance_metrics.start_timer(Computation::Sorting);
@@ -215,17 +233,19 @@ namespace puffinn {
             uint32_t idx = 0;
             for (unsigned int prefix=0; prefix < (1u << PREFIX_INDEX_BITS); prefix++) {
                 while (
-                    idx < rebuilding_data.size() &&
+                    idx < rebuilding_data_size &&
                     (hashes[SEGMENT_SIZE+idx] >> (hash_length-PREFIX_INDEX_BITS)) < prefix
                 ) {
                     idx++;
                 }
                 prefix_index[prefix] = SEGMENT_SIZE+idx;
             }
-            prefix_index[1 << PREFIX_INDEX_BITS] = SEGMENT_SIZE+rebuilding_data.size();
+            prefix_index[1 << PREFIX_INDEX_BITS] = SEGMENT_SIZE+rebuilding_data_size;
 
-            rebuilding_data.clear();
-            rebuilding_data.shrink_to_fit();
+            for (auto & rd : parallel_rebuilding_data) {
+                rd.clear();
+                rd.shrink_to_fit();
+            }
 
             g_performance_metrics.store_time(Computation::Rebuilding);
         }
