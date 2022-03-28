@@ -28,6 +28,13 @@ namespace puffinn {
         // Sample a random hash function from this source.
         virtual std::unique_ptr<Hash> sample() = 0;
 
+        // Compute the LSH values for all tables supported by this pool for the given input vector.
+        // Writes the results to the given output array, which can be reused
+        virtual void hash_repetitions(
+            typename T::Sim::Format::Type * input,
+            std::vector<LshDatatype> & output
+        ) const = 0;
+
         // Initialize the state necessary to compute the hashes of the given vector.
         virtual std::unique_ptr<HashSourceState> reset(
             typename T::Sim::Format::Type* vec,
