@@ -19,9 +19,69 @@ import shlex
 import faiss
 import os
 import hashlib
+import sqlite3
+import json
 
+# Results database
+# ================
+#
+# We store results in a Sqlite database, which points to paths to HDF5 files
+# that store the actual nearest neighbor information, which would be too large
+# to store in the sqlite database.
+# From these HDF5 files we compute the recall of the various algorithms, which
+# are then cached in the database for fast query.
+
+# This is a sequence of SQL statements that set up different 
+# versions of the database.
+MIGRATIONS = [
+    """
+    CREATE TABLE main (
+        dataset            TEXT NOT NULL,
+        workload           TEXT NOT NULL,
+        k                  INTEGER NOT NULL,
+        algorithm          TEXT NOT NULL,
+        params             TEXT NOT NULL,
+        time_index_s       REAL NOT NULL,
+        time_join_s        REAL NOT NULL,
+        recall             REAL, -- may be null, we compute it afterwards
+        output_file        TEXT NOT NULL,
+        hdf5_group         TEXT NOT NULL
+    )
+    """
+]
+
+def get_db():
+    db = sqlite3.connect("join-results.db", isolation_level=None)
+    current_version, = db.execute("pragma user_version;").fetchone()
+    # Update the database schema, if needed
+    for i, migration in enumerate(MIGRATIONS):
+        version = i + 1
+        if version > current_version:
+            db.executescript(migration)
+            db.execute("pragma user_version = {}".format(version))
+    return db
+
+
+def already_run(db, configuration):
+    """Checks whether the given configuration is already present in the database"""
+    configuration = configuration.copy()
+    configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
+    res = db.execute("""
+    SELECT rowid FROM main 
+    WHERE dataset = :dataset
+      AND workload = :workload
+      AND k = :k
+      AND algorithm = :algorithm
+      AND params = :params
+    """, configuration).fetchall()
+    return len(res) > 0
+
+
+# Algorithms
+# ==========
+#
 # Communication protocol
-# ======================
+# ----------------------
 #
 # For algorithms interfacing over text streams, the protocol is as follows:
 #
@@ -88,7 +148,11 @@ class Algorithm(object):
         """
         pass
     def save_result(self, hdf5_file, path):
-        hdf5_file[path] = self.result()
+        result = self.result()
+        if path in hdf5_file:
+            assert (np.array(hdf5_file[path]) == result).all()
+            return
+        hdf5_file[path] = result
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         pass
@@ -259,14 +323,18 @@ def get_output_file(configuration):
 
 
 def run_config(configuration):
+    db = get_db()
+    if already_run(db, configuration):
+        print("Configuration already run, skipping")
+        return
     output_file, group, output = get_output_file(configuration)
     hdf5_file, datapath = DATASETS[configuration['dataset']]
     algo = ALGORITHMS[configuration['algorithm']]
     params = configuration['params']
     k = configuration['k']
-    if configuration['mode'] == 'local-top-k':
+    if configuration['workload'] == 'local-top-k':
         hdf5_path = 'local-top-{}'.format(k)
-    elif configuration['mode'] == 'global-top-k':
+    elif configuration['workload'] == 'global-top-k':
         hdf5_path = 'global-top-{}'.format(k)
     else:
         raise RuntimeError()
@@ -286,6 +354,31 @@ def run_config(configuration):
     )
     print("   time to index", time_index)
     print("   time for join", time_workload)
+    db.execute("""
+    INSERT INTO main VALUES (
+        :dataset,
+        :workload,
+        :k,
+        :algorithm,
+        :params,
+        :time_index_s,
+        :time_join_s,
+        :recall,
+        :output_file,
+        :hdf5_group
+    );
+    """, {
+        "dataset": config['dataset'],
+        'workload': config['workload'],
+        'k': k,
+        'algorithm': config['algorithm'],
+        'params': json.dumps(params, sort_keys=True),
+        'time_index_s': time_index,
+        'time_join_s': time_workload,
+        'recall': None,
+        'output_file': output_file,
+        'hdf5_group': group
+    })
 
 
 if __name__ == "__main__":
