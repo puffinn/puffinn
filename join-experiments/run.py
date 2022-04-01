@@ -17,6 +17,8 @@ import sys
 import yaml
 import shlex
 import faiss
+import os
+import hashlib
 
 # Communication protocol
 # ======================
@@ -58,12 +60,12 @@ def h5cat(path, dataset, stream=sys.stdout):
 
 class Algorithm(object):
     """Manages the lifecycle of an algorithm"""
-    def execute(self, k, params, h5py_path, dataset, collector):
+    def execute(self, k, params, h5py_path, dataset, output_file, output_hdf5_path):
         self.setup(k, params)
         self.feed_data(h5py_path, dataset)
         self.index()
         self.run()
-        self.result(collector)
+        self.save_result(output_file, output_hdf5_path)
         return self.times()
     def setup(self, k, params):
         """Configure the parameters of the algorithm"""
@@ -77,36 +79,20 @@ class Algorithm(object):
     def run(self):
         """Run the workload. This is timed."""
         pass
-    def result(self, result_collector):
-        """Collect the result"""
+    def result(self):
+        """Return the result as a two-dimensional numpy array.
+        The way it is interpreted depends on the application.
+        For global top-k join, it is the list of top-k pairs of indices.
+        For local top-k join, it is the list of 
+        nearest neighbors for each element.
+        """
         pass
+    def save_result(self, hdf5_file, path):
+        hdf5_file[path] = self.result()
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         pass
     
-
-class GlobalTopKResult(object):
-    def __init__(self):
-        self.pairs = []
-
-    def add(self, i, j):
-        self.pairs.append((min(i, j), max(i, j)))
-
-    def add_line(self, line):
-        i, j = line.split()
-        self.add(int(i), int(j))
-
-class LocalTopKResult(object):
-    def __init__(self):
-        self.neighbors = []
-
-    def add(self, lst):
-        self.neighbors.append(np.array(lst))
-
-    def add_line(self, line):
-        self.add([int(i) for i in line.split()])
-
-
 
 class SubprocessAlgorithm(Algorithm):
     """Manages the lifecycle of an algorithm which does not provide
@@ -181,14 +167,17 @@ class SubprocessAlgorithm(Algorithm):
         end_t = time.time()
         self.workload_time = end_t - start_t
 
-    def result(self, result_collector):
+    def result(self):
         print("Running collecting result")
         self._send("result")
+        rows = []
         while True:
             line = self._raw_line()
             if line[1] == "end":
                 break
-            result_collector.add_line(" ".join(line))
+            rows.append(np.array([int(i) for i in line]))
+        rows = np.array(rows)
+        return rows
 
     def times(self):
         return self.index_time, self.workload_time
@@ -224,13 +213,11 @@ class FaissHNSW(Algorithm):
         """Run the workload. This is timed."""
         print("  Top-{} join".format(self.k))
         start = time.time()
-        _dists, idxs = self.faiss_index.search(self.data, self.k)
+        _dists, idxs = self.faiss_index.search(self.data, self.k+1)
         self.time_run = time.time() - start
-        self.result_indices = idxs
-    def result(self, result_collector):
-        """Collect the result"""
-        for arr in self.result_indices:
-            result_collector.add(arr)
+        self.result_indices = idxs[:,1:]
+    def result(self):
+        return self.result_indices
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
@@ -239,7 +226,7 @@ class FaissHNSW(Algorithm):
 
 
 DATASETS = {
-    'glove-25': ('/tmp/glove.hdf5', '/train')
+    'glove-25': ('/tmp/glove.hdf5', '/test')
 }
 
 ALGORITHMS = {
@@ -248,19 +235,55 @@ ALGORITHMS = {
 }
 
 
+def get_output_file(configuration):
+    """Returns a triplet: (filename, hdf5_path, hdf5_object)"""
+    outdir = "output"
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+    fname = os.path.join(outdir, "{}-{}.hdf5".format(
+        configuration['dataset'],
+        configuration['algorithm']
+    ))
+    # Turns the dictionary of parameters into a string that 
+    # follows a consistent order
+    params_list = sorted(list(configuration['params'].items()))
+    params_string = ""
+    for key, value in params_list:
+        params_string += key.replace(" ", "") + str(value).replace(" ", "")
+    params_hash = hashlib.sha256(params_string.encode('utf-8')).hexdigest()
+    h5obj = h5py.File(fname, 'a')
+    group = h5obj.require_group(params_hash)
+    for key, value in params_list:
+        group.attrs[key] = value
+    return fname, params_hash, group
+
+
 def run_config(configuration):
+    output_file, group, output = get_output_file(configuration)
     hdf5_file, datapath = DATASETS[configuration['dataset']]
-    result_collector = LocalTopKResult() if configuration['mode'] == 'local-topk' else GlobalTopKResult()
     algo = ALGORITHMS[configuration['algorithm']]
     params = configuration['params']
     k = configuration['k']
+    if configuration['mode'] == 'local-top-k':
+        hdf5_path = 'local-top-{}'.format(k)
+    elif configuration['mode'] == 'global-top-k':
+        hdf5_path = 'global-top-{}'.format(k)
+    else:
+        raise RuntimeError()
     print("=== k={} algorithm={} params={} dataset={}".format(
         k,
         configuration['algorithm'],
         params,
         configuration['dataset']
     ))
-    time_index, time_workload = algo.execute(k, params, hdf5_file, datapath, result_collector)
+    time_index, time_workload = algo.execute(
+        k,
+        params,
+        hdf5_file,
+        datapath,
+        output,
+        hdf5_path
+    )
     print("   time to index", time_index)
     print("   time for join", time_workload)
 
