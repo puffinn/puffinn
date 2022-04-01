@@ -185,10 +185,10 @@ class SubprocessAlgorithm(Algorithm):
 if __name__ == "__main__":
     res = GlobalTopKResult()
     algo = SubprocessAlgorithm(
-        ["build/GloveJoin"],
+        ["build/PuffinnJoin"],
         {"k": 10, "recall": 0.01, "method": "LSHJoinGlobal", "space_usage": 512},
         res
     )
-    time_index, time_workload = algo.execute("/tmp/glove.hdf5", "/test")
+    time_index, time_workload = algo.execute("/tmp/glove.hdf5", "/train")
     for pair in res.pairs:
         print("[result pair]", pair)

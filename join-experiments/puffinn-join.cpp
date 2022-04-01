@@ -4,8 +4,6 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include <highfive/H5Attribute.hpp>
-#include <highfive/H5File.hpp>
 #include "puffinn.hpp"
 #include "puffinn/performance.hpp"
 
