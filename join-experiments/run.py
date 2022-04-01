@@ -16,6 +16,7 @@ import h5py
 import sys
 import yaml
 import shlex
+import faiss
 
 # Communication protocol
 # ======================
@@ -193,12 +194,57 @@ class SubprocessAlgorithm(Algorithm):
         return self.index_time, self.workload_time
 
 
+class FaissHNSW(Algorithm):
+    def __init__(self):
+        self.faiss_index = None
+        self.k = None
+        self.params = None
+        self.data = None
+        self.time_index = None
+        self.time_run = None
+        self.result_indices = None
+    def setup(self, k, params):
+        """Configure the parameters of the algorithm"""
+        self.k = k
+        self.params = params
+    def feed_data(self, h5py_path, dataset):
+        """Pass the data to the algorithm"""
+        f = h5py.File(h5py_path)
+        self.data = np.array(f[dataset])
+        f.close()
+    def index(self):
+        """Setup the index, if any. This is timed."""
+        print("  Building index")
+        start = time.time()
+        self.faiss_index = faiss.IndexHNSWFlat(len(self.data[0]), self.params["M"])
+        self.faiss_index.hnsw.efConstruction = self.params["efConstruction"]
+        self.faiss_index.add(self.data)
+        self.time_index = time.time() - start
+    def run(self):
+        """Run the workload. This is timed."""
+        print("  Top-{} join".format(self.k))
+        start = time.time()
+        _dists, idxs = self.faiss_index.search(self.data, self.k)
+        self.time_run = time.time() - start
+        self.result_indices = idxs
+    def result(self, result_collector):
+        """Collect the result"""
+        for arr in self.result_indices:
+            result_collector.add(arr)
+    def times(self):
+        """Returns the pair (index_time, workload_time)"""
+        return self.time_index, self.time_run
+    
+
+
+
 DATASETS = {
     'glove-25': ('/tmp/glove.hdf5', '/train')
 }
 
 ALGORITHMS = {
-    'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"])
+    'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"]),
+    'faiss-HNSW': FaissHNSW()
 }
 
 
