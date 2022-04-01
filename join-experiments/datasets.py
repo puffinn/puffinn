@@ -12,6 +12,7 @@ import xml.sax
 from xml.sax.handler import ContentHandler
 import h5py
 from tqdm import tqdm
+import random
 
 
 def download(url, dest):
@@ -185,14 +186,55 @@ def glove(out_fn, dims):
     return out_fn
 
 
+# Adapted from ann-benchmarks
+def random_jaccard(out_fn, n=10000, size=50, universe=80):
+    if os.path.isfile(out_fn):
+        return
+    random.seed(1)
+    f = h5py.File(out_fn, 'w')
+    l = list(range(universe))
+    # We call the set of sets `train` to be compatible with datasets from
+    # ann-benchmarks
+    train = []
+    for i in range(n):
+        train.append(random.sample(l, size))
+
+    train = np.array(list(map(sorted, train)))
+    flat_train = np.hstack(train.flatten())
+    f.create_dataset('train', (len(flat_train),), dtype=flat_train.dtype)[:] = flat_train
+    f.create_dataset('size_train', (len(train),), dtype='i')[:] = list(map(len, train))
+    f.close()
+    return out_fn
+
+
+def iter_sparse(fn, data_path, size_path):
+    f = h5py.File(fn, 'r')
+    data = np.array(f[data_path])
+    sizes = np.array(f[size_path])
+    offsets = np.zeros(sizes.shape, dtype=np.int64)
+    offsets[1:] = np.cumsum(sizes[:-1])
+    for start, s in zip(offsets, sizes):
+        v = data[start:start+s]
+        assert len(v) == s
+        yield v
+
+
 if not os.path.isdir("datasets"):
     os.mkdir("datasets")
 
 DATASETS = {
     "DBLP": lambda: dblp("datasets/dblp.h5"),
-    "Glove-25": lambda: glove("datasets/glove-25.h5", 25)
+    "Glove-25": lambda: glove("datasets/glove-25.h5", 25),
+    "Random-Jaccard-10k": lambda: random_jaccard('datasets/random-jaccard.hdf5')
 }
 
 if __name__ == "__main__":
-    DATASETS["DBLP"]()
-    DATASETS["Glove-25"]()
+    # DATASETS["DBLP"]()
+    # DATASETS["Glove-25"]()
+    DATASETS["Random-Jaccard-10k"](),
+    for v in iter_sparse(
+        'datasets/random-jaccard.hdf5',
+        'train',
+        'size_train'
+    ):
+        print(v)

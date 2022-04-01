@@ -287,15 +287,17 @@ class FaissHNSW(Algorithm):
         return self.time_index, self.time_run
     
 
-
-
 DATASETS = {
-    'glove-25': ('/tmp/glove.hdf5', '/test')
+    'glove-25': ('/tmp/glove.hdf5', '/test'),
+    'random-jaccard': ('datasets/random-jaccard.hdf5', 'sparse')
 }
 
 ALGORITHMS = {
     'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"]),
-    'faiss-HNSW': FaissHNSW()
+    # Local top-k baselines
+    'faiss-HNSW': FaissHNSW(),
+    # Global top-k baselines
+    'XiaoEtAl': SubprocessAlgorithm(["build/XiaoEtAl"])
 }
 
 
