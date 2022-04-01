@@ -8,6 +8,8 @@
 # Datasets are taken from ann-benchmarks or created ad-hoc from 
 # other sources (e.g. DBLP).
 
+from ast import Global
+import numpy as np
 import time
 import subprocess
 import h5py
@@ -55,15 +57,14 @@ def h5cat(path, dataset, stream=sys.stdout):
 
 class Algorithm(object):
     """Manages the lifecycle of an algorithm"""
-    def execute(self, h5py_path, dataset):
-        self.setup()
+    def execute(self, k, params, h5py_path, dataset, collector):
+        self.setup(k, params)
         self.feed_data(h5py_path, dataset)
         self.index()
         self.run()
-        self.result()
+        self.result(collector)
         return self.times()
-
-    def setup(self):
+    def setup(self, k, params):
         """Configure the parameters of the algorithm"""
         pass
     def feed_data(self, h5py_path, dataset):
@@ -75,7 +76,7 @@ class Algorithm(object):
     def run(self):
         """Run the workload. This is timed."""
         pass
-    def result(self):
+    def result(self, result_collector):
         """Collect the result"""
         pass
     def times(self):
@@ -93,6 +94,17 @@ class GlobalTopKResult(object):
     def add_line(self, line):
         i, j = line.split()
         self.add(int(i), int(j))
+
+class LocalTopKResult(object):
+    def __init__(self):
+        self.neighbors = []
+
+    def add(self, lst):
+        self.neighbors.append(np.array(lst))
+
+    def add_line(self, line):
+        self.add([int(i) for i in line.split()])
+
 
 
 class SubprocessAlgorithm(Algorithm):
@@ -118,11 +130,9 @@ class SubprocessAlgorithm(Algorithm):
 
     # param result_collector: object that accepts lines with a method `add_line`,
     # one by one, and converts them to at global or local top-k result
-    def __init__(self, command_w_args, params_dict, result_collector):
+    def __init__(self, command_w_args):
         self.command_w_args = command_w_args
         self._program = None
-        self.params_dict = params_dict
-        self.result_collector = result_collector
         self.index_time = None
         self.workload_time = None
 
@@ -136,12 +146,13 @@ class SubprocessAlgorithm(Algorithm):
                 universal_newlines=True)
         return self._program
 
-    def setup(self):
+    def setup(self, k, params_dict):
         print("Setup")
         self._send("setup")
         program = self._subprocess_handle()
-        for k, v in self.params_dict.items():
-            print(k, v, file=program.stdin)
+        print("k", k, file=program.stdin)
+        for key, v in params_dict.items():
+            print(key, v, file=program.stdin)
         self._send("end")
         self._expect("ok", "setup failed")
         
@@ -167,28 +178,49 @@ class SubprocessAlgorithm(Algorithm):
         # Wait for the program to report success
         self._expect("ok", "workload phase failed")
         end_t = time.time()
-        self.run_time = end_t - start_t
+        self.workload_time = end_t - start_t
 
-    def result(self):
+    def result(self, result_collector):
         print("Running collecting result")
         self._send("result")
         while True:
             line = self._raw_line()
             if line[1] == "end":
                 break
-            self.result_collector.add_line(" ".join(line))
+            result_collector.add_line(" ".join(line))
 
     def times(self):
         return self.index_time, self.workload_time
 
 
+DATASETS = {
+    'glove-25': ('/tmp/glove.hdf5', '/train')
+}
+
+ALGORITHMS = {
+    'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"])
+}
+
+
+def run_config(configuration):
+    hdf5_file, datapath = DATASETS[configuration['dataset']]
+    result_collector = LocalTopKResult() if configuration['mode'] == 'local-topk' else GlobalTopKResult()
+    algo = ALGORITHMS[configuration['algorithm']]
+    params = configuration['params']
+    k = configuration['k']
+    print("=== k={} algorithm={} params={} dataset={}".format(
+        k,
+        configuration['algorithm'],
+        params,
+        configuration['dataset']
+    ))
+    time_index, time_workload = algo.execute(k, params, hdf5_file, datapath, result_collector)
+    print("   time to index", time_index)
+    print("   time for join", time_workload)
+
+
 if __name__ == "__main__":
-    res = GlobalTopKResult()
-    algo = SubprocessAlgorithm(
-        ["build/PuffinnJoin"],
-        {"k": 10, "recall": 0.01, "method": "LSHJoinGlobal", "space_usage": 512},
-        res
-    )
-    time_index, time_workload = algo.execute("/tmp/glove.hdf5", "/train")
-    for pair in res.pairs:
-        print("[result pair]", pair)
+    with open(sys.argv[1]) as fp:
+        configs = yaml.load(fp, yaml.SafeLoader)
+    for config in configs:
+        run_config(config)

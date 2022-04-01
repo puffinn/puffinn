@@ -10,10 +10,10 @@
 const unsigned long long MB = 1024*1024;
 
 void expect(std::string what) {
-    std::cerr << "[c++] Expecting to receive `sppv1 " << what << "`" << std::endl;
+    // std::cerr << "[c++] Expecting to receive `sppv1 " << what << "`" << std::endl;
     std::string protocol_line;
     std::getline(std::cin, protocol_line);
-    std::cerr << "[c++] received`" << protocol_line << "`" << std::endl;
+    // std::cerr << "[c++] received`" << protocol_line << "`" << std::endl;
     if (protocol_line != "sppv1 " + what) {
         std::cout << "sppv1 err" << std::endl;
         throw "invalid message received";
@@ -49,14 +49,14 @@ int main(void) {
 
     // Read parameters
     expect("setup");
-    std::cerr << "[c++] setup" << std::endl;
+    // std::cerr << "[c++] setup" << std::endl;
     unsigned int k = 10;
     float recall = 0.8;
     std::string method = "BF";
     unsigned long long space_usage = 100*MB;
     while (true) {
         std::getline(std::cin, protocol_line);
-        std::cerr << "[c++] setup line: " << protocol_line << std::endl;
+        // std::cerr << "[c++] setup line: " << protocol_line << std::endl;
         if (protocol_line == "sppv1 end") {
             break;
         }
@@ -77,15 +77,11 @@ int main(void) {
             return -1;
         }
     }
-    std::cerr << " method " << method << std::endl
-              << " k "  << k << std::endl
-              << " recall " << recall << std::endl
-              << " space_usage " << space_usage << std::endl;
     send("ok");
 
     // Read the dataset
     expect("data");
-    std::cerr << "[c++] receiving data" << std::endl;
+    // std::cerr << "[c++] receiving data" << std::endl;
     auto dataset = read_vectors_stdin();
     auto dimensions = dataset[0].size(); 
     send("ok");
@@ -141,7 +137,7 @@ int main(void) {
     send("ok");
 
     expect("result");
-    std::cerr << "[c++] results size " << res.size() << std::endl; 
+    // std::cerr << "[c++] results size " << res.size() << std::endl; 
     for (auto v : res) {
         for (auto i : v) {
             std::cout << i << " ";
