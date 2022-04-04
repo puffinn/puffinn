@@ -89,7 +89,7 @@ def already_run(db, configuration):
 #   - harness sends `sppv1 setup`, followed by parameters as `name value` pairs, followed by `sppv1 end`
 #   - program acknowledges using `sppv1 ok`
 # - Data ingestion
-#   - harness sends `sppv1 data`, followed by vectors, one per line, followed by `sppv1 end`
+#   - harness sends `sppv1 data`, `sspv1 distance_type`, followed by vectors, one per line, followed by `sppv1 end`
 #   - program acknowledges using `sppv1 ok`
 # - Index construction (timed)
 #   - harness sends `sppv1 index`
@@ -111,11 +111,26 @@ def text_encode_floats(v):
 
 def h5cat(path, dataset, stream=sys.stdout):
     file = h5py.File(path, "r")
-    for v in file[dataset]:
-        stream.write(text_encode_floats(v) + "\n")
-        stream.flush()
-        # print(text_encode_floats(v), file=stream)
-    print(file=stream) # Signal end of streaming
+    distance = file.attrs['distance']
+    if distance == 'cosine':
+        for v in file[dataset]:
+            stream.write(text_encode_floats(v) + "\n")
+            stream.flush()
+            # print(text_encode_floats(v), file=stream)
+        print(file=stream) # Signal end of streaming
+    elif distance == 'jaccard':
+        sizes_dataset = 'size_' + dataset
+        data = np.array(file[dataset])
+        sizes = np.array(file[sizes_dataset])
+        offsets = np.zeros(sizes.shape, dtype=np.int64)
+        offsets[1:] = np.cumsum(sizes[:-1])
+        for offset, size in zip(offsets, sizes):
+            v = data[offset:offset+size]
+            stream.write(text_encode_floats(v) + "\n") 
+            stream.flush()
+        print(file=stream)
+    else:
+        raise RuntimeError("Unsupported distance".format(distance))
 
 
 class Algorithm(object):
@@ -209,7 +224,9 @@ class SubprocessAlgorithm(Algorithm):
         
     def feed_data(self, h5py_path, dataset):
         print("Feeding data using pipes")
+        distance = h5py.File(h5py_path).attrs['distance']
         self._send("data")
+        self._send(distance)
         program = self._subprocess_handle()
         h5cat(h5py_path, dataset, program.stdin)
         self._expect("ok", "population phase failed")
@@ -263,6 +280,7 @@ class FaissHNSW(Algorithm):
     def feed_data(self, h5py_path, dataset):
         """Pass the data to the algorithm"""
         f = h5py.File(h5py_path)
+        assert f.attrs['distance'] == 'cosine'
         self.data = np.array(f[dataset])
         f.close()
     def index(self):
@@ -289,7 +307,7 @@ class FaissHNSW(Algorithm):
 
 DATASETS = {
     'glove-25': ('/tmp/glove.hdf5', '/test'),
-    'random-jaccard': ('datasets/random-jaccard.hdf5', 'sparse')
+    'random-jaccard': ('datasets/random-jaccard.hdf5', 'train')
 }
 
 ALGORITHMS = {

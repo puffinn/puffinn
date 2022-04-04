@@ -199,6 +199,8 @@ def random_jaccard(out_fn, n=10000, size=50, universe=80):
     for i in range(n):
         train.append(random.sample(l, size))
 
+    f.attrs['distance'] = 'jaccard'
+
     train = np.array(list(map(sorted, train)))
     flat_train = np.hstack(train.flatten())
     f.create_dataset('train', (len(flat_train),), dtype=flat_train.dtype)[:] = flat_train
@@ -225,7 +227,7 @@ if not os.path.isdir("datasets"):
 DATASETS = {
     "DBLP": lambda: dblp("datasets/dblp.h5"),
     "Glove-25": lambda: glove("datasets/glove-25.h5", 25),
-    "Random-Jaccard-10k": lambda: random_jaccard('datasets/random-jaccard.hdf5')
+    "Random-Jaccard-10k": lambda: random_jaccard('datasets/random-jaccard.hdf5', n=1000)
 }
 
 if __name__ == "__main__":

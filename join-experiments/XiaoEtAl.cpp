@@ -284,6 +284,7 @@ int main(void) {
 
     // Read the dataset
     expect("data");
+    expect("jaccard");
     // std::cerr << "[c++] receiving data" << std::endl;
     auto dataset = read_int_vectors_stdin();
     size_t universe = 0;
@@ -295,6 +296,8 @@ int main(void) {
       }
     }
     universe++;
+    std::cerr << "Loaded " << dataset.size() 
+              << " vectors from a universe of size " << universe << std::endl;
     send("ok");
         
 
