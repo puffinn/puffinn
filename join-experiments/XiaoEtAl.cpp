@@ -276,8 +276,7 @@ int main(void) {
         if (key == "k") {
             line >> k;
         } else {
-            std::cout << "sppv1 err unknown parameter " << key << std::endl;
-            return -1;
+          // ignore other parameters
         }
     }
     send("ok");

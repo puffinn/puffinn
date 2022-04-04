@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <omp.h>
 #include "protocol.hpp"
 #include "puffinn.hpp"
 #include "puffinn/performance.hpp"
@@ -113,6 +114,7 @@ int main(void) {
     float recall = 0.8;
     std::string method = "BF";
     unsigned long long space_usage = 100*MB;
+    int threads = -1;
     while (true) {
         std::getline(std::cin, protocol_line);
         // std::cerr << "[c++] setup line: " << protocol_line << std::endl;
@@ -131,10 +133,15 @@ int main(void) {
         } else if (key == "space_usage") {
             line >> space_usage;
             space_usage *= MB;
+        } else if (key == "threads") {
+            line >> threads;
         } else {
             std::cout << "sppv1 err unknown parameter " << key << std::endl;
             return -1;
         }
+    }
+    if (threads > 0) {
+        omp_set_num_threads(threads);
     }
     send("ok");
 

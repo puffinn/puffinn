@@ -41,6 +41,7 @@ MIGRATIONS = [
         k                  INTEGER NOT NULL,
         algorithm          TEXT NOT NULL,
         params             TEXT NOT NULL,
+        threads            INT,
         time_index_s       REAL NOT NULL,
         time_join_s        REAL NOT NULL,
         recall             REAL, -- may be null, we compute it afterwards
@@ -65,11 +66,13 @@ def get_db():
 def already_run(db, configuration):
     """Checks whether the given configuration is already present in the database"""
     configuration = configuration.copy()
+    configuration['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
     res = db.execute("""
     SELECT rowid FROM main 
     WHERE dataset = :dataset
       AND workload = :workload
+      AND threads = :threads
       AND k = :k
       AND algorithm = :algorithm
       AND params = :params
@@ -217,6 +220,7 @@ class SubprocessAlgorithm(Algorithm):
         self._send("setup")
         program = self._subprocess_handle()
         print("k", k, file=program.stdin)
+        print("threads", config.get("threads", 1), file=program.stdin)
         for key, v in params_dict.items():
             print(key, v, file=program.stdin)
         self._send("end")
@@ -381,6 +385,7 @@ def run_config(configuration):
         :k,
         :algorithm,
         :params,
+        :threads,
         :time_index_s,
         :time_join_s,
         :recall,
@@ -392,6 +397,7 @@ def run_config(configuration):
         'workload': config['workload'],
         'k': k,
         'algorithm': config['algorithm'],
+        'threads': config.get('threads', 1),
         'params': json.dumps(params, sort_keys=True),
         'time_index_s': time_index,
         'time_join_s': time_workload,
