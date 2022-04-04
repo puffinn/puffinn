@@ -123,7 +123,7 @@ def h5cat(path, stream=sys.stdout):
     print('catting cata from', path)
     file = h5py.File(path, "r")
     distance = file.attrs['distance']
-    if distance == 'cosine':
+    if distance == 'cosine' or distance == 'angular':
         for v in tqdm(file['train']):
             stream.write(text_encode_floats(v) + "\n")
             stream.flush()
@@ -289,10 +289,11 @@ class FaissHNSW(Algorithm):
         """Configure the parameters of the algorithm"""
         self.k = k
         self.params = params
+        faiss.omp_set_num_threads(params['threads'])
     def feed_data(self, h5py_path):
         """Pass the data to the algorithm"""
         f = h5py.File(h5py_path)
-        assert f.attrs['distance'] == 'cosine'
+        assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
         self.data = np.array(f['train'])
         f.close()
     def index(self):
@@ -635,11 +636,18 @@ if __name__ == "__main__":
     #     'algorithm': 'XiaoEtAl',
     #     'params': {}
     # })
-    run_config({
-        'dataset': 'glove-25',
-        'workload': 'global-top-k',
-        'k': 10,
-        'algorithm': 'PUFFINN',
-        'params': {}
-    })
+    threads = 56
+    for M in [4,8,16,32]:
+        for efConstruction in [100,200,400,800,1600]:
+            run_config({
+                'dataset': 'glove-25',
+                'workload': 'local-top-k',
+                'k': 10,
+                'algorithm': 'faiss-HNSW',
+                'threads': threads,
+                'params': {
+                    'M': M,
+                    'efConstruction': efConstruction
+                }
+            })
 
