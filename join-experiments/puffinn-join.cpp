@@ -151,7 +151,7 @@ int main(void) {
     std::cerr << "[c++] distance type "  << distance_type << std::endl;
     // we send the ack within the `run` function
 
-    if (distance_type == "cosine") {
+    if (distance_type == "cosine" || distance_type == "angular") {
         run<puffinn::CosineSimilarity, puffinn::SimHash, std::vector<float>>(
             k,
             recall,

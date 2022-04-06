@@ -89,7 +89,6 @@ def already_run(db, configuration):
     configuration['threads'] = configuration.get('threads', 1)
     configuration['params']['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
-    print(configuration)
     res = db.execute("""
     SELECT rowid FROM main 
     WHERE dataset = :dataset
@@ -99,7 +98,6 @@ def already_run(db, configuration):
       AND algorithm = :algorithm
       AND params = :params
     """, configuration).fetchall()
-    print(res)
     return len(res) > 0
 
 
@@ -173,7 +171,8 @@ def h5cat(path, stream=sys.stdout):
     file = h5py.File(path, "r")
     distance = file.attrs['distance']
     if distance == 'cosine' or distance == 'angular':
-        for v in tqdm(file['train']):
+        for v in tqdm(file['train'], leave=False):
+            v = v / np.linalg.norm(v)
             stream.write(text_encode_floats(v) + "\n")
             stream.flush()
             # print(text_encode_floats(v), file=stream)
@@ -724,6 +723,9 @@ if __name__ == "__main__":
     # })
 
     threads = 56
+
+    # ----------------------------------------------------------------------
+    # Faiss-HNSW
     for M in [4,8,16,32]:
         for efConstruction in [100,200,400,800,1600]:
             run_config({
@@ -737,6 +739,24 @@ if __name__ == "__main__":
                     'efConstruction': efConstruction
                 }
             })
+
+    # ----------------------------------------------------------------------
+    # PUFFINN local top-k
+    for recall in [0.8, 0.9]:
+        for space_usage in [256, 512, 1024]:
+            run_config({
+                'dataset': 'glove-25',
+                'workload': 'local-top-k',
+                'k': 10,
+                'algorithm': 'PUFFINN',
+                'threads': threads,
+                'params': {
+                    'method': 'LSHJoin',
+                    'recall': recall,
+                    'space_usage': space_usage
+                }
+            })
+
     with get_db() as db:
         compute_recalls(db)
 
