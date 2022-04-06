@@ -25,6 +25,7 @@ import hashlib
 import sqlite3
 import json
 import random
+import numba
 
 # Results database
 # ================
@@ -177,7 +178,9 @@ class Algorithm(object):
     def save_result(self, hdf5_file, path):
         result = self.result()
         if path in hdf5_file:
-            assert (np.array(hdf5_file[path]) == result).all()
+            existing = np.array(hdf5_file[path])
+            print(existing)
+            assert (existing == result).all()
             return
         hdf5_file[path] = result
     def times(self):
@@ -316,6 +319,39 @@ class FaissHNSW(Algorithm):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
+    
+
+class BruteForceLocal(Algorithm):
+    def __init__(self):
+        self.data = None
+        self.time_index = 0
+        self.time_run = None
+        self.result_indices = None
+    def setup(self, k, params):
+        self.k = k
+        pass
+    def feed_data(self, h5py_path):
+        f = h5py.File(h5py_path)
+        assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
+        self.data = np.array(f['train'])
+        self.data /= np.linalg.norm(self.data, axis=1)[:, np.newaxis]
+        f.close()
+    def index(self):
+        self.time_index = 0
+    def run(self):
+        print("  Top-{} join".format(self.k))
+        start = time.time()
+        index = faiss.IndexFlatIP(len(self.data[0]))
+        index.add(self.data)
+        self.result_indices = index.search(self.data, self.k+1)[1][:, 1:]
+        print(self.result_indices)
+        self.time_run = time.time() - start
+    def result(self):
+        return self.result_indices
+    def times(self):
+        """Returns the pair (index_time, workload_time)"""
+        return self.time_index, self.time_run
+
     
 # =============================================================================
 # Datasets
@@ -532,6 +568,7 @@ DATASETS = {
 ALGORITHMS = {
     'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"]),
     # Local top-k baselines
+    'BruteForceLocal': BruteForceLocal(),
     'faiss-HNSW': FaissHNSW(),
     # Global top-k baselines
     'XiaoEtAl': SubprocessAlgorithm(["build/XiaoEtAl"])
@@ -629,25 +666,25 @@ def run_config(configuration):
 if __name__ == "__main__":
     if not os.path.isdir("datasets"):
         os.mkdir("datasets")
-    # run_config({
-    #     'dataset': 'DBLP',
-    #     'workload': 'global-top-k',
-    #     'k': 10,
-    #     'algorithm': 'XiaoEtAl',
-    #     'params': {}
-    # })
-    threads = 56
-    for M in [4,8,16,32]:
-        for efConstruction in [100,200,400,800,1600]:
-            run_config({
-                'dataset': 'glove-25',
-                'workload': 'local-top-k',
-                'k': 10,
-                'algorithm': 'faiss-HNSW',
-                'threads': threads,
-                'params': {
-                    'M': M,
-                    'efConstruction': efConstruction
-                }
-            })
+    run_config({
+        'dataset': 'glove-25',
+        'workload': 'local-top-k',
+        'k': 1000,
+        'algorithm': 'BruteForceLocal',
+        'params': {}
+    })
+    # threads = 56
+    # for M in [4,8,16,32]:
+    #     for efConstruction in [100,200,400,800,1600]:
+    #         run_config({
+    #             'dataset': 'glove-25',
+    #             'workload': 'local-top-k',
+    #             'k': 10,
+    #             'algorithm': 'faiss-HNSW',
+    #             'threads': threads,
+    #             'params': {
+    #                 'M': M,
+    #                 'efConstruction': efConstruction
+    #             }
+    #         })
 
