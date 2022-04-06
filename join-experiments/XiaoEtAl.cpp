@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <string>
 #include <chrono>
+#include "protocol.hpp"
 #include "puffinn.hpp"
 
 struct Pair
@@ -95,10 +96,9 @@ float jaccard(const std::vector<uint32_t> * a, const std::vector<uint32_t> * b) 
     }
 }
 
-std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size_t k)
+std::vector<Pair> topk(std::vector<std::vector<uint32_t>> &dataset, size_t universe, size_t k)
 {
-  size_t n = dataset.get_size();
-  size_t universe = dataset.get_description().args;
+  size_t n = dataset.size();
 
   float sim_threshold = 0.0;
 
@@ -107,7 +107,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
   output.reserve(k + 1);
   for (size_t i = 1; i < k+1; i++)
   {
-    float s = jaccard(dataset[0], dataset[i]);
+    float s = jaccard(&dataset[0], &dataset[i]);
     output.push_back(Pair{0, i, s});
   }
   std::make_heap(output.begin(), output.end(), cmp_pairs);
@@ -118,7 +118,7 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
   events.reserve(n);
   for (size_t i = 0; i < n; i++)
   {
-    events.push_back(Event{i, 0, dataset[i]->size(), 1.0});
+    events.push_back(Event{i, 0, dataset[i].size(), 1.0});
   }
   std::make_heap(events.begin(), events.end(), cmp_events);
 
@@ -143,13 +143,13 @@ std::vector<Pair> topk(const puffinn::Dataset<puffinn::SetFormat> &dataset, size
       break; // End of the algorithm
     }
 
-    std::vector<uint32_t> *x = dataset[e.index];
+    std::vector<uint32_t> *x = &dataset[e.index];
     size_t size_x = x->size();
     uint32_t w = x->at(e.prefix);
     // Lookup in inverted index
     for (size_t idx : inverted_index.at(w))
     {
-      std::vector<uint32_t> *y = dataset[idx];
+      std::vector<uint32_t> *y = &dataset[idx];
       size_t size_y = y->size();
       if (e.index != idx) {
         if (size_x * sim_threshold <= size_y && size_y <= size_x / sim_threshold)
@@ -260,90 +260,64 @@ std::vector<Pair> all_2_all(const puffinn::Dataset<puffinn::SetFormat> &dataset,
   return out;
 }
 
-int main(int argc, char **argv)
-{
-  if (argc < 3) {
-    std::cerr << "USAGE: ./XiaoEtAl dataset topk (topk...)" << std::endl;
-    return 1;
-  }
-  auto dataset = read_sets(argv[1]);
-  std::cerr << "Read " << dataset.get_size() << " sets" << std::endl;
-
-  size_t nruns = 1;
-
-  std::cout << "| method | dataset |    k | elapsed (ms) | similarity |" << std::endl;
-  std::cout << "| :----- | :------ | ---: | -----------: | ---------: |" << std::endl;
-  for (int i = 2; i < argc; i++) {
-    size_t k = atoi(argv[i]);
-    auto top_pairs = topk(dataset, k);
-    auto k_th_pair = top_pairs.front();
-
-    // while (!top_pairs.empty()) {
-    //   std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
-    //   auto p = top_pairs.back();
-    //   top_pairs.pop_back();
-    //   std::cerr << "  " << p.a << " " << p.b << " @ " << p.similarity << std::endl;
-    // }
-    // printf("\n");
-
-    // take the average time
-    auto start = std::chrono::steady_clock::now();
-    for (size_t run=0; run < nruns; run++) {
-      topk(dataset, k);
+int main(void) {
+    // Read parameters
+    std::string protocol_line;
+    expect("setup");
+    unsigned int k = 10;
+    while (true) {
+        std::getline(std::cin, protocol_line);
+        if (protocol_line == "sppv1 end") {
+            break;
+        }
+        std::istringstream line(protocol_line);
+        std::string key;
+        line >> key;
+        if (key == "k") {
+            line >> k;
+        } else {
+          // ignore other parameters
+        }
     }
-    auto end = std::chrono::steady_clock::now();
-    double elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / nruns;
+    send("ok");
 
-    std::cout << "| Xiao et al. | " << argv[1] << " | " << k << " | " << elapsed_ms << " | " << k_th_pair.similarity << " |" << std::endl;
-
-    // If the dataset is small enough, check for correctness using the all-2-all algorithm
-    if (dataset.get_size() <= 10000) {
-      printf("Exact all to all computation");
-      auto check = all_2_all(dataset, k);
-
-      while (!check.empty()) {
-        std::pop_heap(check.begin(), check.end(), cmp_pairs);
-        auto p = check.back();
-        check.pop_back();
-        std::cerr << "  " << p.a << " " << p.b << " @ " << p.similarity << std::endl;
+    // Read the dataset
+    expect("data");
+    expect("jaccard");
+    // std::cerr << "[c++] receiving data" << std::endl;
+    auto dataset = read_int_vectors_stdin();
+    size_t universe = 0;
+    for (auto & v : dataset) {
+      for (auto x : v) {
+        if (x > universe) {
+          universe = x;
+        }
       }
     }
-  }
-  
-  auto universe_size = dataset.get_description().args;
-  puffinn::Index<puffinn::JaccardSimilarity, puffinn::MinHash1Bit> index(
-    universe_size,
-    1e9,
-    puffinn::TensoredHashArgs<puffinn::MinHash1Bit>());
+    universe++;
+    std::cerr << "Loaded " << dataset.size() 
+              << " vectors from a universe of size " << universe << std::endl;
+    send("ok");
+        
 
-  for (size_t i = 0; i < dataset.get_size(); i++) {
-    index.insert(*dataset[i]);
-  }
-  index.rebuild();
-  
-  for (int i = 2; i < argc; i++) {
-    size_t k = atoi(argv[i]);
-    auto buffer = index.global_lsh_join(k, 0.8);  
-    auto best_entries = buffer.best_entries();
+    expect("index");
+    // No index is built
+    send("ok");
 
-    std::cout << "| LSHJoin | " << argv[1] << " | " << k << " | " << 
-      puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total) * 1000 << " | " <<
-      buffer.smallest_value() << " | " << std::endl;
-    // for (int j = k - 1; j >= 0; j--) {
-    //   std::cout << best_entries[j].first.first << " " << best_entries[j].first.second << " @ " 
-    //     << best_entries[j].second << " " << std::endl;
-    // }
-  }
+    expect("workload");
+    auto top_pairs = topk(dataset, universe, k);
+    send("ok");
 
-  // for (int i = 2; i < argc; i++) {
-  //   size_t k = atoi(argv[i]);
-  //   auto buffer = index.global_bf_join(k);  
-  //   auto best_entries = buffer.best_entries();
-  //   std::cout << "| BF | " << argv[1] << " | " << k << " | " << 
-  //     puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total) * 1000 << " | " <<
-  //     buffer.smallest_value() << " | " << std::endl;
-  // }
+    expect("result");
+    // std::cerr << "[c++] results size " << res.size() << std::endl; 
+    while (!top_pairs.empty()) {
+      std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
+      auto p = top_pairs.back();
+      top_pairs.pop_back();
+      std::cout << p.a << " " << p.b << std::endl;
+    }
+    send("end");
 
 
-  return 0;
+    return 0;
 }

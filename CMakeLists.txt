@@ -12,13 +12,6 @@ if (OpenMP_FOUND)
     endif()
 endif()
 
-find_package(HDF5)
-if (HDF5_FOUND)
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${HDF5_CXX_FLAGS}")
-endif()
-
-add_subdirectory("external/HighFive")
-
 include_directories("include")
 
 add_executable(GloveExample "examples/glove.cpp")
@@ -26,17 +19,9 @@ if (OpenMP_FOUND)
     target_link_libraries(GloveExample ${OpenMP_CXX_LIBRARIES})
 endif()
 
-add_executable(GloveJoin "join-experiments/glove-join.cpp")
-if (OpenMP_FOUND)
-    target_link_libraries(GloveJoin ${OpenMP_CXX_LIBRARIES} HighFive)
-endif()
-
 add_executable(PuffinnJoin "join-experiments/puffinn-join.cpp")
 if (OpenMP_FOUND)
-    target_link_libraries(PuffinnJoin ${OpenMP_CXX_LIBRARIES} HighFive)
-endif()
-if (HDF5_FOUND)
-    target_link_libraries(PuffinnJoin HighFive)
+    target_link_libraries(PuffinnJoin ${OpenMP_CXX_LIBRARIES})
 endif()
 
 add_executable(XiaoEtAl "join-experiments/XiaoEtAl.cpp")

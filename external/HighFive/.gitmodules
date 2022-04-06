@@ -1,3 +1,0 @@
-[submodule "deps/hpc-coding-conventions"]
-	path = deps/hpc-coding-conventions
-	url = https://github.com/BlueBrain/hpc-coding-conventions.git

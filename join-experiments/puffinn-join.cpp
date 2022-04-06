@@ -4,118 +4,68 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include <highfive/H5Attribute.hpp>
-#include <highfive/H5File.hpp>
-#include <highfive/H5Easy.hpp>
+#include <omp.h>
+#include "protocol.hpp"
 #include "puffinn.hpp"
 #include "puffinn/performance.hpp"
 
-template <typename DataFormat>
-std::vector<DataFormat> load_dataset(char * hdf5_path);
+const unsigned long long MB = 1024*1024;
 
-template <>
-std::vector<std::vector<uint32_t>> load_dataset(char * hdf5_path) {
-    HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    std::vector<uint32_t> items = H5Easy::load<std::vector<uint32_t>>(file, "vectors/items");
-    std::vector<uint32_t> offsets = H5Easy::load<std::vector<uint32_t>>(file, "vectors/offsets");
-    std::vector<uint32_t> lengths = H5Easy::load<std::vector<uint32_t>>(file, "vectors/lengths");
+template<typename RawData> 
+std::pair<std::vector<RawData>, size_t> do_read_vectors();
 
-    std::vector<std::vector<uint32_t>> vectors;
-    for (size_t i = 0; i < offsets.size(); i++) {
-        auto start = items.begin() + offsets[i];
-        auto end = start + lengths[i];
-        std::vector<uint32_t> v(start, end);
-        vectors.push_back(v);
+template<> 
+std::pair<std::vector<std::vector<float>>, size_t> do_read_vectors<std::vector<float>>() {
+    auto data = read_vectors_stdin();
+    return { data, data[0].size() };
+}
+
+template<> 
+std::pair<std::vector<std::vector<uint32_t>>, size_t> do_read_vectors<std::vector<uint32_t>>() {
+    auto data = read_int_vectors_stdin();
+    size_t universe = 0;
+    for (auto & v : data) {
+      for (auto x : v) {
+        if (x > universe) {
+          universe = x;
+        }
+      }
     }
-    return vectors;
+    universe++;
+    return { data, universe };
 }
 
-template <>
-std::vector<std::vector<float>> load_dataset(char * hdf5_path) {
-    HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    std::vector<std::vector<float>> vectors = H5Easy::load<std::vector<std::vector<float>>>(file, "vectors");
-    return vectors;
-}
+template<typename Similarity, typename HashFn, typename RawData>
+void run(size_t k, float recall, std::string method, size_t space_usage) {
+    auto data_pair = do_read_vectors<RawData>();
+    auto dataset = data_pair.first;
+    auto dimensions = data_pair.second;
+    send("ok");
 
-std::string get_type(char * hdf5_path) {
-    HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    std::string type;
-    file.getAttribute("type").read(type);
-    return type;
-}
-
-template<typename DataFormat>
-size_t get_dimensions(char * hdf5_path);
-
-template<>
-size_t get_dimensions<std::vector<uint32_t>>(char * hdf5_path) {
-    HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    size_t universe;
-    file.getAttribute("universe").read(&universe);
-    puffinn::Dataset<puffinn::SetFormat> dataset(universe);
-    return universe;
-}
-
-template<>
-size_t get_dimensions<std::vector<float>>(char * hdf5_path) {
-    HighFive::File file(hdf5_path, HighFive::File::ReadOnly);
-    auto dimensions_attr = file.getAttribute("dimensions");
-    size_t dimensions;
-    dimensions_attr.read(&dimensions);
-    puffinn::Dataset<puffinn::UnitVectorFormat> dataset(dimensions);
-    return dimensions;
-}
-
-void print_stats() {
-    auto total_time =  puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Total);
-    auto search_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Search);
-    auto filter_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Filtering);
-    auto init_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::SearchInit);
-    auto indexing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Indexing);
-    auto rebuild_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Rebuilding);
-    auto sorting_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::Sorting);
-    auto index_hashing_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexHashing);
-    auto index_sketching_time = puffinn::g_performance_metrics.get_total_time(puffinn::Computation::IndexSketching);
-    std::cerr
-        << "indexing_time=" << indexing_time
-        << "\n\tsketching_time=" << index_sketching_time
-        << "\n\thashing_time=" << index_hashing_time
-        << "\n\trebuilding_time=" << rebuild_time
-        << "\n\tsorting_time" << sorting_time
-        << "\nsearch_time=" <<  search_time
-        << "\nfilter_time=" << filter_time
-        << "\ninit_time=" << init_time 
-        << "\ntotal_time=" << total_time << std::endl;
-}
-
-template <typename DataFormat, typename Similarity, typename HashFunction>
-void run(char * filename, uint32_t k, float recall, std::string method, size_t space_usage) {
-    auto start_time = std::chrono::steady_clock::now();
-    auto dataset = load_dataset<DataFormat>(filename);
-    size_t dimensions = get_dimensions<DataFormat>(filename);
-    auto end_time = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    std::cerr << "Data loaded in " << elapsed << " ms" << std::endl;
-
+    expect("index");
     // Construct the search index.
-    puffinn::Index<Similarity, HashFunction> index(
+    // Here we use the cosine similarity measure with the default hash functions.
+    // The index expects vectors with the same dimensionality as the first row of the dataset
+    // and will use at most the specified amount of memory.
+    puffinn::Index<Similarity, HashFn> index(
         dimensions,
         space_usage,
-        puffinn::TensoredHashArgs<HashFunction>()
+        // puffinn::TensoredHashArgs<puffinn::SimHash>()
+        puffinn::IndependentHashArgs<HashFn>()
     );
     // Insert each vector into the index.
-    for (auto v : dataset) {
-        index.insert(v);
-    }
-    start_time = std::chrono::steady_clock::now();
+    for (auto v : dataset) { index.insert(v); }
+    auto start_time = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
     index.rebuild(false);
-    end_time = std::chrono::steady_clock::now();
-    elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    auto throughput = ((float) dataset.size()) / (elapsed / 1000.0);
-    std::cerr << "Index built in " << elapsed << " ms " << throughput << " vecs/s" << std::endl;
+    auto end_time = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed = (end_time - start_time);
+    auto throughput = ((float) dataset.size()) / elapsed.count();
+    std::cerr << "Index built in " << elapsed.count() << " s " << throughput << " vecs/s" << std::endl;
+    send("ok");
 
+    expect("workload");
     start_time = std::chrono::steady_clock::now();
     std::cerr << "Computing the join using " << method << ". This can take a while." << std::endl;    
     std::vector<std::vector<uint32_t>>  res;
@@ -128,55 +78,92 @@ void run(char * filename, uint32_t k, float recall, std::string method, size_t s
     } else if (method == "LSHJoin") {
         res = index.lsh_join(k, recall);
     } else if (method == "LSHJoinGlobal") {
-        index.global_lsh_join(k, recall);
+        auto pairs = index.global_lsh_join(k, recall);
+        for (auto entry : pairs.best_indices()) {
+            std::vector<uint32_t> vpair;
+            vpair.push_back(entry.first);
+            vpair.push_back(entry.second);
+            res.push_back(vpair);
+        }
     }
     end_time = std::chrono::steady_clock::now();
-    auto elapsed_join = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    throughput = ((float) dataset.size()) / (elapsed_join / 1000.0);
-    std::cerr << "Join computed in " << elapsed_join << " ms " << throughput << " queries/s" << std::endl;
+    std::chrono::duration<double> elapsed_join = (end_time - start_time);
+    throughput = ((float) dataset.size()) / elapsed_join.count();
+    std::cerr << "Join computed in " << elapsed_join.count() << " s " << throughput << " queries/s" << std::endl;
+    send("ok");
 
-    print_stats();
+    expect("result");
+    // std::cerr << "[c++] results size " << res.size() << std::endl; 
+    for (auto v : res) {
+        for (auto i : v) {
+            std::cout << i << " ";
+        }
+        std::cout << std::endl;
+    }
+    send("end");
 
 }
 
-const unsigned long long MB = 1024*1024;
+int main(void) {
+    std::string protocol_line;
 
-// Takes the following arguments: filename (num_neighbors) (recall) (space_usage in MB)
-// The recall is a lower bound on the probability of finding each of the closest neighbors and is
-// between 0 and 1.
-int main(int argc, char* argv[]) {
-    if (argc != 6) {
-        printf("USAGE: PuffinnJoin filename k recall method space_usage");
-        return 1;
-    }
     // Read parameters
-    char * filename = argv[1];
-    uint32_t k = atoi(argv[2]);
-    float recall = atof(argv[3]);
-    std::string method = argv[4];
-    size_t space_usage = atoi(argv[5])*MB;
-
-    auto dataset_type = get_type(filename);
-
-    if (dataset_type == "dense") {
-        run<
-            std::vector<float>,
-            puffinn::CosineSimilarity, 
-            puffinn::SimHash
-        >(filename, k, recall, method, space_usage);
-    } else if (dataset_type == "sparse") {
-        run<
-            std::vector<uint32_t>,
-            puffinn::JaccardSimilarity,
-            puffinn::MinHash1Bit
-        >(filename, k, recall, method, space_usage);
-    } else {
-        printf("Unknown dataset type %s\n", dataset_type.c_str());
-        return 1;
+    expect("setup");
+    // std::cerr << "[c++] setup" << std::endl;
+    unsigned int k = 10;
+    float recall = 0.8;
+    std::string method = "BF";
+    unsigned long long space_usage = 100*MB;
+    int threads = -1;
+    while (true) {
+        std::getline(std::cin, protocol_line);
+        // std::cerr << "[c++] setup line: " << protocol_line << std::endl;
+        if (protocol_line == "sppv1 end") {
+            break;
+        }
+        std::istringstream line(protocol_line);
+        std::string key;
+        line >> key;
+        if (key == "k") {
+            line >> k;
+        } else if (key == "recall") {
+            line >> recall;
+        } else if (key == "method") {
+            line >> method;
+        } else if (key == "space_usage") {
+            line >> space_usage;
+            space_usage *= MB;
+        } else if (key == "threads") {
+            line >> threads;
+        } else {
+            std::cout << "sppv1 err unknown parameter " << key << std::endl;
+            return -1;
+        }
     }
+    if (threads > 0) {
+        omp_set_num_threads(threads);
+    }
+    send("ok");
 
+    // Read the dataset
+    expect("data");
+    std::string distance_type = protocol_read();
+    std::cerr << "[c++] distance type "  << distance_type << std::endl;
+    // we send the ack within the `run` function
 
-    return 0;
+    if (distance_type == "cosine" || distance_type == "angular") {
+        run<puffinn::CosineSimilarity, puffinn::SimHash, std::vector<float>>(
+            k,
+            recall,
+            method,
+            space_usage
+        );
+    } else if (distance_type == "jaccard") {
+        run<puffinn::JaccardSimilarity, puffinn::MinHash1Bit, std::vector<uint32_t>>(
+            k,
+            recall,
+            method,
+            space_usage
+        );
+    }
 }
-
-
