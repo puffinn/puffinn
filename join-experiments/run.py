@@ -27,6 +27,17 @@ import json
 import random
 import numba
 
+
+DIR_ENVVAR = 'TOPK_DIR'
+try:
+    BASE_DIR = os.environ[DIR_ENVVAR]
+except:
+    print("You should set the {} environment variable to a directory".format(DIR_ENVVAR))
+    sys.exit(1)
+
+DATASET_DIR = os.path.join(BASE_DIR, "datasets")
+RESULT_FILES_DIR = os.path.join(BASE_DIR, "output")
+
 # Results database
 # ================
 #
@@ -61,7 +72,7 @@ MIGRATIONS = [
 ]
 
 def get_db():
-    db = sqlite3.connect("join-results.db", isolation_level=None)
+    db = sqlite3.connect(os.path.join(BASE_DIR, "join-results.db"), isolation_level=None)
     current_version, = db.execute("pragma user_version;").fetchone()
     # Update the database schema, if needed
     for i, migration in enumerate(MIGRATIONS):
@@ -76,7 +87,9 @@ def already_run(db, configuration):
     """Checks whether the given configuration is already present in the database"""
     configuration = configuration.copy()
     configuration['threads'] = configuration.get('threads', 1)
+    configuration['params']['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
+    print(configuration)
     res = db.execute("""
     SELECT rowid FROM main 
     WHERE dataset = :dataset
@@ -86,6 +99,7 @@ def already_run(db, configuration):
       AND algorithm = :algorithm
       AND params = :params
     """, configuration).fetchall()
+    print(res)
     return len(res) > 0
 
 
@@ -594,9 +608,9 @@ def dblp(out_fn):
 # and datasets, to be used to run experiments
 
 DATASETS = {
-    'glove-25': lambda: glove('datasets/glove-25.hdf5', 25),
-    'random-jaccard-10k': lambda: random_jaccard('datasets/random-jaccard-10k.hdf5', n=10000),
-    'DBLP': lambda : dblp('datasets/dblp.hdf5')
+    'glove-25': lambda: glove(os.path.join(DATASET_DIR, 'glove-25.hdf5'), 25),
+    'random-jaccard-10k': lambda: random_jaccard(os.path.join(DATASET_DIR, 'random-jaccard-10k.hdf5'), n=10000),
+    'DBLP': lambda : dblp(os.path.join(DATASET_DIR, 'dblp.hdf5'))
 }
 
 ALGORITHMS = {
@@ -698,10 +712,9 @@ def run_config(configuration):
 
 
 if __name__ == "__main__":
-    if not os.path.isdir("datasets"):
-        os.mkdir("datasets")
-    with get_db() as db:
-        compute_recalls(db)
+    if not os.path.isdir(BASE_DIR):
+        os.mkdir(BASE_DIR)
+
     # run_config({
     #     'dataset': 'glove-25',
     #     'workload': 'local-top-k',
@@ -709,18 +722,21 @@ if __name__ == "__main__":
     #     'algorithm': 'BruteForceLocal',
     #     'params': {}
     # })
-    # threads = 56
-    # for M in [4,8,16,32]:
-    #     for efConstruction in [100,200,400,800,1600]:
-    #         run_config({
-    #             'dataset': 'glove-25',
-    #             'workload': 'local-top-k',
-    #             'k': 10,
-    #             'algorithm': 'faiss-HNSW',
-    #             'threads': threads,
-    #             'params': {
-    #                 'M': M,
-    #                 'efConstruction': efConstruction
-    #             }
-    #         })
+
+    threads = 56
+    for M in [4,8,16,32]:
+        for efConstruction in [100,200,400,800,1600]:
+            run_config({
+                'dataset': 'glove-25',
+                'workload': 'local-top-k',
+                'k': 10,
+                'algorithm': 'faiss-HNSW',
+                'threads': threads,
+                'params': {
+                    'M': M,
+                    'efConstruction': efConstruction
+                }
+            })
+    with get_db() as db:
+        compute_recalls(db)
 
