@@ -53,6 +53,10 @@ MIGRATIONS = [
         output_file        TEXT NOT NULL,
         hdf5_group         TEXT NOT NULL
     )
+    """,
+    """
+    CREATE VIEW baselines AS 
+    SELECT * FROM main WHERE algorithm = 'BruteForceLocal'
     """
 ]
 
@@ -83,6 +87,36 @@ def already_run(db, configuration):
       AND params = :params
     """, configuration).fetchall()
     return len(res) > 0
+
+
+def compute_recalls(db):
+    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
+    for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
+        print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
+        baseline = db.execute(
+            "SELECT output_file, hdf5_group FROM baselines WHERE dataset = :dataset AND workload = 'local-top-k';",
+            {"dataset": dataset}
+        ).fetchone()
+        if baseline is None:
+            print("Missing baseline")
+            continue
+        base_file, base_group = baseline
+        with h5py.File(base_file) as hfp:
+            baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
+        with h5py.File(output_file) as hfp:
+            actual_indices = np.array(hfp[hdf5_group]['local-top-{}'.format(k)])
+        recalls = [
+            np.mean(np.isin(actual_indices[i], baseline_indices[i]))
+            for i in tqdm(range(len(baseline_indices)), leave=False)
+        ]
+        avg_recall = np.mean(recalls)
+        db.execute(
+            """UPDATE main 
+                 SET recall = :recall
+               WHERE rowid = :rowid ;
+            """,
+            {"rowid": rowid, "recall": avg_recall}
+        )
 
 
 # =============================================================================
@@ -666,13 +700,15 @@ def run_config(configuration):
 if __name__ == "__main__":
     if not os.path.isdir("datasets"):
         os.mkdir("datasets")
-    run_config({
-        'dataset': 'glove-25',
-        'workload': 'local-top-k',
-        'k': 1000,
-        'algorithm': 'BruteForceLocal',
-        'params': {}
-    })
+    with get_db() as db:
+        compute_recalls(db)
+    # run_config({
+    #     'dataset': 'glove-25',
+    #     'workload': 'local-top-k',
+    #     'k': 1000,
+    #     'algorithm': 'BruteForceLocal',
+    #     'params': {}
+    # })
     # threads = 56
     # for M in [4,8,16,32]:
     #     for efConstruction in [100,200,400,800,1600]:
