@@ -354,7 +354,7 @@ namespace puffinn {
             FilterType filter_type = FilterType::Default
         ) const {
             if (filter_type != FilterType::None && filterer.size() != NUM_SKETCHES * dataset.get_size()) {
-                std::cout << "Filterer size " << filterer.size() << " dataset size " << dataset.get_size() << std::endl;
+                std::cerr << "Filterer size " << filterer.size() << " dataset size " << dataset.get_size() << std::endl;
                 throw std::invalid_argument("Asked for a filtered search, but sketches have not been computed in the `rebuild` call.");
             }
             auto desc = dataset.get_description();
@@ -400,18 +400,18 @@ namespace puffinn {
         bool check_active_counts(const std::vector<uint32_t>& indices, const std::vector<uint32_t>& segments,
             const bool* active, const std::vector<uint32_t>& active_counts) {
 
-            std::cout << active_counts.size() << std::endl;
-            std::cout << segments.size() - 1 << std::endl;
-            std::cout << segments[segments.size() - 1] << std::endl;
+            std::cerr << active_counts.size() << std::endl;
+            std::cerr << segments.size() - 1 << std::endl;
+            std::cerr << segments[segments.size() - 1] << std::endl;
             for (uint32_t j = 2; j < segments.size(); j++) {
                 auto left = segments[j - 1];
                 auto right = segments[j] - 1;
                 auto cnt = 0;
 
-                std::cout << j << " (" << left << " --- " << right << ") of " << segments.size() - 1 << std::endl;
+                std::cerr << j << " (" << left << " --- " << right << ") of " << segments.size() - 1 << std::endl;
                 for (size_t l = left; l <= right; l++) {
                     if (l <= 0 || l >= indices.size()) {
-                        std::cout << l << std::endl;
+                        std::cerr << l << std::endl;
                     }
                     if (active[indices[l]]) {
                         cnt++;
@@ -422,11 +422,11 @@ namespace puffinn {
                     }
                 }
                 if (cnt != active_counts[j-1]) {
-                    std::cout << "error at " << j << ": " << cnt << " " << active_counts[j-1] << std::endl;
+                    std::cerr << "error at " << j << ": " << cnt << " " << active_counts[j-1] << std::endl;
                     return false;
                 }
             }
-            std::cout << "Finished check!" << std::endl;
+            std::cerr << "Finished check!" << std::endl;
             return true;
         }
         
@@ -484,7 +484,7 @@ namespace puffinn {
                         for (auto s = r + 1; s != range.second; s++) {
                             auto R = *r;
                             auto S = *s;
-                            // std::cout << "Comparing " << R << " and " << S << std::endl;
+                            // std::cerr << "Comparing " << R << " and " << S << std::endl;
                             // comparisons++;
                             auto dist = TSim::compute_similarity(
                                 dataset[R], 
@@ -501,9 +501,9 @@ namespace puffinn {
             for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
                 // check current level
                 g_performance_metrics.start_timer(Computation::Search);
-                std::cout << "Checking level " << depth << std::endl;
+                std::cerr << "Checking level " << depth << std::endl;
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
-                std::cout << "Current k-th NN distance: " << maxbuffer.smallest_value() << std::endl;
+                std::cerr << "Current k-th NN distance: " << maxbuffer.smallest_value() << std::endl;
 
                 for (size_t i = 0; i < lsh_maps.size(); i++) {
                     new_segments[i].push_back(0);
@@ -532,7 +532,7 @@ namespace puffinn {
                 } 
                 g_performance_metrics.store_time(Computation::Search);   
 
-                std::cout << " Check termination." << std::endl;
+                std::cerr << " Check termination." << std::endl;
 
                 // remove inactive nodes
                 auto kth_similarity = maxbuffer.smallest_value();
@@ -544,7 +544,7 @@ namespace puffinn {
                     last_tables,
                     kth_similarity
                 );
-                std::cout <<  failure_prob << std::endl;
+                std::cerr <<  failure_prob << std::endl;
                 // g_performance_metrics.store_time(Computation::CheckTermination);
                 if (failure_prob <= 1-recall) {
                     break;
@@ -555,7 +555,7 @@ namespace puffinn {
                 prefix_mask <<= 1;
             }
             g_performance_metrics.store_time(Computation::Total);
-            std::cout << k << "-th largest similarity: " << maxbuffer.smallest_value() << std::endl;
+            std::cerr << k << "-th largest similarity: " << maxbuffer.smallest_value() << std::endl;
             return maxbuffer;//.best_indices();
         }
 
@@ -608,18 +608,8 @@ namespace puffinn {
             // indices in segments[i][j-1], ..., segments[i][j]-1 in lsh_maps[i]
             // share the same hash code.
             std::vector<std::vector<uint32_t>> segments (lsh_maps.size());
-            // Store count of active nodes in each segment.
-            // active_count[i][j] = number of active nodes in 
-            // segments[i][j-1], ..., segments[i][j]-1.
-            // std::vector<std::vector<uint32_t>> active_count (lsh_maps.size());
 
-            // node_positions[i][j]: position of node i in lsh_maps[j]
-            // std::vector<std::vector<uint32_t>> node_positions (dataset.get_size());
-
-
-            // int comparisons = 0;
             g_performance_metrics.start_timer(Computation::SearchInit);
-
 
             // Set up data structures. Create segments for initial hash codes.
             for (size_t i = 0; i < lsh_maps.size(); i++) {
@@ -627,9 +617,7 @@ namespace puffinn {
                 for (size_t j = 1; j < lsh_maps[i].hashes.size(); j++) {
                     if (lsh_maps[i].hashes[j] != lsh_maps[i].hashes[j-1]) {
                         segments[i].push_back(j);
-                        //active_count[i].push_back(j - segments[segments.size() - 2]);
                     }
-                    //node_positions[indices[j]].push_back(j);
                 }    
 
                 // Carry out initial all-to-all comparisons within a segment.
@@ -649,46 +637,20 @@ namespace puffinn {
                         }
                     }
                 }
-
-
-
             }
             g_performance_metrics.store_time(Computation::SearchInit);
-            std::cout << "Initial scan done" << std::endl;
+            std::cerr << "Initial scan done" << std::endl;
 
-            // std::cout << "Current segments: " << std::endl;
-            // for (auto& s: segments) {
-            //         std::cout << s << " ";
-            // }
-            // std::cout << std::endl;
-
-            // for (auto& idx: lsh_maps[0].indices) {
-            //      std::cout << idx << " ";
-            // }
-            // std::cout << std::endl;
-            // for (auto& h: lsh_maps[0].hashes) {
-            //     std::cout << h << " ";
-            // }
-            // std::cout << std::endl;
-
-            
             uint32_t prefix_mask = 0xffffffff;
             for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
                 // check current level
                 g_performance_metrics.start_timer(Computation::Search);
-                std::cout << "Checking level " << depth << std::endl;
-                std::cout << "Active nodes: " << active_nodes.size() << std::endl;
+                std::cerr << "Checking level " << depth << std::endl;
+                std::cerr << "Active nodes: " << active_nodes.size() << std::endl;
                 if (active_nodes.size() == 0) {
                     break;
                 }
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
-                // std::vector<std::vector<uint32_t>> new_active_count (lsh_maps.size());
-
-                // std::cout << "Current segments: " << std::endl;
-                // for (auto& s: segments[0]) {
-                //      std::cout << s << " ";
-                // }
-                // std::cout << std::endl;
 
                 for (size_t i = 0; i < lsh_maps.size(); i++) {
                     new_segments[i].push_back(0);
@@ -698,58 +660,31 @@ namespace puffinn {
                         auto left = (lsh_maps[i].hashes[segments[i][j - 1]]) & prefix_mask;
                         auto actual = (lsh_maps[i].hashes[segments[i][j]]) & prefix_mask;
                         if (left == actual) {
-                            // if (active_count[i][j - 1] == 0 && active_count[i][j] == 0) {
-                            //     continue;
-                            // }
                             for (auto r = segments[i][j-1]; r < segments[i][j]; r++) {
                                 for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
                                     auto R = lsh_maps[i].indices[r];
                                     auto S = lsh_maps[i].indices[s];
-                                    // std::cout << "Comparing " << R << " and " << S << std::endl;
-                                    // comparisons++;
                                     if (!active[R] && !active[S]) {
                                          continue;
                                     }
-                                    // auto sketch_idx = j%NUM_SKETCHES;
-                                    // auto r_sketch = filterer.get_sketch(R, sketch_idx);
-                                    // auto s_sketch = filterer.get_sketch(S, sketch_idx);
-                                
-                                    // if (filterer.passes_filter(r_sketch, s_sketch, filterer.get_max_sketch_diff(maxbuffers[R]->smallest_value()))) {
-                                        auto dist = TSim::compute_similarity(
-                                            dataset[R], 
-                                            dataset[S], 
-                                            dataset.get_description());
-                                        maxbuffers[R].insert(S, dist);
-                                        maxbuffers[S].insert(R, dist);
-                                    // }
-                                    // collisions[R]++;
-                                    // collisions[S]++;
+                                    auto dist = TSim::compute_similarity(
+                                        dataset[R], 
+                                        dataset[S], 
+                                        dataset.get_description());
+                                    maxbuffers[R].insert(S, dist);
+                                    maxbuffers[S].insert(R, dist);
                                 }
                             }
-                            // active_count[i][j] += active_count[i][j-1];                            
                         } else {
                             new_segments[i].push_back(segments[i][j]);
-                            // new_active_count[i].push_back(active_count[i][j-1]);
-
                         }
                     }
                 }    
                 g_performance_metrics.store_time(Computation::Search);   
 
-                // std::cout << new_segments.size() << std::endl;
-                // for (auto& h: lsh_maps[0].hashes) {
-                //      std::cout << (h & prefix_mask) << " ";
-                // }
-                // std::cout << std::endl;
-                
-                // for (auto& s: segments) {
-                //     std::cout << s << ";";
-                // }
-                // std::cout << std::endl;
-
                 std::unordered_set<uint32_t> new_active (active_nodes.size());
 
-                std::cout << " Removing inactive nodes." << std::endl;
+                std::cerr << " Removing inactive nodes." << std::endl;
                 
                 g_performance_metrics.start_timer(Computation::Filtering);
                 // remove inactive nodes
@@ -763,27 +698,10 @@ namespace puffinn {
                         last_tables,
                         kth_similarity
                     );
-                    // g_performance_metrics.store_time(Computation::CheckTermination);
                     if (failure_prob > 1-recall) {
-                        // g_performance_metrics.set_hash_length(depth);
-                        // g_performance_metrics.set_considered_maps(
-                            // (MAX_HASHBITS-depth+1)*lsh_maps.size());
-                        // return;
-                        //std::cout << kth_similarity << std::endl;
                         new_active.insert(v);
                     } else {
-                        //std::cout << failure_prob << std::endl;
                         active[v] = false;
-                        // std::cout << "Removing " << v << std::endl;
-                        // TODO: 0 seems to be used by the filler segments, but is also the first actual data point.
-                        // if (v == 0)
-                        //     continue;
-                        // for (size_t i = 0; i < node_positions[v].size(); i++) {
-                        //     auto pos = node_positions[v][i];
-                        //     auto it = std::upper_bound(new_segments[i].begin(), new_segments[i].end(), pos);
-                        //     auto j = (it - new_segments[i].begin());
-                        //     new_active_count[i][j-1]--;
-                        // }
                     }
                 }
                 g_performance_metrics.store_time(Computation::Filtering);
@@ -791,19 +709,12 @@ namespace puffinn {
                 // prepare next round
                 segments = new_segments;
                 active_nodes = new_active;
-                // active_count = new_active_count;
-                //check_active_counts(lsh_maps[0].indices, segments[0], active, active_count[0]);
                 prefix_mask <<= 1;
             }
-            // auto n = dataset.get_size();
-            // std::cout << "comparisons: " << comparisons << "; should be " << (n * (n - 1) / 2 + n) << std::endl;
             g_performance_metrics.store_time(Computation::Total);
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
                 auto best = maxbuffers[i].best_indices();
-                // if (best.size() != k) {
-                    // std::cout << "error! " << best.size() << " " << collisions[i] << std::endl;
-                // }
                 res.push_back(best);
             }
             return res;
