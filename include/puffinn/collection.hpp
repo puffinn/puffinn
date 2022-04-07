@@ -66,6 +66,16 @@ namespace puffinn {
         }
     };
 
+    size_t count_true(const std::vector<bool> & flags) {
+        size_t cnt = 0;
+        for (bool f : flags) {
+            if (f) {
+                cnt += 1;
+            }
+        }
+        return cnt;
+    }
+
     /// An index constructed over a dataset which supports approximate
     /// near-neighbor queries for a specific similarity measure.
     /// 
@@ -589,19 +599,25 @@ namespace puffinn {
             g_performance_metrics.new_query();
             g_performance_metrics.start_timer(Computation::Total);
             
-            // Allocate a buffer for each data point.
-            std::vector<MaxBuffer> maxbuffers;
+            size_t nthreads = omp_get_max_threads();
+            
+            // Allocate a buffer for each data point, for each thread
+            // std::vector<MaxBuffer> maxbuffers;
+            std::vector<std::vector<MaxBuffer>> tl_maxbuffers;
+            tl_maxbuffers.resize(nthreads);
 
             // Is a point still active?
-            bool active[dataset.get_size()];
-
-            // The set of active points.
-            std::unordered_set<uint32_t> active_nodes;
+            // This vector is only written to in the `remove inactive nodes` phase,
+            // so it is safe to parallelize reads in the repetitions 
+            // loop where we check distances
+            std::vector<bool> active;
+            active.resize(dataset.get_size());
             
             for (size_t i = 0; i < dataset.get_size(); i++) {
-                maxbuffers.push_back(MaxBuffer(k));
+                for (auto& maxbuffers : tl_maxbuffers) {
+                    maxbuffers.push_back(MaxBuffer(k));
+                }
                 active[i] = true;
-                active_nodes.insert(i);
             }
 
             // Store segments efficiently (?).
@@ -613,7 +629,11 @@ namespace puffinn {
 
             std::cerr << "Initial scan start" << std::endl;
             // Set up data structures. Create segments for initial hash codes.
+            #pragma omp parallel for
             for (size_t i = 0; i < lsh_maps.size(); i++) {
+                int tid = omp_get_thread_num();
+                // All of these `push_back`s are reducing parallelism, because calling malloc on
+                // on vector resize is a bottleneck that happens serially
                 segments[i].push_back(0);
                 for (size_t j = 1; j < lsh_maps[i].hashes.size(); j++) {
                     if (lsh_maps[i].hashes[j] != lsh_maps[i].hashes[j-1]) {
@@ -633,8 +653,8 @@ namespace puffinn {
                                 dataset[R], 
                                 dataset[S], 
                                 dataset.get_description());
-                            maxbuffers[R].insert(S, dist);
-                            maxbuffers[S].insert(R, dist);
+                            tl_maxbuffers[tid][R].insert(S, dist);
+                            tl_maxbuffers[tid][S].insert(R, dist);
                         }
                     }
                 }
@@ -647,13 +667,16 @@ namespace puffinn {
                 // check current level
                 g_performance_metrics.start_timer(Computation::Search);
                 std::cerr << "Checking level " << depth << std::endl;
-                std::cerr << "Active nodes: " << active_nodes.size() << std::endl;
-                if (active_nodes.size() == 0) {
+                size_t active_count = count_true(active);
+                std::cerr << "Active nodes: " << active_count << std::endl;
+                if (active_count == 0) {
                     break;
                 }
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
 
+                #pragma omp parallel for
                 for (size_t i = 0; i < lsh_maps.size(); i++) {
+                    int tid = omp_get_thread_num();
                     new_segments[i].push_back(0);
 
                     // check each pair of adjacent segments in lsh_maps[i] in ``depth``.
@@ -672,50 +695,61 @@ namespace puffinn {
                                         dataset[R], 
                                         dataset[S], 
                                         dataset.get_description());
-                                    maxbuffers[R].insert(S, dist);
-                                    maxbuffers[S].insert(R, dist);
+                                    tl_maxbuffers[tid][R].insert(S, dist);
+                                    tl_maxbuffers[tid][S].insert(R, dist);
                                 }
                             }
                         } else {
                             new_segments[i].push_back(segments[i][j]);
                         }
                     }
-                }    
+                }
+
+                // Here we combine the information gathered by the different threads
+                #pragma omp parallel for
+                for (uint32_t v = 0; v < dataset.get_size(); v++) {
+                    // accumulate all the information of a node in the first thread local buffer
+                    for(size_t tid = 1; tid < nthreads; tid++) {
+                        tl_maxbuffers[0][v].add_all(tl_maxbuffers[tid][v]);
+                    }
+                    // replace the information in all the buffers for the next iteration
+                    for(size_t tid = 1; tid < nthreads; tid++) {
+                        tl_maxbuffers[tid][v].replace(tl_maxbuffers[0][v]);
+                    }
+                }
+
                 g_performance_metrics.store_time(Computation::Search);   
 
-                std::unordered_set<uint32_t> new_active (active_nodes.size());
-
                 std::cerr << " Removing inactive nodes." << std::endl;
-                
                 g_performance_metrics.start_timer(Computation::Filtering);
                 // remove inactive nodes
-                for (auto& v: active_nodes) {
-                    auto kth_similarity = maxbuffers[v].smallest_value();
-                    auto table_idx = lsh_maps.size();
-                    auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
-                    float failure_prob = hash_source->failure_probability(
-                        depth,
-                        table_idx,
-                        last_tables,
-                        kth_similarity
-                    );
-                    if (failure_prob > 1-recall) {
-                        new_active.insert(v);
-                    } else {
-                        active[v] = false;
+                for (size_t v=0; v < dataset.get_size(); v++) {
+                    if (active[v]) {
+                        // we have reconciled the thread local max buffers, so we can look at the first
+                        auto kth_similarity = tl_maxbuffers[0][v].smallest_value();
+                        auto table_idx = lsh_maps.size();
+                        auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
+                        float failure_prob = hash_source->failure_probability(
+                            depth,
+                            table_idx,
+                            last_tables,
+                            kth_similarity
+                        );
+                        if (failure_prob <= 1-recall) {
+                            active[v] = false;
+                        }
                     }
                 }
                 g_performance_metrics.store_time(Computation::Filtering);
 
                 // prepare next round
                 segments = new_segments;
-                active_nodes = new_active;
                 prefix_mask <<= 1;
             }
             g_performance_metrics.store_time(Computation::Total);
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
-                auto best = maxbuffers[i].best_indices();
+                auto best = tl_maxbuffers[0][i].best_indices();
                 res.push_back(best);
             }
             return res;
@@ -1175,3 +1209,5 @@ namespace puffinn {
         }
     };
 }
+
+

@@ -75,6 +75,21 @@ namespace puffinn {
             return true;
         }
 
+        // Add all the best items stored in the `other` buffer
+        void add_all(MaxBuffer & other) {
+            other.filter();
+            for (unsigned i=0; i<other.inserted_values; i++) {
+                insert(other.data[i].first, other.data[i].second);
+            }
+        }
+
+        // Replace all the data items in this buffer with the best ones in the other buffer, without reallocating memory 
+        void replace(MaxBuffer & other) {
+            this->inserted_values = 0;
+            this->minval = 0.0;
+            this->add_all(other);
+        }
+
         // Retrieve the `k` entries with the highest associated values.
         std::vector<ResultPair> best_entries() {
             filter();
