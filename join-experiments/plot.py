@@ -26,32 +26,20 @@ def get_db():
 
 def get_pareto():
     def compute_pareto(gdata):
+        gdata = gdata.sort_values(['time_total_s'], ascending=True)
         points = np.vstack(
             (gdata['recall'], gdata['time_total_s'])
         ).transpose()
-        params = np.array(gdata['params'])
-        if points.shape[0] >= 2:
-            print(params)
-            points = np.concatenate((np.array([[1, 0]]), points), axis=0)
-            # with qhull_options='QG0' we instruct the function to
-            # compute the convex hull ignoring the first point, which
-            # is somehow the 'observation point'. The field `chull.good`
-            # will contain the points of the convex hull which are
-            # "visible" from said observation point
-            chull = ConvexHull(points, qhull_options='QG0')
-            pareto_front = points[chull.vertices[chull.good]]
-            pareto_recalls = pareto_front[:,0]
-            pareto_times = pareto_front[:,1]
-            pareto_params = params[chull.vertices[chull.good] - 1] # offset by 1 because we don't append a dummy point in front of the `params` array
-        else:
-            pareto_recalls = points[:,0]
-            pareto_times = points[:,1]
-            pareto_params = params
-        return pd.DataFrame({
-            'recall': pareto_recalls,
-            'time_total_s': pareto_times,
-            'params': pareto_params
-        })
+
+        # now we seek the vertices of the pareto 
+        # frontier to select from the `gdata` object
+        indices = []
+        last_r = 0
+        for i, (r, t) in enumerate(points):
+            if r > last_r:
+                last_r = r
+                indices.append(i)
+        return gdata[['recall', 'time_total_s', 'params']].iloc[indices]
 
     data = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
     pareto = data.groupby(['dataset', 'workload', 'k', 'algorithm', 'threads']).apply(compute_pareto)
@@ -59,9 +47,9 @@ def get_pareto():
 
 
 def plot_local_topk():
-    data = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
-    # data = get_pareto()
-    chart = alt.Chart(data).mark_point(filled=True).encode(
+    all = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
+    data = get_pareto()
+    chart_pareto = alt.Chart(data).mark_line(point=True).encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
         color='algorithm:N',
@@ -71,9 +59,23 @@ def plot_local_topk():
             'recall:Q',
             'time_total_s:Q'
         ]
-    ).properties(
+    )
+    chart_all = alt.Chart(all).mark_point().encode(
+        x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
+        y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
+        color='algorithm:N',
+        tooltip=[
+            'algorithm:N',
+            'params:N',
+            'recall:Q',
+            'time_total_s:Q'
+        ]
+    )
+    
+    chart = alt.layer(chart_all, chart_pareto).properties(
         width=1000,
-        height=600
+        height=600,
+        title="Recall vs. time"
     )
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
