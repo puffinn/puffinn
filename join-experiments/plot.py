@@ -64,7 +64,13 @@ def plot_local_topk():
     chart = alt.Chart(data).mark_point(filled=True).encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
-        color='algorithm:N'
+        color='algorithm:N',
+        tooltip=[
+            'algorithm:N',
+            'params:N',
+            'recall:Q',
+            'time_total_s:Q'
+        ]
     ).properties(
         width=1000,
         height=600
