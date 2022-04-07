@@ -47,9 +47,19 @@ def get_pareto():
 
 
 def plot_local_topk():
-    all = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
+    db = get_db()
+    all = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", db)
     data = get_pareto()
-    chart_pareto = alt.Chart(data).mark_line(point=True).encode(
+
+    datasets = [
+        t[0]
+        for t in db.execute("select distinct dataset from main order by 1;").fetchall()
+    ]
+
+    input_dropdown = alt.binding_select(options=datasets, name='Dataset: ')
+    selection = alt.selection_single(fields=['dataset'], bind=input_dropdown)
+
+    chart_pareto = alt.Chart(data).transform_filter(selection).mark_line(point=True).encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
         color='algorithm:N',
@@ -60,7 +70,7 @@ def plot_local_topk():
             'time_total_s:Q'
         ]
     )
-    chart_all = alt.Chart(all).mark_point().encode(
+    chart_all = alt.Chart(all).transform_filter(selection).mark_point().encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
         color='algorithm:N',
@@ -76,7 +86,7 @@ def plot_local_topk():
         width=1000,
         height=600,
         title="Recall vs. time"
-    )
+    ).add_selection(selection)
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
 
