@@ -113,6 +113,28 @@ void bench_index_build(const std::vector<std::vector<float>> & dataset) {
     // do_build_index<puffinn::FHTCrossPolytopeHash, puffinn::TensoredHashArgs<puffinn::FHTCrossPolytopeHash>>(&bencher, "FHT CrossPolytope tensored", dataset, 534*MB); // 70.5 MB
 }
 
+
+void bench_join(const std::vector<std::vector<float>> & dataset) {
+    auto dimensions = dataset[0].size(); 
+    auto index_memory = 100*MB;
+
+    puffinn::Index<puffinn::CosineSimilarity> index(
+        dimensions,
+        index_memory
+    );
+
+    for (auto v : dataset) { index.insert(v); }
+    index.rebuild(false);
+
+    auto bencher = ankerl::nanobench::Bench()
+        .title("LSH join")
+        .timeUnit(std::chrono::milliseconds(1), "ms");
+
+    bencher.run("LSH join", [&] {
+        index.lsh_join(10, 0.9);
+    });
+}
+
 void bench_query(const std::vector<std::vector<float>> & dataset) {
     auto dimensions = dataset[0].size(); 
 
@@ -217,8 +239,9 @@ int main(int argc, char ** argv) {
 
     // bench_api_simhash(dataset);
     // bench_query(dataset);
-    bench_index_build(dataset);
+    // bench_index_build(dataset);
     // bench_hash(dataset);
+    bench_join(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {

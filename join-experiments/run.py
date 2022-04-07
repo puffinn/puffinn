@@ -171,7 +171,7 @@ def h5cat(path, stream=sys.stdout):
     file = h5py.File(path, "r")
     distance = file.attrs['distance']
     if distance == 'cosine' or distance == 'angular':
-        for v in tqdm(file['train'], leave=False):
+        for v in tqdm(file['train'][:1000000], leave=False):
             v = v / np.linalg.norm(v)
             stream.write(text_encode_floats(v) + "\n")
             stream.flush()
@@ -200,6 +200,7 @@ class Algorithm(object):
         self.feed_data(h5py_path)
         self.index()
         self.run()
+        sys.exit(1)
         self.save_result(output_file, output_hdf5_path)
         return self.times()
     def setup(self, k, params):
@@ -743,7 +744,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------
     # PUFFINN local top-k
     for recall in [0.8, 0.9]:
-        for space_usage in [4096]:
+        for space_usage in [1024]:
             run_config({
                 'dataset': 'glove-25',
                 'workload': 'local-top-k',

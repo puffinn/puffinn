@@ -611,6 +611,7 @@ namespace puffinn {
 
             g_performance_metrics.start_timer(Computation::SearchInit);
 
+            std::cerr << "Initial scan start" << std::endl;
             // Set up data structures. Create segments for initial hash codes.
             for (size_t i = 0; i < lsh_maps.size(); i++) {
                 segments[i].push_back(0);
@@ -639,7 +640,7 @@ namespace puffinn {
                 }
             }
             g_performance_metrics.store_time(Computation::SearchInit);
-            std::cerr << "Initial scan done" << std::endl;
+            std::cerr << "Initial scan done (" << g_performance_metrics.get_total_time(Computation::SearchInit) << ")" << std::endl;
 
             uint32_t prefix_mask = 0xffffffff;
             for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
