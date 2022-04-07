@@ -743,13 +743,13 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------
     # PUFFINN local top-k
     for recall in [0.8, 0.9]:
-        for space_usage in [1024]:
+        for space_usage in [1024, 2048, 4096]:
             run_config({
                 'dataset': 'glove-25',
                 'workload': 'local-top-k',
                 'k': 10,
                 'algorithm': 'PUFFINN',
-                'threads': 56,
+                'threads': threads,
                 'params': {
                     'method': 'LSHJoin',
                     'recall': recall,
