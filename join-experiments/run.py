@@ -750,7 +750,7 @@ if __name__ == "__main__":
                 'workload': 'local-top-k',
                 'k': 10,
                 'algorithm': 'PUFFINN',
-                'threads': threads,
+                'threads': 32,
                 'params': {
                     'method': 'LSHJoin',
                     'recall': recall,
