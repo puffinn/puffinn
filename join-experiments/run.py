@@ -113,6 +113,8 @@ def compute_recalls(db):
             print("Missing baseline")
             continue
         base_file, base_group = baseline
+        base_file = os.path.join(BASE_DIR, base_file)
+        output_file = os.path.join(BASE_DIR, output_file)
         with h5py.File(base_file) as hfp:
             baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
         with h5py.File(output_file) as hfp:
@@ -641,7 +643,7 @@ def get_output_file(configuration):
     for key, value in params_list:
         params_string += key.replace(" ", "") + str(value).replace(" ", "")
     params_hash = hashlib.sha256(params_string.encode('utf-8')).hexdigest()
-    h5obj = h5py.File(fname, 'a')
+    h5obj = h5py.File(os.path.join(BASE_DIR, fname), 'a')
     group = h5obj.require_group(params_hash)
     for key, value in params_list:
         group.attrs[key] = value
