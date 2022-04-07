@@ -632,8 +632,6 @@ namespace puffinn {
             #pragma omp parallel for
             for (size_t i = 0; i < lsh_maps.size(); i++) {
                 int tid = omp_get_thread_num();
-                // All of these `push_back`s are reducing parallelism, because calling malloc on
-                // on vector resize is a bottleneck that happens serially
                 segments[i].push_back(0);
                 for (size_t j = 1; j < lsh_maps[i].hashes.size(); j++) {
                     if (lsh_maps[i].hashes[j] != lsh_maps[i].hashes[j-1]) {
@@ -705,18 +703,20 @@ namespace puffinn {
                     }
                 }
 
+                auto reconcile_start = std::chrono::steady_clock::now();
                 // Here we combine the information gathered by the different threads
                 #pragma omp parallel for
                 for (uint32_t v = 0; v < dataset.get_size(); v++) {
-                    // accumulate all the information of a node in the first thread local buffer
+                    // accumulate all the information of a node in the first thread local buffer,
+                    // which will be used for all subsequent evaluations about deactivation
+                    // of single nodes
                     for(size_t tid = 1; tid < nthreads; tid++) {
                         tl_maxbuffers[0][v].add_all(tl_maxbuffers[tid][v]);
                     }
-                    // replace the information in all the buffers for the next iteration
-                    for(size_t tid = 1; tid < nthreads; tid++) {
-                        tl_maxbuffers[tid][v].replace(tl_maxbuffers[0][v]);
-                    }
                 }
+                auto reconcile_end = std::chrono::steady_clock::now();
+                double reconcile_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(reconcile_end - reconcile_start).count();
+                std::cerr << " . reconcile in " << reconcile_elapsed << std::endl;
 
                 g_performance_metrics.store_time(Computation::Search);   
 
@@ -747,6 +747,13 @@ namespace puffinn {
                 prefix_mask <<= 1;
             }
             g_performance_metrics.store_time(Computation::Total);
+            std::cerr << "total time " << g_performance_metrics.get_total_time(Computation::Total)
+                      << " of which: " 
+                      << std::endl << "  init:      " << g_performance_metrics.get_total_time(Computation::SearchInit)
+                      << std::endl << "  search:    " << g_performance_metrics.get_total_time(Computation::Search)
+                      << std::endl << "  filtering: " << g_performance_metrics.get_total_time(Computation::Filtering)
+                      << std::endl << "  max buffer filter: " << g_performance_metrics.get_total_time(Computation::MaxbufferFilter)
+                      << std::endl;
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
                 auto best = tl_maxbuffers[0][i].best_indices();

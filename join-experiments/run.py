@@ -171,7 +171,7 @@ def h5cat(path, stream=sys.stdout):
     file = h5py.File(path, "r")
     distance = file.attrs['distance']
     if distance == 'cosine' or distance == 'angular':
-        for v in tqdm(file['train'][:1000000], leave=False):
+        for v in tqdm(file['train'][:100000], leave=False):
             v = v / np.linalg.norm(v)
             stream.write(text_encode_floats(v) + "\n")
             stream.flush()

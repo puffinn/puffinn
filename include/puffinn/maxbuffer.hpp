@@ -79,7 +79,13 @@ namespace puffinn {
         void add_all(MaxBuffer & other) {
             other.filter();
             for (unsigned i=0; i<other.inserted_values; i++) {
-                insert(other.data[i].first, other.data[i].second);
+                auto & o = other.data[i];
+                if ( !insert(o.first, o.second) ) {
+                    // we stop inserting as soon as we hit the first
+                    // value smaller than the minimum of `this`, since the
+                    // iteration on `other` is by decreasing values
+                    break;
+                }
             }
         }
 
