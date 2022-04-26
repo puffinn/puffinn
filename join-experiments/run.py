@@ -68,7 +68,11 @@ MIGRATIONS = [
     """
     CREATE VIEW baselines AS 
     SELECT * FROM main WHERE algorithm = 'BruteForceLocal'
+    """,
     """
+    CREATE VIEW baselines_global AS 
+    SELECT * FROM main WHERE algorithm = 'XiaoEtAl'
+    """,
 ]
 
 def get_db():
@@ -102,6 +106,7 @@ def already_run(db, configuration):
 
 
 def compute_recalls(db):
+    # Local topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
         print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
@@ -131,6 +136,39 @@ def compute_recalls(db):
             """,
             {"rowid": rowid, "recall": avg_recall}
         )
+    # Global topk
+    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'global-top-k';").fetchall()
+    for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
+        print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
+        baseline = db.execute(
+            "SELECT output_file, hdf5_group FROM baselines_global WHERE dataset = :dataset AND k = :k AND workload = 'global-top-k';",
+            {"dataset": dataset, "k": k}
+        ).fetchone()
+        if baseline is None:
+            print("Missing baseline")
+            continue
+        print(baseline)
+        base_file, base_group = baseline
+        base_file = os.path.join(BASE_DIR, base_file)
+        output_file = os.path.join(BASE_DIR, output_file)
+        with h5py.File(base_file) as hfp:
+            baseline_pairs = set(map(tuple, hfp[base_group]['global-top-{}'.format(k)]))
+        with h5py.File(output_file) as hfp:
+            actual_pairs = set(map(tuple, hfp[hdf5_group]['global-top-{}'.format(k)]))
+        matched = 0
+        for pair in baseline_pairs:
+            if pair in actual_pairs:
+                matched += 1
+        recall = matched / len(baseline_pairs)
+        db.execute(
+            """UPDATE main 
+                 SET recall = :recall
+               WHERE rowid = :rowid ;
+            """,
+            {"rowid": rowid, "recall": recall}
+        )
+            
+
 
 
 # =============================================================================
@@ -574,7 +612,7 @@ def dblp(out_fn):
     if os.path.isfile(out_fn):
         return out_fn
     url = "https://dblp.uni-trier.de/xml/dblp.xml.gz"
-    local = "datasets/dblp.xml.gz"
+    local = os.path.join(DATASET_DIR, "dblp.xml.gz")
     download(url, local)
     hdf5_file = h5py.File(out_fn, "w")
 
@@ -727,37 +765,48 @@ if __name__ == "__main__":
     threads = 56
 
     # ----------------------------------------------------------------------
+    # Xiao et al. global top-k
+    for k in [1, 10, 100, 1000]:
+        run_config({
+            'dataset': 'DBLP',
+            'workload': 'global-top-k',
+            'k': k,
+            'algorithm': 'XiaoEtAl',
+            'params': {}
+        })
+
+    # ----------------------------------------------------------------------
     # Faiss-HNSW
-    for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-        for efConstruction in [100,200,400,800,1600]:
-            run_config({
-                'dataset': 'glove-25',
-                'workload': 'local-top-k',
-                'k': 10,
-                'algorithm': 'faiss-HNSW',
-                'threads': threads,
-                'params': {
-                    'M': M,
-                    'efConstruction': efConstruction
-                }
-            })
+    # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
+    #     for efConstruction in [100,200,400,800,1600]:
+    #         run_config({
+    #             'dataset': 'glove-25',
+    #             'workload': 'local-top-k',
+    #             'k': 10,
+    #             'algorithm': 'faiss-HNSW',
+    #             'threads': threads,
+    #             'params': {
+    #                 'M': M,
+    #                 'efConstruction': efConstruction
+    #             }
+    #         })
 
     # ----------------------------------------------------------------------
     # PUFFINN local top-k
-    for recall in [0.8, 0.9]:
-        for space_usage in [1024, 2048, 4096]:
-            run_config({
-                'dataset': 'glove-25',
-                'workload': 'local-top-k',
-                'k': 10,
-                'algorithm': 'PUFFINN',
-                'threads': threads,
-                'params': {
-                    'method': 'LSHJoin',
-                    'recall': recall,
-                    'space_usage': space_usage
-                }
-            })
+    # for recall in [0.8, 0.9]:
+    #     for space_usage in [1024, 2048, 4096]:
+    #         run_config({
+    #             'dataset': 'glove-25',
+    #             'workload': 'local-top-k',
+    #             'k': 10,
+    #             'algorithm': 'PUFFINN',
+    #             'threads': threads,
+    #             'params': {
+    #                 'method': 'LSHJoin',
+    #                 'recall': recall,
+    #                 'space_usage': space_usage
+    #             }
+    #         })
 
     with get_db() as db:
         compute_recalls(db)
