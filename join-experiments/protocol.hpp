@@ -1,17 +1,23 @@
 #pragma once
 
 #include <string>
+#include "highfive/H5Easy.hpp"
 
 std::string expect(std::string what) {
     // std::cerr << "[c++] Expecting to receive `sppv1 " << what << "`" << std::endl;
+    std::string head = "sppv1 " + what;
     std::string protocol_line;
     std::getline(std::cin, protocol_line);
     // std::cerr << "[c++] received`" << protocol_line << "`" << std::endl;
-    if (protocol_line != "sppv1 " + what) {
+    if (protocol_line.find(head) != 0) {
         std::cout << "sppv1 err" << std::endl;
         throw "invalid message received";
     }
-    return protocol_line.substr(6);
+    std::string toret = protocol_line.substr(head.size());
+    while (toret.size() > 0 && toret.at(0) == ' ') {
+        toret.erase(0, 1); // strip the first character
+    }
+    return toret;
 }
 
 std::string protocol_read() {
@@ -25,6 +31,29 @@ std::string protocol_read() {
 
 void send(std::string what) {
     std::cout << "sppv1 " << what << std::endl;
+}
+
+std::vector<std::vector<float>> read_float_vectors_hdf5() {
+    std::string path = expect("path");
+    std::cerr << "[c++] path" << path << std::endl;
+    H5Easy::File file(path, H5Easy::File::ReadOnly);
+    std::vector<std::vector<float>> data = H5Easy::load<std::vector<std::vector<float>>>(file, "/train");
+    return data;
+}
+
+std::vector<std::vector<uint32_t>> read_int_vectors_hdf5() {
+    std::string path = expect("path");
+    H5Easy::File file(path, H5Easy::File::ReadOnly);
+    std::vector<uint32_t> data = H5Easy::load<std::vector<uint32_t>>(file, "/train");
+    std::vector<size_t> sizes = H5Easy::load<std::vector<size_t>>(file, "/size_train");
+    size_t offset = 0;
+    std::vector<std::vector<uint32_t>> res;
+    for (size_t s : sizes) {
+        std::vector<uint32_t> elem(data.begin() + offset, data.begin() + offset + s);
+        res.push_back(elem);
+        offset += s;
+    }
+    return res;
 }
 
 std::vector<std::vector<float>> read_vectors_stdin() {

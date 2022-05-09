@@ -328,12 +328,11 @@ class SubprocessAlgorithm(Algorithm):
         self._expect("ok", "setup failed")
         
     def feed_data(self, h5py_path):
-        print("Feeding data using pipes from", h5py_path)
         distance = h5py.File(h5py_path).attrs['distance']
         self._send("data")
         self._send(distance)
         program = self._subprocess_handle()
-        h5cat(h5py_path, program.stdin)
+        self._send("path " + h5py_path)
         self._expect("ok", "population phase failed")
 
     def index(self):
@@ -904,7 +903,7 @@ if __name__ == "__main__":
     for recall in [0.8, 0.9, 0.99]:
         for space_usage in [1024, 2048, 4096]:
             run_config({
-                'dataset': 'NYTimes',
+                'dataset': 'glove-25',
                 'workload': 'local-top-k',
                 'k': 10,
                 'algorithm': 'PUFFINN',
