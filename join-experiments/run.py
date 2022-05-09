@@ -26,7 +26,8 @@ import sqlite3
 import json
 import random
 import numba
-
+from urllib.request import urlopen
+from urllib.request import urlretrieve
 
 DIR_ENVVAR = 'TOPK_DIR'
 try:
@@ -298,16 +299,18 @@ class SubprocessAlgorithm(Algorithm):
 
     # param result_collector: object that accepts lines with a method `add_line`,
     # one by one, and converts them to at global or local top-k result
-    def __init__(self, command_w_args):
+    def __init__(self, command_w_args, profile=False):
         self.command_w_args = command_w_args
         self._program = None
         self.index_time = None
         self.workload_time = None
+        self.profile = profile
 
     def _subprocess_handle(self):
         if self._program is None:
+            cmdline = self.command_w_args if not self.profile else ['flamegraph', '--root', '--'] + self.command_w_args
             self._program = subprocess.Popen(
-                self.command_w_args,
+                cmdline,
                 bufsize=1,  # line buffering
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -421,7 +424,9 @@ class BruteForceLocal(Algorithm):
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
         self.data = np.array(f['train'])
-        self.data /= np.linalg.norm(self.data, axis=1)[:, np.newaxis]
+        norms = np.linalg.norm(self.data, axis=1)[:, np.newaxis]
+        assert np.sum(norms == 0.0) == 0
+        self.data /= norms
         f.close()
     def index(self):
         self.time_index = 0
@@ -464,6 +469,13 @@ def write_sparse(out_fn, data):
     f.create_dataset('size_train', (len(data),), dtype='i')[:] = list(map(len, data))
     f.close()
 
+def write_dense(out_fn, vecs):
+    hfile = h5py.File(out_fn, "w")
+    hfile.attrs["dimensions"] = len(vecs[0])
+    hfile.attrs["type"] = "dense"
+    hfile.attrs["distance"] = "cosine"
+    hfile.create_dataset("train", shape=(len(vecs), len(vecs[0])), dtype=vecs[0].dtype, data=vecs, compression="gzip")
+    hfile.close()
 
 # Adapted from ann-benchmarks
 def random_jaccard(out_fn, n=10000, size=50, universe=80):
@@ -494,12 +506,97 @@ def glove(out_fn, dims):
             np.array([float(t) for t in line.split()[1:]])
             for line in zp.open(z_fn)
         ])
-        hfile = h5py.File(out_fn, "w")
-        hfile.attrs["dimensions"] = len(vecs[0])
-        hfile.attrs["type"] = "dense"
-        hfile.attrs["distance"] = "cosine"
-        hfile.create_dataset("train", shape=(len(vecs), len(vecs[0])), dtype=vecs[0].dtype, data=vecs, compression="gzip")
-        hfile.close()
+        write_dense(out_fn, vecs)
+    return out_fn
+
+# Adapted from https://github.com/erikbern/ann-benchmarks.
+# Creates a 'deep image descriptor' dataset using the 'deep10M.fvecs' sample
+# from http://sites.skoltech.ru/compvision/noimi/. The download logic is adapted
+# from the script https://github.com/arbabenko/GNOIMI/blob/master/downloadDeep1B.py.
+def deep_image(out_fn):
+    if os.path.isfile(out_fn):
+        return out_fn
+    yadisk_key = 'https://yadi.sk/d/11eDCm7Dsn9GA'
+    response = urlopen('https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=' \
+        + yadisk_key + '&path=/deep10M.fvecs')
+    response_body = response.read().decode("utf-8")
+
+    dataset_url = response_body.split(',')[0][9:-1]
+    filename = os.path.join(DATASET_DIR, 'deep-image.fvecs')
+    download(dataset_url, filename)
+
+    # In the fvecs file format, each vector is stored by first writing its
+    # length as an integer, then writing its components as floats.
+    fv = np.fromfile(filename, dtype=np.float32)
+    dim = fv.view(np.int32)[0]
+    fv = fv.reshape(-1, dim + 1)[:, 1:]
+    write_dense(out_fn, fv)
+    return out_fn
+
+
+# adapted from https://github.com/erikbern/ann-benchmarks.
+def transform_bag_of_words(filename, n_dimensions, out_fn):
+    import gzip
+    from scipy.sparse import lil_matrix
+    from sklearn.feature_extraction.text import TfidfTransformer
+    from sklearn import random_projection
+    with gzip.open(filename, 'rb') as f:
+        file_content = f.readlines()
+        entries = int(file_content[0])
+        words = int(file_content[1])
+        file_content = file_content[3:]  # strip first three entries
+        print("building matrix...")
+        A = lil_matrix((entries, words))
+        for e in file_content:
+            doc, word, cnt = [int(v) for v in e.strip().split()]
+            A[doc - 1, word - 1] = cnt
+        print("normalizing matrix entries with tfidf...")
+        B = TfidfTransformer().fit_transform(A)
+        print("reducing dimensionality...")
+        C = random_projection.GaussianRandomProjection(
+            n_components=n_dimensions).fit_transform(B)
+        print("Shape of C", C.shape)
+        norms = np.linalg.norm(C, axis=1)
+        print("Shape of norms", norms.shape)
+        # remove entries with 0 norm
+        D = np.delete(C, np.where(norms == 0.0)[0], axis=0).astype(np.float32)
+        print("Shape of D", D.shape)
+        write_dense(out_fn, D)
+        return out_fn
+
+
+# Adapted from https://github.com/erikbern/ann-benchmarks.
+def nytimes(out_fn, n_dimensions):
+    if os.path.isfile(out_fn):
+        return out_fn
+    fn = os.path.join(DATASET_DIR, 'nytimes_{}.txt.gz'.format(n_dimensions))
+    download('https://archive.ics.uci.edu/ml/machine-learning-databases/bag-of-words/docword.nytimes.txt.gz', fn)
+    transform_bag_of_words(fn, n_dimensions, out_fn)
+    return out_fn
+
+
+# Adapted from https://github.com/erikbern/ann-benchmarks.
+def kosarak(out_fn):
+    if os.path.isfile(out_fn):
+        return out_fn
+    import gzip
+    local_fn = 'kosarak.dat.gz'
+    # only consider sets with at least min_elements many elements
+    min_elements = 20
+    url = 'http://fimi.uantwerpen.be/data/%s' % local_fn
+    download(url, local_fn)
+
+    X = []
+    dimension = 0
+    with gzip.open('kosarak.dat.gz', 'r') as f:
+        content = f.readlines()
+        # preprocess data to find sets with more than 20 elements
+        # keep track of used ids for reenumeration
+        for line in content:
+            if len(line.split()) >= min_elements:
+                X.append(list(map(int, line.split())))
+                dimension = max(dimension, max(X[-1]) + 1)
+    write_sparse(out_fn, X)
     return out_fn
 
 
@@ -649,7 +746,10 @@ def dblp(out_fn):
 DATASETS = {
     'glove-25': lambda: glove(os.path.join(DATASET_DIR, 'glove-25.hdf5'), 25),
     'random-jaccard-10k': lambda: random_jaccard(os.path.join(DATASET_DIR, 'random-jaccard-10k.hdf5'), n=10000),
-    'DBLP': lambda : dblp(os.path.join(DATASET_DIR, 'dblp.hdf5'))
+    'DBLP': lambda : dblp(os.path.join(DATASET_DIR, 'dblp.hdf5')),
+    'Kosarak': lambda: kosarak(os.path.join(DATASET_DIR, 'kosarak.hdf5')),
+    'DeepImage': lambda: deep_image(os.path.join(DATASET_DIR, 'deep_image.hdf5')),
+    'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
 }
 
 ALGORITHMS = {
@@ -754,6 +854,14 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
 
+    run_config({
+        'dataset': 'NYTimes',
+        'workload': 'local-top-k',
+        'k': 1000,
+        'algorithm': 'BruteForceLocal',
+        'params': {}
+    })
+    
     # run_config({
     #     'dataset': 'glove-25',
     #     'workload': 'local-top-k',
@@ -766,14 +874,14 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # Xiao et al. global top-k
-    for k in [1, 10, 100, 1000]:
-        run_config({
-            'dataset': 'DBLP',
-            'workload': 'global-top-k',
-            'k': k,
-            'algorithm': 'XiaoEtAl',
-            'params': {}
-        })
+    # for k in [1, 10, 100, 1000]:
+    #     run_config({
+    #         'dataset': 'DBLP',
+    #         'workload': 'global-top-k',
+    #         'k': k,
+    #         'algorithm': 'XiaoEtAl',
+    #         'params': {}
+    #     })
 
     # ----------------------------------------------------------------------
     # Faiss-HNSW
@@ -793,20 +901,33 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # PUFFINN local top-k
-    # for recall in [0.8, 0.9]:
-    #     for space_usage in [1024, 2048, 4096]:
-    #         run_config({
-    #             'dataset': 'glove-25',
-    #             'workload': 'local-top-k',
-    #             'k': 10,
-    #             'algorithm': 'PUFFINN',
-    #             'threads': threads,
-    #             'params': {
-    #                 'method': 'LSHJoin',
-    #                 'recall': recall,
-    #                 'space_usage': space_usage
-    #             }
-    #         })
+    for recall in [0.8, 0.9, 0.99]:
+        for space_usage in [1024, 2048, 4096]:
+            run_config({
+                'dataset': 'NYTimes',
+                'workload': 'local-top-k',
+                'k': 10,
+                'algorithm': 'PUFFINN',
+                'threads': threads,
+                'params': {
+                    'method': 'LSHJoin',
+                    'recall': recall,
+                    'space_usage': space_usage
+                }
+            })
+
+    # run_config({
+    #     'dataset': 'glove-25',
+    #     'workload': 'local-top-k',
+    #     'k': 5,
+    #     'algorithm': 'PUFFINN',
+    #     'threads': threads,
+    #     'params': {
+    #         'method': 'LSHJoin',
+    #         'recall': 0.9,
+    #         'space_usage': 1024
+    #     }
+    # })
 
     with get_db() as db:
         compute_recalls(db)
