@@ -167,4 +167,5 @@ int main(void) {
             space_usage
         );
     }
+    std::cerr << "[c++] done" << std::endl;
 }

@@ -14,6 +14,8 @@ import zipfile
 from tqdm import tqdm
 import numpy as np
 import time
+import sklearn
+import sklearn.preprocessing
 import subprocess
 import h5py
 import sys
@@ -121,14 +123,18 @@ def compute_recalls(db):
         base_file, base_group = baseline
         base_file = os.path.join(BASE_DIR, base_file)
         output_file = os.path.join(BASE_DIR, output_file)
+        print("output file", output_file, "rowid", rowid, "group", hdf5_group)
         with h5py.File(base_file) as hfp:
             baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
         with h5py.File(output_file) as hfp:
             actual_indices = np.array(hfp[hdf5_group]['local-top-{}'.format(k)])
-        recalls = [
-            np.mean(np.isin(actual_indices[i], baseline_indices[i]))
+        assert baseline_indices.shape == actual_indices.shape
+        recalls = np.array([
+            np.mean(np.isin(baseline_indices[i], actual_indices[i]))
             for i in tqdm(range(len(baseline_indices)), leave=False)
-        ]
+        ])
+        with h5py.File(output_file, 'r+') as hfp:
+            hfp[hdf5_group]['local-top-{}-recalls'.format(k)] = recalls
         avg_recall = np.mean(recalls)
         db.execute(
             """UPDATE main 
@@ -317,6 +323,10 @@ class SubprocessAlgorithm(Algorithm):
                 universal_newlines=True)
         return self._program
 
+    def _wait_for_completion(self):
+        self._subprocess_handle().wait()
+        self._program = None
+
     def setup(self, k, params_dict):
         print("Setup")
         self._send("setup")
@@ -362,10 +372,68 @@ class SubprocessAlgorithm(Algorithm):
                 break
             rows.append(np.array([int(i) for i in line]))
         rows = np.array(rows)
+        print("Waiting for subprocess to finish")
+        self._wait_for_completion()
         return rows
 
     def times(self):
         return self.index_time, self.workload_time
+
+
+class FaissIVF(Algorithm):
+    def __init__(self):
+        self.faiss_index = None
+        self.k = None
+        self.params = None
+        self.data = None
+        self.time_index = None
+        self.time_run = None
+        self.result_indices = None
+    def setup(self, k, params):
+        """Configure the parameters of the algorithm"""
+        self.k = k
+        self.params = params
+        faiss.omp_set_num_threads(params['threads'])
+    def feed_data(self, h5py_path):
+        """Pass the data to the algorithm"""
+        f = h5py.File(h5py_path)
+        assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
+        self.data = np.array(f['train'])
+        f.close()
+    def index(self):
+        """Setup the index, if any. This is timed."""
+        print("  Building index")
+        start = time.time()
+
+        n_list = self.params["n_list"]
+        n_probe = self.params["n_probe"]
+
+        X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
+
+        if X.dtype != np.float32:
+            X = X.astype(np.float32)
+
+        self.quantizer = faiss.IndexFlatL2(X.shape[1])
+        index = faiss.IndexIVFFlat(
+            self.quantizer, X.shape[1], n_list, faiss.METRIC_L2)
+        index.nprobe = n_probe
+        index.train(X)
+        index.add(X)
+        self.faiss_index = index
+        self.time_index = time.time() - start
+    def run(self):
+        """Run the workload. This is timed."""
+        print("  Top-{} join".format(self.k))
+        start = time.time()
+        _dists, idxs = self.faiss_index.search(self.data, self.k+1)
+        self.time_run = time.time() - start
+        self.result_indices = idxs[:,1:]
+    def result(self):
+        return self.result_indices
+    def times(self):
+        """Returns the pair (index_time, workload_time)"""
+        return self.time_index, self.time_run
+    
 
 
 class FaissHNSW(Algorithm):
@@ -752,12 +820,13 @@ DATASETS = {
 }
 
 ALGORITHMS = {
-    'PUFFINN': SubprocessAlgorithm(["build/PuffinnJoin"]),
+    'PUFFINN': lambda: SubprocessAlgorithm(["build/PuffinnJoin"]),
     # Local top-k baselines
-    'BruteForceLocal': BruteForceLocal(),
-    'faiss-HNSW': FaissHNSW(),
+    'BruteForceLocal': lambda: BruteForceLocal(),
+    'faiss-HNSW': lambda: FaissHNSW(),
+    'faiss-IVF': lambda: FaissIVF(),
     # Global top-k baselines
-    'XiaoEtAl': SubprocessAlgorithm(["build/XiaoEtAl"])
+    'XiaoEtAl': lambda: SubprocessAlgorithm(["build/XiaoEtAl"])
 }
 
 # =============================================================================
@@ -795,7 +864,7 @@ def run_config(configuration):
     output_file, group, output = get_output_file(configuration)
     hdf5_file = DATASETS[configuration['dataset']]()
     assert hdf5_file is not None
-    algo = ALGORITHMS[configuration['algorithm']]
+    algo = ALGORITHMS[configuration['algorithm']]()
     params = configuration['params']
     params['threads'] = configuration.get('threads', 1)
     k = configuration['k']
@@ -853,6 +922,9 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
 
+    with get_db() as db:
+        compute_recalls(db)
+
     run_config({
         'dataset': 'NYTimes',
         'workload': 'local-top-k',
@@ -882,38 +954,55 @@ if __name__ == "__main__":
     #         'params': {}
     #     })
 
-    # ----------------------------------------------------------------------
-    # Faiss-HNSW
-    # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-    #     for efConstruction in [100,200,400,800,1600]:
-    #         run_config({
-    #             'dataset': 'glove-25',
-    #             'workload': 'local-top-k',
-    #             'k': 10,
-    #             'algorithm': 'faiss-HNSW',
-    #             'threads': threads,
-    #             'params': {
-    #                 'M': M,
-    #                 'efConstruction': efConstruction
-    #             }
-    #         })
+    for dataset in ['NYTimes', 'glove-25']:
+        # ----------------------------------------------------------------------
+        # Faiss-HNSW
+        for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
+            for efConstruction in [100,400,1600]:
+                run_config({
+                    'dataset': 'NYTimes',
+                    'workload': 'local-top-k',
+                    'k': 10,
+                    'algorithm': 'faiss-HNSW',
+                    'threads': threads,
+                    'params': {
+                        'M': M,
+                        'efConstruction': efConstruction
+                    }
+                })
 
-    # ----------------------------------------------------------------------
-    # PUFFINN local top-k
-    for recall in [0.8, 0.9, 0.99]:
-        for space_usage in [1024, 2048, 4096]:
-            run_config({
-                'dataset': 'glove-25',
-                'workload': 'local-top-k',
-                'k': 10,
-                'algorithm': 'PUFFINN',
-                'threads': threads,
-                'params': {
-                    'method': 'LSHJoin',
-                    'recall': recall,
-                    'space_usage': space_usage
-                }
-            })
+        # ----------------------------------------------------------------------
+        # Faiss-IVF
+        for n_list in [32, 64, 128, 256]:
+            for n_probe in [1, 5, 10, 50]:
+                run_config({
+                    'dataset': 'NYTimes',
+                    'workload': 'local-top-k',
+                    'k': 10,
+                    'algorithm': 'faiss-IVF',
+                    'threads': threads,
+                    'params': {
+                        'n_list': n_list,
+                        'n_probe': n_probe
+                    }
+                })
+
+        # ----------------------------------------------------------------------
+        # PUFFINN local top-k
+        for recall in [0.8, 0.9, 0.99]:
+            for space_usage in [1024, 2048, 4096]:
+                run_config({
+                    'dataset': 'NYTimes',
+                    'workload': 'local-top-k',
+                    'k': 10,
+                    'algorithm': 'PUFFINN',
+                    'threads': threads,
+                    'params': {
+                        'method': 'LSHJoin',
+                        'recall': recall,
+                        'space_usage': space_usage
+                    }
+                })
 
     # run_config({
     #     'dataset': 'glove-25',
