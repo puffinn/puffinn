@@ -958,9 +958,9 @@ if __name__ == "__main__":
         # ----------------------------------------------------------------------
         # Faiss-HNSW
         for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-            for efConstruction in [100,400,1600]:
+            for efConstruction in [100]:
                 run_config({
-                    'dataset': 'NYTimes',
+                    'dataset': dataset,
                     'workload': 'local-top-k',
                     'k': 10,
                     'algorithm': 'faiss-HNSW',
@@ -976,7 +976,7 @@ if __name__ == "__main__":
         for n_list in [32, 64, 128, 256]:
             for n_probe in [1, 5, 10, 50]:
                 run_config({
-                    'dataset': 'NYTimes',
+                    'dataset': dataset,
                     'workload': 'local-top-k',
                     'k': 10,
                     'algorithm': 'faiss-IVF',
@@ -992,7 +992,7 @@ if __name__ == "__main__":
         for recall in [0.8, 0.9, 0.99]:
             for space_usage in [1024, 2048, 4096]:
                 run_config({
-                    'dataset': 'NYTimes',
+                    'dataset': dataset,
                     'workload': 'local-top-k',
                     'k': 10,
                     'algorithm': 'PUFFINN',

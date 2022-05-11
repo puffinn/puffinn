@@ -490,8 +490,8 @@ namespace puffinn {
                 // We leave out the first and last segment since it's filled up with filler elements.
                 for (size_t j = 2; j < segments[i].size() - 1; j++) { 
                     auto range = lsh_maps[i].get_segment(segments[i][j-1], segments[i][j]);
-                    for (auto r = range.first; r != range.second; r++) {
-                        for (auto s = r + 1; s != range.second; s++) {
+                    for (auto r = range.first; r < range.second; r++) {
+                        for (auto s = r + 1; s < range.second; s++) {
                             auto R = *r;
                             auto S = *s;
                             // std::cerr << "Comparing " << R << " and " << S << std::endl;
@@ -643,8 +643,8 @@ namespace puffinn {
                 // We leave out the first and last segment since it's filled up with filler elements.
                 for (size_t j = 2; j < segments[i].size() - 1; j++) { 
                     auto range = lsh_maps[i].get_segment(segments[i][j-1], segments[i][j]);
-                    for (auto r = range.first; r != range.second; r++) {
-                        for (auto s = r; s != range.second; s++) {
+                    for (auto r = range.first; r < range.second; r++) {
+                        for (auto s = r+1; s < range.second; s++) {
                             auto R = *r;
                             auto S = *s;
                             auto dist = TSim::compute_similarity(
@@ -686,6 +686,10 @@ namespace puffinn {
                                 for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
                                     auto R = lsh_maps[i].indices[r];
                                     auto S = lsh_maps[i].indices[s];
+                                    if (R == S) {
+                                        // skip trivial matches
+                                        continue;
+                                    }
                                     if (!active[R] && !active[S]) {
                                          continue;
                                     }
