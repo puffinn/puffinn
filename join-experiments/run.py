@@ -462,6 +462,7 @@ class FaissHNSW(Algorithm):
         start = time.time()
         self.faiss_index = faiss.IndexHNSWFlat(len(self.data[0]), self.params["M"])
         self.faiss_index.hnsw.efConstruction = self.params["efConstruction"]
+        self.faiss_index.hnsw.efSearch = self.params["efSearch"]
         self.faiss_index.add(self.data)
         self.time_index = time.time() - start
     def run(self):
@@ -957,19 +958,22 @@ if __name__ == "__main__":
     for dataset in ['NYTimes', 'glove-25']:
         # ----------------------------------------------------------------------
         # Faiss-HNSW
-        for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-            for efConstruction in [100]:
-                run_config({
-                    'dataset': dataset,
-                    'workload': 'local-top-k',
-                    'k': 10,
-                    'algorithm': 'faiss-HNSW',
-                    'threads': threads,
-                    'params': {
-                        'M': M,
-                        'efConstruction': efConstruction
-                    }
-                })
+        # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
+        for M in [48, 64]:
+            for efConstruction in [100, 500]:
+                for efSearch in [10, 800]:
+                    run_config({
+                        'dataset': dataset,
+                        'workload': 'local-top-k',
+                        'k': 10,
+                        'algorithm': 'faiss-HNSW',
+                        'threads': threads,
+                        'params': {
+                            'M': M,
+                            'efConstruction': efConstruction,
+                            'efSearch': efSearch,
+                        }
+                    })
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
@@ -989,20 +993,22 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        for recall in [0.8, 0.9, 0.99]:
-            for space_usage in [1024, 2048, 4096]:
-                run_config({
-                    'dataset': dataset,
-                    'workload': 'local-top-k',
-                    'k': 10,
-                    'algorithm': 'PUFFINN',
-                    'threads': threads,
-                    'params': {
-                        'method': 'LSHJoin',
-                        'recall': recall,
-                        'space_usage': space_usage
-                    }
-                })
+        for hash_source in ['Independent', 'Tensored']:
+            for recall in [0.8, 0.9, 0.99]:
+                for space_usage in [1024, 2048, 4096]:
+                    run_config({
+                        'dataset': dataset,
+                        'workload': 'local-top-k',
+                        'k': 10,
+                        'algorithm': 'PUFFINN',
+                        'threads': threads,
+                        'params': {
+                            'method': 'LSHJoin',
+                            'recall': recall,
+                            'space_usage': space_usage,
+                            'hash_source': hash_source
+                        }
+                    })
 
     # run_config({
     #     'dataset': 'glove-25',

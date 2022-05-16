@@ -1,3 +1,5 @@
+set dotenv-load
+
 # produce a flamegraph.svg file
 profile: install-flamegraph
   cmake --build build --config RelWithDebInfo --target Bench
@@ -18,6 +20,10 @@ test:
 bench:
   cmake --build build --config RelWithDebInfo --target Bench
   env OMP_NUM_THREADS=56 build/Bench glove.25d.100k.txt >> bench_results.txt
+
+# open the sqlite result database
+sqlite:
+  sqlite3 $TOPK_DIR/join-results.db
 
 run:
   cmake --build build --config RelWithDebInfo --target PuffinnJoin

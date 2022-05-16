@@ -24,7 +24,7 @@ def get_db():
     return db
 
 
-def get_pareto():
+def get_pareto(data):
     def compute_pareto(gdata):
         gdata = gdata.sort_values(['time_total_s'], ascending=True)
         points = np.vstack(
@@ -41,15 +41,18 @@ def get_pareto():
                 indices.append(i)
         return gdata[['recall', 'time_total_s', 'params']].iloc[indices]
 
-    data = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
+    # data = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", get_db())
     pareto = data.groupby(['dataset', 'workload', 'k', 'algorithm', 'threads']).apply(compute_pareto)
     return pareto.reset_index()
 
 
 def plot_local_topk():
     db = get_db()
-    all = pd.read_sql("select dataset, workload, k, algorithm, params, threads, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", db)
-    data = get_pareto()
+    all = pd.read_sql("select dataset, workload, k, algorithm, params, threads, json_extract(params, '$.hash_source') as hash_source, recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s from main;", db)
+    all = all.fillna(value={'hash_source': ''})
+    all['algorithm'] = all['algorithm'] + all['hash_source']
+    print(all)
+    data = get_pareto(all)
 
     datasets = [
         t[0]
@@ -57,7 +60,7 @@ def plot_local_topk():
     ]
 
     input_dropdown = alt.binding_select(options=datasets, name='Dataset: ')
-    selection = alt.selection_single(fields=['dataset'], bind=input_dropdown)
+    selection = alt.selection_single(fields=['dataset'], bind=input_dropdown, empty='none')
 
     chart_pareto = alt.Chart(data).transform_filter(selection).mark_line(point=True).encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),

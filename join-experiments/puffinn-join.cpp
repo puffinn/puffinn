@@ -36,7 +36,7 @@ std::pair<std::vector<std::vector<uint32_t>>, size_t> do_read_vectors<std::vecto
     return { data, universe };
 }
 
-template<typename Similarity, typename HashFn, typename RawData>
+template<typename Similarity, typename HashSourceArgs, typename HashFn, typename RawData>
 void run(size_t k, float recall, std::string method, size_t space_usage) {
     auto data_pair = do_read_vectors<RawData>();
     auto dataset = data_pair.first;
@@ -52,7 +52,7 @@ void run(size_t k, float recall, std::string method, size_t space_usage) {
         dimensions,
         space_usage,
         // puffinn::TensoredHashArgs<puffinn::SimHash>()
-        puffinn::IndependentHashArgs<HashFn>()
+        HashSourceArgs()
     );
     // Insert each vector into the index.
     for (auto v : dataset) { index.insert(v); }
@@ -114,6 +114,7 @@ int main(void) {
     unsigned int k = 10;
     float recall = 0.8;
     std::string method = "BF";
+    std::string hash_source = "Independent"; // in alternative, Tensored
     unsigned long long space_usage = 100*MB;
     int threads = -1;
     while (true) {
@@ -131,6 +132,8 @@ int main(void) {
             line >> recall;
         } else if (key == "method") {
             line >> method;
+        } else if (key == "hash_source") {
+            line >> hash_source;
         } else if (key == "space_usage") {
             line >> space_usage;
             space_usage *= MB;
@@ -141,6 +144,12 @@ int main(void) {
             return -1;
         }
     }
+
+    // if (hash_source != "Independent" || hash_source != "Tensored") {
+    //     std::cerr << "Unknwon hash source `" << hash_source << "`" << std::endl;
+    //     send("err");
+    //     return -1; 
+    // }
     if (threads > 0) {
         omp_set_num_threads(threads);
     }
@@ -153,19 +162,37 @@ int main(void) {
     // we send the ack within the `run` function
 
     if (distance_type == "cosine" || distance_type == "angular") {
-        run<puffinn::CosineSimilarity, puffinn::SimHash, std::vector<float>>(
-            k,
-            recall,
-            method,
-            space_usage
-        );
+        if (hash_source == "Independent") {
+            run<puffinn::CosineSimilarity, puffinn::IndependentHashArgs<puffinn::SimHash>, puffinn::SimHash, std::vector<float>>(
+                k,
+                recall,
+                method,
+                space_usage
+            );
+        } else if (hash_source == "Tensored") {
+            run<puffinn::CosineSimilarity, puffinn::TensoredHashArgs<puffinn::SimHash>, puffinn::SimHash, std::vector<float>>(
+                k,
+                recall,
+                method,
+                space_usage
+            );
+        } 
     } else if (distance_type == "jaccard") {
-        run<puffinn::JaccardSimilarity, puffinn::MinHash1Bit, std::vector<uint32_t>>(
-            k,
-            recall,
-            method,
-            space_usage
-        );
+        if (hash_source == "Independent") {
+            run<puffinn::JaccardSimilarity, puffinn::IndependentHashArgs<puffinn::MinHash1Bit>, puffinn::MinHash1Bit, std::vector<uint32_t>>(
+                k,
+                recall,
+                method,
+                space_usage
+            );
+        } else if (hash_source == "Tensored") {
+            run<puffinn::JaccardSimilarity, puffinn::TensoredHashArgs<puffinn::MinHash1Bit>, puffinn::MinHash1Bit, std::vector<uint32_t>>(
+                k,
+                recall,
+                method,
+                space_usage
+            );
+        }
     }
     std::cerr << "[c++] done" << std::endl;
 }
