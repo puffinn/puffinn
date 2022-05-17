@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-# This script handles the execution of the join experiments 
+# This script handles the execution of the join experiments
 # in two different modes:
 #  - global top-k
 #  - local top-k
-# 
-# Datasets are taken from ann-benchmarks or created ad-hoc from 
+#
+# Datasets are taken from ann-benchmarks or created ad-hoc from
 # other sources (e.g. DBLP).
 
 import gzip
@@ -50,7 +50,7 @@ RESULT_FILES_DIR = os.path.join(BASE_DIR, "output")
 # From these HDF5 files we compute the recall of the various algorithms, which
 # are then cached in the database for fast query.
 
-# This is a sequence of SQL statements that set up different 
+# This is a sequence of SQL statements that set up different
 # versions of the database.
 MIGRATIONS = [
     """
@@ -69,11 +69,11 @@ MIGRATIONS = [
     )
     """,
     """
-    CREATE VIEW baselines AS 
+    CREATE VIEW baselines AS
     SELECT * FROM main WHERE algorithm = 'BruteForceLocal'
     """,
     """
-    CREATE VIEW baselines_global AS 
+    CREATE VIEW baselines_global AS
     SELECT * FROM main WHERE algorithm = 'XiaoEtAl'
     """,
 ]
@@ -97,7 +97,7 @@ def already_run(db, configuration):
     configuration['params']['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
     res = db.execute("""
-    SELECT rowid FROM main 
+    SELECT rowid FROM main
     WHERE dataset = :dataset
       AND workload = :workload
       AND threads = :threads
@@ -137,7 +137,7 @@ def compute_recalls(db):
             hfp[hdf5_group]['local-top-{}-recalls'.format(k)] = recalls
         avg_recall = np.mean(recalls)
         db.execute(
-            """UPDATE main 
+            """UPDATE main
                  SET recall = :recall
                WHERE rowid = :rowid ;
             """,
@@ -168,13 +168,13 @@ def compute_recalls(db):
                 matched += 1
         recall = matched / len(baseline_pairs)
         db.execute(
-            """UPDATE main 
+            """UPDATE main
                  SET recall = :recall
                WHERE rowid = :rowid ;
             """,
             {"rowid": rowid, "recall": recall}
         )
-            
+
 
 
 
@@ -233,7 +233,7 @@ def h5cat(path, stream=sys.stdout):
             v = data[offset:offset+size]
             if len(v) > 0:
                 txt = text_encode_ints(v)
-                stream.write(txt + "\n") 
+                stream.write(txt + "\n")
                 stream.flush()
         print(file=stream)
     else:
@@ -265,7 +265,7 @@ class Algorithm(object):
         """Return the result as a two-dimensional numpy array.
         The way it is interpreted depends on the application.
         For global top-k join, it is the list of top-k pairs of indices.
-        For local top-k join, it is the list of 
+        For local top-k join, it is the list of
         nearest neighbors for each element.
         """
         pass
@@ -280,7 +280,7 @@ class Algorithm(object):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         pass
-    
+
 
 class SubprocessAlgorithm(Algorithm):
     """Manages the lifecycle of an algorithm which does not provide
@@ -336,7 +336,7 @@ class SubprocessAlgorithm(Algorithm):
             print(key, v, file=program.stdin)
         self._send("end")
         self._expect("ok", "setup failed")
-        
+
     def feed_data(self, h5py_path):
         distance = h5py.File(h5py_path).attrs['distance']
         self._send("data")
@@ -433,7 +433,7 @@ class FaissIVF(Algorithm):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
-    
+
 
 
 class FaissHNSW(Algorithm):
@@ -460,14 +460,18 @@ class FaissHNSW(Algorithm):
         """Setup the index, if any. This is timed."""
         print("  Building index")
         start = time.time()
-        self.faiss_index = faiss.IndexHNSWFlat(len(self.data[0]), self.params["M"])
+        X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
+
+        if X.dtype != np.float32:
+            X = X.astype(np.float32)
+        self.faiss_index = faiss.IndexHNSWFlat(len(X[0]), self.params["M"])
         self.faiss_index.hnsw.efConstruction = self.params["efConstruction"]
-        self.faiss_index.hnsw.efSearch = self.params["efSearch"]
-        self.faiss_index.add(self.data)
+        self.faiss_index.add(X)
         self.time_index = time.time() - start
     def run(self):
         """Run the workload. This is timed."""
         print("  Top-{} join".format(self.k))
+        self.faiss_index.hnsw.efSearch = self.params["efSearch"]
         start = time.time()
         _dists, idxs = self.faiss_index.search(self.data, self.k+1)
         self.time_run = time.time() - start
@@ -477,7 +481,7 @@ class FaissHNSW(Algorithm):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
-    
+
 
 class BruteForceLocal(Algorithm):
     def __init__(self):
@@ -512,13 +516,13 @@ class BruteForceLocal(Algorithm):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
 
-    
+
 # =============================================================================
 # Datasets
 # ========
 #
-# Here we define preprocessing code for datasets, that will also fetch 
-# them if already available. Each function returns the local path to the 
+# Here we define preprocessing code for datasets, that will also fetch
+# them if already available. Each function returns the local path to the
 # preprocessed dataset.
 
 def download(url, dest):
@@ -803,12 +807,12 @@ def dblp(out_fn):
 
 
 
-    
+
 # =============================================================================
 # Putting it all together
 # =======================
 #
-# Here we define some dictionaries mapping short names to algorithm configurations 
+# Here we define some dictionaries mapping short names to algorithm configurations
 # and datasets, to be used to run experiments
 
 DATASETS = {
@@ -843,7 +847,7 @@ def get_output_file(configuration):
         configuration['dataset'],
         configuration['algorithm']
     ))
-    # Turns the dictionary of parameters into a string that 
+    # Turns the dictionary of parameters into a string that
     # follows a consistent order
     params_list = sorted(list(configuration['params'].items()))
     params_string = ""
@@ -933,7 +937,7 @@ if __name__ == "__main__":
         'algorithm': 'BruteForceLocal',
         'params': {}
     })
-    
+
     # run_config({
     #     'dataset': 'glove-25',
     #     'workload': 'local-top-k',
@@ -961,7 +965,7 @@ if __name__ == "__main__":
         # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
         for M in [48, 64]:
             for efConstruction in [100, 500]:
-                for efSearch in [10, 800]:
+                for efSearch in [10, 40, 80, 120, 800]:
                     run_config({
                         'dataset': dataset,
                         'workload': 'local-top-k',
