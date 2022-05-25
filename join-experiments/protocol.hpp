@@ -33,11 +33,27 @@ void send(std::string what) {
     std::cout << "sppv1 " << what << std::endl;
 }
 
-std::vector<std::vector<float>> read_float_vectors_hdf5() {
+float norm(std::vector<float> & v) {
+    float n = 0.0;
+    for (auto x : v) {
+        n += x * x;
+    }
+    return n;
+}
+
+std::vector<std::vector<float>> read_float_vectors_hdf5(bool normalize) {
     std::string path = expect("path");
     std::cerr << "[c++] path" << path << std::endl;
     H5Easy::File file(path, H5Easy::File::ReadOnly);
     std::vector<std::vector<float>> data = H5Easy::load<std::vector<std::vector<float>>>(file, "/train");
+    if (normalize) {
+        for (size_t i=0; i<data.size(); i++) {
+            float n = norm(data[i]);
+            for (size_t j=0; j<data[i].size(); j++) {
+                data[i][j] /= n;
+            }
+        }
+    }
     return data;
 }
 
