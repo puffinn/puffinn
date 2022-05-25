@@ -1,10 +1,9 @@
 set dotenv-load
 
 # produce a flamegraph.svg file
-profile: install-flamegraph
+profile exec: install-flamegraph
   cmake --build build --config RelWithDebInfo --target Bench
-  # Edit the command below to change the command being profiled
-  flamegraph --root -- build/Bench glove.25d.100k.txt
+  flamegraph --root -p $(pgrep {{exec}})
 
 # install flamegraph
 install-flamegraph:

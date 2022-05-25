@@ -35,6 +35,12 @@ if (OpenMP_FOUND)
     target_link_libraries(XiaoEtAl ${OpenMP_CXX_LIBRARIES} HighFive)
 endif()
 
+add_executable(LSBTree "join-experiments/lsb_tree.cpp")
+if (OpenMP_FOUND)
+    target_link_libraries(LSBTree ${OpenMP_CXX_LIBRARIES} HighFive)
+endif()
+
+
 include_directories("test/include")
 add_executable(Test "test/main.cpp" "test/code.cpp")
 if (OpenMP_FOUND)
