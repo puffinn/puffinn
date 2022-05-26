@@ -135,3 +135,9 @@ namespace puffinn {
     PerformanceMetrics g_performance_metrics;
 }
 
+#define TIMER_START(name) \
+    std::cerr << "Starting " << #name << std::endl; \
+    auto name = std::chrono::steady_clock::now();
+
+#define TIMER_STOP(name) \
+    std::cerr << "Done " << #name << " in " << (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - name).count()) << " seconds" << std::endl;

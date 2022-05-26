@@ -6,6 +6,7 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/hash_source/independent.hpp"
 #include "puffinn/maxbuffer.hpp"
+#include "puffinn/maxbuffercollection.hpp"
 #include "puffinn/maxpairbuffer.hpp"
 #include "puffinn/prefixmap.hpp"
 #include "puffinn/typedefs.hpp"
@@ -594,6 +595,7 @@ namespace puffinn {
             float recall,
             FilterType /*filter_type*/ = FilterType::Default
         ) {
+            TIMER_START(pre_initialization);
             std::vector<std::vector<uint32_t>> res;
 
             g_performance_metrics.new_query();
@@ -612,13 +614,16 @@ namespace puffinn {
             // loop where we check distances
             std::vector<bool> active;
             active.resize(dataset.get_size());
+            TIMER_STOP(pre_initialization);
             
+            TIMER_START(maxbuffer_population);
             for (size_t i = 0; i < dataset.get_size(); i++) {
                 for (auto& maxbuffers : tl_maxbuffers) {
                     maxbuffers.push_back(MaxBuffer(k));
                 }
                 active[i] = true;
             }
+            TIMER_STOP(maxbuffer_population);
 
             // Store segments efficiently (?).
             // indices in segments[i][j-1], ..., segments[i][j]-1 in lsh_maps[i]
@@ -627,6 +632,7 @@ namespace puffinn {
 
             g_performance_metrics.start_timer(Computation::SearchInit);
 
+            TIMER_START(initial_scan);
             std::cerr << "Initial scan start" << std::endl;
             // Set up data structures. Create segments for initial hash codes.
             #pragma omp parallel for
@@ -639,6 +645,7 @@ namespace puffinn {
                     }
                 }    
 
+                double dbg_dist = 0;
                 // Carry out initial all-to-all comparisons within a segment.
                 // We leave out the first and last segment since it's filled up with filler elements.
                 for (size_t j = 2; j < segments[i].size() - 1; j++) { 
@@ -653,19 +660,24 @@ namespace puffinn {
                                 dataset.get_description());
                             tl_maxbuffers[tid][R].insert(S, dist);
                             tl_maxbuffers[tid][S].insert(R, dist);
+                            dbg_dist += dist;
                         }
                     }
                 }
+                std::cout << "dbg_dist" << dbg_dist << std::endl;
             }
             g_performance_metrics.store_time(Computation::SearchInit);
             std::cerr << "Initial scan done (" << g_performance_metrics.get_total_time(Computation::SearchInit) << ")" << std::endl;
+            TIMER_STOP(initial_scan);
 
             uint32_t prefix_mask = 0xffffffff;
             for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
                 // check current level
                 g_performance_metrics.start_timer(Computation::Search);
+                TIMER_START(count_active);
                 std::cerr << "Checking level " << depth << std::endl;
                 size_t active_count = count_true(active);
+                TIMER_STOP(count_active);
                 std::cerr << "Active nodes: " << active_count << std::endl;
                 if (active_count == 0) {
                     break;
