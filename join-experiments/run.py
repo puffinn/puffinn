@@ -128,14 +128,28 @@ def compute_recalls(db):
             baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
         with h5py.File(output_file) as hfp:
             actual_indices = np.array(hfp[hdf5_group]['local-top-{}'.format(k)])
-        assert baseline_indices.shape == actual_indices.shape
+        assert baseline_indices.shape[1] == actual_indices.shape[1]
+        # If we have fewer rows we used a prefix for the evaluation
+        assert baseline_indices.shape[0] <= actual_indices.shape[0]
+        print(
+            "Indices",
+            baseline_indices[0],
+            actual_indices[0],
+            sep="\n"
+        )
         recalls = np.array([
             np.mean(np.isin(baseline_indices[i], actual_indices[i]))
             for i in tqdm(range(len(baseline_indices)), leave=False)
         ])
+        print("Recalls are", recalls)
         with h5py.File(output_file, 'r+') as hfp:
-            hfp[hdf5_group]['local-top-{}-recalls'.format(k)] = recalls
+            gpath = 'local-top-{}-recalls'.format(k)
+            if gpath in hfp[hdf5_group]:
+                print('deleting existing recall matrix', gpath)
+                del hfp[hdf5_group][gpath]
+            hfp[hdf5_group][gpath] = recalls
         avg_recall = np.mean(recalls)
+        print("Average recall is", avg_recall)
         db.execute(
             """UPDATE main
                  SET recall = :recall
@@ -152,7 +166,7 @@ def compute_recalls(db):
             {"dataset": dataset, "k": k}
         ).fetchone()
         if baseline is None:
-            print("Missing baseline")
+            print("Missing baseline for global-top-k")
             continue
         print(baseline)
         base_file, base_group = baseline
@@ -491,6 +505,7 @@ class BruteForceLocal(Algorithm):
         self.result_indices = None
     def setup(self, k, params):
         self.k = k
+        self.prefix = params.get('prefix')
         pass
     def feed_data(self, h5py_path):
         f = h5py.File(h5py_path)
@@ -507,7 +522,12 @@ class BruteForceLocal(Algorithm):
         start = time.time()
         index = faiss.IndexFlatIP(len(self.data[0]))
         index.add(self.data)
-        self.result_indices = index.search(self.data, self.k+1)[1][:, 1:]
+        if self.prefix is None:
+            queries = self.data
+        else:
+            queries = self.data[0:self.prefix]
+            print(queries)
+        self.result_indices = index.search(queries, self.k+1)[1][:, 1:]
         print(self.result_indices)
         self.time_run = time.time() - start
     def result(self):
@@ -938,13 +958,13 @@ if __name__ == "__main__":
         'params': {}
     })
 
-    # run_config({
-    #     'dataset': 'glove-25',
-    #     'workload': 'local-top-k',
-    #     'k': 1000,
-    #     'algorithm': 'BruteForceLocal',
-    #     'params': {}
-    # })
+    run_config({
+        'dataset': 'DeepImage',
+        'workload': 'local-top-k',
+        'k': 1000,
+        'algorithm': 'BruteForceLocal',
+        'params': {'prefix': 10000}
+    })
 
     threads = 56
 
@@ -959,7 +979,8 @@ if __name__ == "__main__":
     #         'params': {}
     #     })
 
-    for dataset in ['NYTimes', 'glove-25']:
+    # for dataset in ['NYTimes', 'glove-25', 'DeepImage']:
+    for dataset in ['DeepImage']:
         # ----------------------------------------------------------------------
         # Faiss-HNSW
         # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
@@ -981,25 +1002,25 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
-        for n_list in [32, 64, 128, 256]:
-            for n_probe in [1, 5, 10, 50]:
-                run_config({
-                    'dataset': dataset,
-                    'workload': 'local-top-k',
-                    'k': 10,
-                    'algorithm': 'faiss-IVF',
-                    'threads': threads,
-                    'params': {
-                        'n_list': n_list,
-                        'n_probe': n_probe
-                    }
-                })
+        # for n_list in [32, 64, 128, 256]:
+        #     for n_probe in [1, 5, 10, 50]:
+        #         run_config({
+        #             'dataset': dataset,
+        #             'workload': 'local-top-k',
+        #             'k': 10,
+        #             'algorithm': 'faiss-IVF',
+        #             'threads': threads,
+        #             'params': {
+        #                 'n_list': n_list,
+        #                 'n_probe': n_probe
+        #             }
+        #         })
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        for hash_source in ['Independent', 'Tensored']:
-            for recall in [0.8, 0.9, 0.99]:
-                for space_usage in [1024, 2048, 4096]:
+        for hash_source in ['Independent']:
+            for recall in [0.8, 0.9]:
+                for space_usage in [16384, 32768]:
                     run_config({
                         'dataset': dataset,
                         'workload': 'local-top-k',

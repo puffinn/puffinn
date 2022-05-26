@@ -2,7 +2,6 @@ set dotenv-load
 
 # produce a flamegraph.svg file
 profile exec: install-flamegraph
-  cmake --build build --config RelWithDebInfo --target Bench
   flamegraph --root -p $(pgrep {{exec}})
 
 # install flamegraph
