@@ -16,7 +16,7 @@ std::pair<std::vector<RawData>, size_t> do_read_vectors();
 
 template<> 
 std::pair<std::vector<std::vector<float>>, size_t> do_read_vectors<std::vector<float>>() {
-    auto data = read_float_vectors_hdf5();
+    auto data = read_float_vectors_hdf5(true);
     std::cerr << "loaded dataset with " << data.size() << " points of dimension " << data[0].size() << std::endl;
     return { data, data[0].size() };
 }

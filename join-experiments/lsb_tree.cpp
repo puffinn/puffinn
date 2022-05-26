@@ -298,7 +298,7 @@ int main(void) {
     expect("data");
     expect("cosine");
     // std::cerr << "[c++] receiving data" << std::endl;
-    auto dataset = read_float_vectors_hdf5();
+    auto dataset = read_float_vectors_hdf5(true);
     std::cerr << "Loaded " << dataset.size() << " vectors of dimension " << dataset[0].size() << std::endl;
     send("ok");
 
