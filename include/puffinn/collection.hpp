@@ -604,9 +604,8 @@ namespace puffinn {
             size_t nthreads = omp_get_max_threads();
             
             // Allocate a buffer for each data point, for each thread
-            // std::vector<MaxBuffer> maxbuffers;
-            std::vector<std::vector<MaxBuffer>> tl_maxbuffers;
-            tl_maxbuffers.resize(nthreads);
+            std::vector<MaxBufferCollection> tl_maxbuffers;
+            // tl_maxbuffers.resize(nthreads);
 
             // Is a point still active?
             // This vector is only written to in the `remove inactive nodes` phase,
@@ -614,14 +613,14 @@ namespace puffinn {
             // loop where we check distances
             std::vector<bool> active;
             active.resize(dataset.get_size());
+            for (size_t i = 0; i < dataset.get_size(); i++) {
+                active[i] = true;
+            }
             TIMER_STOP(pre_initialization);
             
             TIMER_START(maxbuffer_population);
-            for (size_t i = 0; i < dataset.get_size(); i++) {
-                for (auto& maxbuffers : tl_maxbuffers) {
-                    maxbuffers.push_back(MaxBuffer(k));
-                }
-                active[i] = true;
+            for (size_t tid = 0; tid < nthreads; tid++) {
+                tl_maxbuffers.emplace_back(dataset.get_size(), k);
             }
             TIMER_STOP(maxbuffer_population);
 
@@ -658,8 +657,8 @@ namespace puffinn {
                                 dataset[R], 
                                 dataset[S], 
                                 dataset.get_description());
-                            tl_maxbuffers[tid][R].insert(S, dist);
-                            tl_maxbuffers[tid][S].insert(R, dist);
+                            tl_maxbuffers[tid].insert(R, S, dist);
+                            tl_maxbuffers[tid].insert(S, R, dist);
                             dbg_dist += dist;
                         }
                     }
@@ -709,8 +708,8 @@ namespace puffinn {
                                         dataset[R], 
                                         dataset[S], 
                                         dataset.get_description());
-                                    tl_maxbuffers[tid][R].insert(S, dist);
-                                    tl_maxbuffers[tid][S].insert(R, dist);
+                                    tl_maxbuffers[tid].insert(R, S, dist);
+                                    tl_maxbuffers[tid].insert(S, R, dist);
                                 }
                             }
                         } else {
@@ -719,43 +718,46 @@ namespace puffinn {
                     }
                 }
 
-                auto reconcile_start = std::chrono::steady_clock::now();
+                TIMER_START(reconcile_buffers);
                 // Here we combine the information gathered by the different threads
-                #pragma omp parallel for
-                for (uint32_t v = 0; v < dataset.get_size(); v++) {
-                    // accumulate all the information of a node in the first thread local buffer,
-                    // which will be used for all subsequent evaluations about deactivation
-                    // of single nodes
-                    for(size_t tid = 1; tid < nthreads; tid++) {
-                        tl_maxbuffers[0][v].add_all(tl_maxbuffers[tid][v]);
-                    }
+                // #pragma omp parallel for
+                // for (uint32_t v = 0; v < dataset.get_size(); v++) {
+
+                // accumulate all the information of a node in the first thread local buffer,
+                // which will be used for all subsequent evaluations about deactivation
+                // of single nodes
+                for(size_t tid = 1; tid < nthreads; tid++) {
+                    tl_maxbuffers[0].add_all(tl_maxbuffers[tid]);
                 }
-                auto reconcile_end = std::chrono::steady_clock::now();
-                double reconcile_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(reconcile_end - reconcile_start).count();
-                std::cerr << " . reconcile in " << reconcile_elapsed << std::endl;
+                // }
+                TIMER_STOP(reconcile_buffers);
 
                 g_performance_metrics.store_time(Computation::Search);   
 
+                TIMER_START(inactive_nodes_removal);
                 std::cerr << " Removing inactive nodes." << std::endl;
                 g_performance_metrics.start_timer(Computation::Filtering);
                 // remove inactive nodes
                 for (size_t v=0; v < dataset.get_size(); v++) {
                     if (active[v]) {
                         // we have reconciled the thread local max buffers, so we can look at the first
-                        auto kth_similarity = tl_maxbuffers[0][v].smallest_value();
-                        auto table_idx = lsh_maps.size();
-                        auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
-                        float failure_prob = hash_source->failure_probability(
-                            depth,
-                            table_idx,
-                            last_tables,
-                            kth_similarity
-                        );
-                        if (failure_prob <= 1-recall) {
-                            active[v] = false;
+                        auto kth_similarity = tl_maxbuffers[0].kth_value(v);
+                        if (kth_similarity > 0.0) { // the similarity is negative if we have yest to collect k neighbors for v
+                            auto table_idx = lsh_maps.size();
+                            auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
+                            float failure_prob = hash_source->failure_probability(
+                                depth,
+                                table_idx,
+                                last_tables,
+                                kth_similarity
+                            );
+                            if (failure_prob <= 1-recall) {
+                                active[v] = false;
+                            }
                         }
                     }
                 }
+                TIMER_STOP(inactive_nodes_removal);
                 g_performance_metrics.store_time(Computation::Filtering);
 
                 // prepare next round
@@ -772,7 +774,7 @@ namespace puffinn {
                       << std::endl;
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
-                auto best = tl_maxbuffers[0][i].best_indices();
+                auto best = tl_maxbuffers[0].best_indices(i);
                 res.push_back(best);
             }
             return res;

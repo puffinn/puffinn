@@ -10,6 +10,10 @@
 #include <vector>
 
 namespace puffinn {
+    // This class is functionally equivalent to std::vector<MaxBuffer>.
+    // The advantage is that it puts less pressure on the memory allocator,
+    // thus taking far less time to initialize. Furthermore, it is more cache friendly,
+    // since there is less indirection.
     class MaxBufferCollection {
     public:
         using ResultPair = std::pair<uint32_t, float>;
@@ -43,7 +47,9 @@ namespace puffinn {
         float kth_value(size_t idx) {
             if (write_head[idx] >= k) {
                 filter(idx);
-                data[idx*capacity + k - 1].second;
+                return data[idx*capacity + k - 1].second;
+            } else {
+                return -std::numeric_limits<float>::infinity();
             }
         }
 
@@ -97,6 +103,16 @@ namespace puffinn {
             //         return a.second > b.second
             //             || (a.second == b.second && a.first > b.first);
             //     });
+            return res;
+        }
+
+        std::vector<uint32_t> best_indices(size_t idx) {
+            auto entries = best_entries(idx);
+            std::vector<uint32_t> res;
+            res.reserve(entries.size());
+            for (auto entry : entries) {
+                res.push_back(entry.first);
+            }
             return res;
         }
 

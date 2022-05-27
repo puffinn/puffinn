@@ -140,4 +140,4 @@ namespace puffinn {
     auto name = std::chrono::steady_clock::now();
 
 #define TIMER_STOP(name) \
-    std::cerr << "Done " << #name << " in " << (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - name).count()) << " seconds" << std::endl;
+    std::cerr << "Done " << #name << " in " << (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - name).count()) << " ms" << std::endl;
