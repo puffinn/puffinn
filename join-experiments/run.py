@@ -31,6 +31,7 @@ import numba
 from urllib.request import urlopen
 from urllib.request import urlretrieve
 
+
 DIR_ENVVAR = 'TOPK_DIR'
 try:
     BASE_DIR = os.environ[DIR_ENVVAR]
@@ -76,6 +77,9 @@ MIGRATIONS = [
     CREATE VIEW baselines_global AS
     SELECT * FROM main WHERE algorithm = 'XiaoEtAl'
     """,
+    """
+    ALTER TABLE main ADD COLUMN algorithm_version INT DEFAULT 1;
+    """
 ]
 
 def get_db():
@@ -93,9 +97,11 @@ def get_db():
 def already_run(db, configuration):
     """Checks whether the given configuration is already present in the database"""
     configuration = configuration.copy()
+    algorithm_version = ALGORITHMS[configuration['algorithm']]()[1]
     configuration['threads'] = configuration.get('threads', 1)
     configuration['params']['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
+    configuration['algorithm_version'] = algorithm_version
     res = db.execute("""
     SELECT rowid FROM main
     WHERE dataset = :dataset
@@ -103,6 +109,7 @@ def already_run(db, configuration):
       AND threads = :threads
       AND k = :k
       AND algorithm = :algorithm
+      AND algorithm_version = :algorithm_version
       AND params = :params
     """, configuration).fetchall()
     return len(res) > 0
@@ -844,14 +851,15 @@ DATASETS = {
     'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
 }
 
+# Stores lazily the algorithm (i.e. as funcions to be called) along with their version
 ALGORITHMS = {
-    'PUFFINN': lambda: SubprocessAlgorithm(["build/PuffinnJoin"]),
+    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 1),
     # Local top-k baselines
-    'BruteForceLocal': lambda: BruteForceLocal(),
-    'faiss-HNSW': lambda: FaissHNSW(),
-    'faiss-IVF': lambda: FaissIVF(),
+    'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
+    'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
+    'faiss-IVF':       lambda: (FaissIVF(),                                 1),
     # Global top-k baselines
-    'XiaoEtAl': lambda: SubprocessAlgorithm(["build/XiaoEtAl"])
+    'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1)
 }
 
 # =============================================================================
@@ -889,7 +897,7 @@ def run_config(configuration):
     output_file, group, output = get_output_file(configuration)
     hdf5_file = DATASETS[configuration['dataset']]()
     assert hdf5_file is not None
-    algo = ALGORITHMS[configuration['algorithm']]()
+    algo, version = ALGORITHMS[configuration['algorithm']]()
     params = configuration['params']
     params['threads'] = configuration.get('threads', 1)
     k = configuration['k']
@@ -926,13 +934,15 @@ def run_config(configuration):
         :time_join_s,
         :recall,
         :output_file,
-        :hdf5_group
+        :hdf5_group,
+        :algorithm_version
     );
     """, {
         "dataset": configuration['dataset'],
         'workload': configuration['workload'],
         'k': k,
         'algorithm': configuration['algorithm'],
+        'algorithm_version': version,
         'threads': configuration.get('threads', 1),
         'params': json.dumps(params, sort_keys=True),
         'time_index_s': time_index,
@@ -979,8 +989,7 @@ if __name__ == "__main__":
     #         'params': {}
     #     })
 
-    # for dataset in ['NYTimes', 'glove-25', 'DeepImage']:
-    for dataset in ['DeepImage']:
+    for dataset in ['NYTimes', 'glove-25', 'DeepImage']:
         # ----------------------------------------------------------------------
         # Faiss-HNSW
         # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
@@ -1020,7 +1029,7 @@ if __name__ == "__main__":
         # PUFFINN local top-k
         for hash_source in ['Independent']:
             for recall in [0.8, 0.9]:
-                for space_usage in [16384, 32768]:
+                for space_usage in [8192, 16384, 32768]:
                     run_config({
                         'dataset': dataset,
                         'workload': 'local-top-k',
