@@ -604,7 +604,7 @@ namespace puffinn {
             size_t nthreads = omp_get_max_threads();
             
             // Allocate a buffer for each data point, for each thread
-            std::vector<MaxBufferCollection> tl_maxbuffers;
+            std::vector<MaxBufferCollection> tl_maxbuffers(nthreads);
             // tl_maxbuffers.resize(nthreads);
 
             // Is a point still active?
@@ -619,8 +619,9 @@ namespace puffinn {
             TIMER_STOP(pre_initialization);
             
             TIMER_START(maxbuffer_population);
+            #pragma omp parallel for schedule(static, 1)
             for (size_t tid = 0; tid < nthreads; tid++) {
-                tl_maxbuffers.emplace_back(dataset.get_size(), k);
+                tl_maxbuffers[tid].init(dataset.get_size(), k);
             }
             TIMER_STOP(maxbuffer_population);
 

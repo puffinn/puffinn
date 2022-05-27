@@ -12,14 +12,16 @@
 
 namespace puffinn {
     TEST_CASE("Single element, one buffer") {
-        MaxBufferCollection buffer(1, 2);
+        MaxBufferCollection buffer;
+        buffer.init(1, 2);
         buffer.insert(0, 2, 0.6);
         auto best = buffer.best_entries(0);
         REQUIRE(best == std::vector<MaxBufferCollection::ResultPair>{{2, 0.6}});
     }
 
     TEST_CASE("Multiple elements, one buffer") {
-        MaxBufferCollection buffer(1, 2);
+        MaxBufferCollection buffer;
+        buffer.init(1, 2);
         buffer.insert(0, 1, 0.6);
         buffer.insert(0, 3, 1.6);
         buffer.insert(0, 6, 5.6);
@@ -34,7 +36,8 @@ namespace puffinn {
     }
 
     TEST_CASE("Multiple elements, two buffers") {
-        MaxBufferCollection buffer(2, 2);
+        MaxBufferCollection buffer;
+        buffer.init(2, 2);
         buffer.insert(0, 1, 0.6);
         buffer.insert(0, 3, 1.6);
         buffer.insert(0, 6, 5.6);
@@ -58,7 +61,8 @@ namespace puffinn {
     }
     
     TEST_CASE("Multiple elements, two buffers, with duplicates") {
-        MaxBufferCollection buffer(2, 2);
+        MaxBufferCollection buffer;
+        buffer.init(2, 2);
         buffer.insert(0, 1, 0.6);
         buffer.insert(0, 1, 0.6);
         buffer.insert(1, 2, 2.3);

@@ -18,9 +18,9 @@ namespace puffinn {
     public:
         using ResultPair = std::pair<uint32_t, float>;
     private:
-        const size_t n;
-        const size_t k;
-        const size_t capacity;
+        size_t n;
+        size_t k;
+        size_t capacity;
         // This array of size `capacity` will be used to sort, indirectly, chunks 
         // of the arrays similarities and indices
         std::vector<size_t> write_head;
@@ -29,17 +29,28 @@ namespace puffinn {
 
     public:
 
-        MaxBufferCollection(size_t n, size_t k)
-            : n(n),
-              k(k),
-              capacity(2*k),
-              write_head(n),
-              minval(n),
-              data(2*k*n)
+        MaxBufferCollection() 
+            : n(0),
+              k(0),
+              capacity(0),
+              write_head(0),
+              minval(0),
+              data(0)
+        {
+            // this constructor is meant only for pre-allocating space when building vectors of MaxBufferCollections
+        }
+
+        void init(size_t n, size_t k)
         { 
             if (k == 0) {
                 throw std::invalid_argument("k should be > 0");
             }
+            this->n = n;
+            this->k = k;
+            this->capacity = 2*k;
+            this->write_head.resize(n);
+            this->minval.resize(n);
+            this->data.resize(2*k*n);
         }
 
         // return the the k-th smallest value, if k elements 
