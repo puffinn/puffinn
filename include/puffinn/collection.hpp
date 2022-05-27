@@ -684,7 +684,6 @@ namespace puffinn {
                 }
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
 
-                // std::vector<size_t> cnt_dists(nthreads);
 
                 TIMER_START(join_segments);
                 #pragma omp parallel for
@@ -698,44 +697,53 @@ namespace puffinn {
                         auto left = (lsh_maps[i].hashes[segments[i][j - 1]]) & prefix_mask;
                         auto actual = (lsh_maps[i].hashes[segments[i][j]]) & prefix_mask;
                         if (left == actual) {
+                            // count active nodes in the two segments
+                            size_t left_active = 0;
                             for (auto r = segments[i][j-1]; r < segments[i][j]; r++) {
-                                for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
-                                    // NOTE: profiling using perf shows that a lot of time (like 11%) is spent waiting
-                                    // for these two accesses. This is also the hottest spot in terms of cache misses.
-                                    // As prefixes get shorter and segments get larger the problem is exacerbated,
-                                    // since we are doing a lot of waiting on the memory for fewer and fewer actual distance
-                                    // computations, so much that for the smallest prefixes the throughput (in terms of
-                                    // distances per second) is orders of magnitude smaller than the throughput 
-                                    // for longer prefixes.
-                                    auto R = lsh_maps[i].indices[r];
-                                    auto S = lsh_maps[i].indices[s];
-                                    if (R == S) {
-                                        // skip trivial matches
-                                        continue;
-                                    }
-                                    if (!active[R] && !active[S]) {
-                                         continue;
-                                    }
-                                    // cnt_dists[tid]++;
-                                    auto dist = TSim::compute_similarity(
-                                        dataset[R], 
-                                        dataset[S], 
-                                        dataset.get_description());
-                                    tl_maxbuffers[tid].insert(R, S, dist);
-                                    tl_maxbuffers[tid].insert(S, R, dist);
+                                if (active[lsh_maps[i].indices[r]]) {
+                                    left_active++;
                                 }
                             }
+                            size_t actual_active = 0;
+                            for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
+                                if (active[lsh_maps[i].indices[s]]) {
+                                    actual_active++;
+                                }
+                            }
+                            if (left_active > 0 || actual_active > 0) {
+                                for (auto r = segments[i][j-1]; r < segments[i][j]; r++) {
+                                    for (auto  s = segments[i][j]; s < segments[i][j + 1]; s++) {
+                                        // NOTE: profiling using perf shows that a lot of time (like 11%) in later iterations
+                                        // is spent waiting for these two accesses. This is also the hottest spot in terms of cache misses.
+                                        // As prefixes get shorter and segments get larger the problem is exacerbated,
+                                        // since we are doing a lot of waiting on the memory for fewer and fewer actual distance
+                                        // computations, so much that for the smallest prefixes the throughput (in terms of
+                                        // distances per second) is orders of magnitude smaller than the throughput 
+                                        // for longer prefixes.
+                                        auto R = lsh_maps[i].indices[r];
+                                        auto S = lsh_maps[i].indices[s];
+                                        if (R == S) {
+                                            // skip trivial matches
+                                            continue;
+                                        }
+                                        if (!active[R] && !active[S]) {
+                                            continue;
+                                        }
+                                        // cnt_dists[tid]++;
+                                        auto dist = TSim::compute_similarity(
+                                            dataset[R], 
+                                            dataset[S], 
+                                            dataset.get_description());
+                                        tl_maxbuffers[tid].insert(R, S, dist);
+                                        tl_maxbuffers[tid].insert(S, R, dist);
+                                    }
+                                }
+                            } 
                         } else {
                             new_segments[i].push_back(segments[i][j]);
                         }
                     }
                 }
-                // size_t total_dists = 0;
-                // for (size_t tid=0; tid<nthreads; tid++) {
-                //     total_dists += cnt_dists[tid];
-                //     // std::cerr << " cnt_dists[" << tid << "] = " << cnt_dists[tid] << std::endl;
-                // }
-                // std::cerr << "total distances " << total_dists << std::endl;
                 TIMER_STOP(join_segments);
 
                 TIMER_START(reconcile_buffers);
