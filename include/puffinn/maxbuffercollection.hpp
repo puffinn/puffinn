@@ -71,6 +71,7 @@ namespace puffinn {
 
         // Add all the best items stored in the `other` buffer
         void add_all(MaxBufferCollection & other) {
+            #pragma omp parallel for
             for (size_t idx=0; idx<n; idx++) {
                 other.filter(idx);
                 size_t offset = capacity*idx;

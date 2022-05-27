@@ -683,7 +683,7 @@ namespace puffinn {
                 }
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
 
-                std::vector<size_t> cnt_dists(nthreads);
+                // std::vector<size_t> cnt_dists(nthreads);
 
                 TIMER_START(join_segments);
                 #pragma omp parallel for
@@ -715,7 +715,7 @@ namespace puffinn {
                                     if (!active[R] && !active[S]) {
                                          continue;
                                     }
-                                    cnt_dists[tid]++;
+                                    // cnt_dists[tid]++;
                                     auto dist = TSim::compute_similarity(
                                         dataset[R], 
                                         dataset[S], 
@@ -729,12 +729,12 @@ namespace puffinn {
                         }
                     }
                 }
-                size_t total_dists = 0;
-                for (size_t tid=0; tid<nthreads; tid++) {
-                    total_dists += cnt_dists[tid];
-                    // std::cerr << " cnt_dists[" << tid << "] = " << cnt_dists[tid] << std::endl;
-                }
-                std::cerr << "total distances " << total_dists << std::endl;
+                // size_t total_dists = 0;
+                // for (size_t tid=0; tid<nthreads; tid++) {
+                //     total_dists += cnt_dists[tid];
+                //     // std::cerr << " cnt_dists[" << tid << "] = " << cnt_dists[tid] << std::endl;
+                // }
+                // std::cerr << "total distances " << total_dists << std::endl;
                 TIMER_STOP(join_segments);
 
                 TIMER_START(reconcile_buffers);
