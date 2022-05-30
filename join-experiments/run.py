@@ -79,6 +79,17 @@ MIGRATIONS = [
     """,
     """
     ALTER TABLE main ADD COLUMN algorithm_version INT DEFAULT 1;
+    """,
+    """
+    CREATE VIEW recent_versions AS
+    SELECT algorithm, max(algorithm_version) as algorithm_version
+    FROM main
+    GROUP BY 1;
+
+    CREATE VIEW recent AS
+    SELECT * 
+    FROM main
+    NATURAL JOIN recent_versions;
     """
 ]
 
@@ -114,48 +125,88 @@ def already_run(db, configuration):
     """, configuration).fetchall()
     return len(res) > 0
 
-
-def compute_recalls(db):
-    # Local topk
-    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
-    for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
-        print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
-        baseline = db.execute(
-            "SELECT output_file, hdf5_group FROM baselines WHERE dataset = :dataset AND workload = 'local-top-k';",
-            {"dataset": dataset}
-        ).fetchone()
-        if baseline is None:
-            print("Missing baseline")
-            continue
-        base_file, base_group = baseline
-        base_file = os.path.join(BASE_DIR, base_file)
-        output_file = os.path.join(BASE_DIR, output_file)
-        print("output file", output_file, "rowid", rowid, "group", hdf5_group)
-        with h5py.File(base_file) as hfp:
-            baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
-        with h5py.File(output_file) as hfp:
-            actual_indices = np.array(hfp[hdf5_group]['local-top-{}'.format(k)])
-        assert baseline_indices.shape[1] == actual_indices.shape[1]
-        # If we have fewer rows we used a prefix for the evaluation
-        assert baseline_indices.shape[0] <= actual_indices.shape[0]
-        print(
-            "Indices",
-            baseline_indices[0],
-            actual_indices[0],
-            sep="\n"
-        )
-        recalls = np.array([
-            np.mean(np.isin(baseline_indices[i], actual_indices[i]))
-            for i in tqdm(range(len(baseline_indices)), leave=False)
-        ])
-        print("Recalls are", recalls)
+def compute_recall(k, baseline_indices, actual_indices, output_file=None, hdf5_group=None):
+    baseline_indices = baseline_indices[:,:k]
+    assert baseline_indices.shape[1] == actual_indices.shape[1]
+    # If we have fewer rows we used a prefix for the evaluation
+    assert baseline_indices.shape[0] <= actual_indices.shape[0]
+    print(
+        "Indices",
+        baseline_indices[0],
+        actual_indices[0],
+        sep="\n"
+    )
+    recalls = np.array([
+        np.mean(np.isin(baseline_indices[i], actual_indices[i]))
+        for i in tqdm(range(len(baseline_indices)), leave=False)
+    ])
+    if output_file is not None:
         with h5py.File(output_file, 'r+') as hfp:
             gpath = 'local-top-{}-recalls'.format(k)
             if gpath in hfp[hdf5_group]:
                 print('deleting existing recall matrix', gpath)
                 del hfp[hdf5_group][gpath]
             hfp[hdf5_group][gpath] = recalls
-        avg_recall = np.mean(recalls)
+    avg_recall = np.mean(recalls)
+    return avg_recall
+
+def baseline_indices(db, dataset, k):
+    baseline = db.execute(
+        "SELECT output_file, hdf5_group FROM baselines WHERE dataset = :dataset AND workload = 'local-top-k';",
+        {"dataset": dataset}
+    ).fetchone()
+    if baseline is None:
+        print("Missing baseline")
+        return None
+    base_file, base_group = baseline
+    base_file = os.path.join(BASE_DIR, base_file)
+    with h5py.File(base_file) as hfp:
+        baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
+        return baseline_indices
+
+def compute_recalls(db):
+    # Local topk
+    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
+    for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
+        print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
+        # baseline = db.execute(
+        #     "SELECT output_file, hdf5_group FROM baselines WHERE dataset = :dataset AND workload = 'local-top-k';",
+        #     {"dataset": dataset}
+        # ).fetchone()
+        baseline_indices = baseline_indices(db, dataset, k)
+        if baseline_indices is None:
+            print("Missing baseline")
+            continue
+        # base_file, base_group = baseline
+        # base_file = os.path.join(BASE_DIR, base_file)
+        output_file = os.path.join(BASE_DIR, output_file)
+        print("output file", output_file, "rowid", rowid, "group", hdf5_group)
+        with h5py.File(base_file) as hfp:
+            baseline_indices = hfp[base_group]['local-top-1000'][:,:k]
+        with h5py.File(output_file) as hfp:
+            actual_indices = np.array(hfp[hdf5_group]['local-top-{}'.format(k)])
+        # assert baseline_indices.shape[1] == actual_indices.shape[1]
+        # # If we have fewer rows we used a prefix for the evaluation
+        # assert baseline_indices.shape[0] <= actual_indices.shape[0]
+        # print(
+        #     "Indices",
+        #     baseline_indices[0],
+        #     actual_indices[0],
+        #     sep="\n"
+        # )
+        # recalls = np.array([
+        #     np.mean(np.isin(baseline_indices[i], actual_indices[i]))
+        #     for i in tqdm(range(len(baseline_indices)), leave=False)
+        # ])
+        # print("Recalls are", recalls)
+        # with h5py.File(output_file, 'r+') as hfp:
+        #     gpath = 'local-top-{}-recalls'.format(k)
+        #     if gpath in hfp[hdf5_group]:
+        #         print('deleting existing recall matrix', gpath)
+        #         del hfp[hdf5_group][gpath]
+        #     hfp[hdf5_group][gpath] = recalls
+        # avg_recall = np.mean(recalls)
+        avg_recall = compute_recall(k, baseline_indices, actual_indices, output_file, hdf5_group)
         print("Average recall is", avg_recall)
         db.execute(
             """UPDATE main
@@ -889,9 +940,9 @@ def get_output_file(configuration):
     return fname, params_hash, group
 
 
-def run_config(configuration):
+def run_config(configuration, debug=False):
     db = get_db()
-    if already_run(db, configuration):
+    if not debug and already_run(db, configuration):
         print("Configuration already run, skipping")
         return
     output_file, group, output = get_output_file(configuration)
@@ -922,40 +973,63 @@ def run_config(configuration):
     )
     print("   time to index", time_index)
     print("   time for join", time_workload)
-    db.execute("""
-    INSERT INTO main VALUES (
-        :dataset,
-        :workload,
-        :k,
-        :algorithm,
-        :params,
-        :threads,
-        :time_index_s,
-        :time_join_s,
-        :recall,
-        :output_file,
-        :hdf5_group,
-        :algorithm_version
-    );
-    """, {
-        "dataset": configuration['dataset'],
-        'workload': configuration['workload'],
-        'k': k,
-        'algorithm': configuration['algorithm'],
-        'algorithm_version': version,
-        'threads': configuration.get('threads', 1),
-        'params': json.dumps(params, sort_keys=True),
-        'time_index_s': time_index,
-        'time_join_s': time_workload,
-        'recall': None,
-        'output_file': output_file,
-        'hdf5_group': group
-    })
+    if not debug:
+        db.execute("""
+        INSERT INTO main VALUES (
+            :dataset,
+            :workload,
+            :k,
+            :algorithm,
+            :params,
+            :threads,
+            :time_index_s,
+            :time_join_s,
+            :recall,
+            :output_file,
+            :hdf5_group,
+            :algorithm_version
+        );
+        """, {
+            "dataset": configuration['dataset'],
+            'workload': configuration['workload'],
+            'k': k,
+            'algorithm': configuration['algorithm'],
+            'algorithm_version': version,
+            'threads': configuration.get('threads', 1),
+            'params': json.dumps(params, sort_keys=True),
+            'time_index_s': time_index,
+            'time_join_s': time_workload,
+            'recall': None,
+            'output_file': output_file,
+            'hdf5_group': group
+        })
+    else:
+        # Compute the recall and display it.
+        baseline = baseline_indices(db, configuration['dataset'], k)
+        with h5py.File(os.path.join(BASE_DIR, output_file), 'r') as hfp:
+            actual_indices = np.array(hfp[group]['local-top-{}'.format(k)])
+            avg_recall = compute_recall(k, baseline, actual_indices)
+            print("Average recall", avg_recall)
 
 
 if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
+
+    run_config({
+        'dataset': 'glove-25',
+        'workload': 'local-top-k',
+        'k': 10,
+        'algorithm': 'PUFFINN',
+        'threads': 56,
+        'params': {
+            'method': 'LSHJoin',
+            'recall': 0.9,
+            'space_usage': 4096,
+            'hash_source': 'Independent'
+        }
+    }, debug=True)
+    sys.exit(0)
 
     with get_db() as db:
         compute_recalls(db)
