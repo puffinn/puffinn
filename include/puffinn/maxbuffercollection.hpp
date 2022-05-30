@@ -2,7 +2,7 @@
 
 #include "puffinn/typedefs.hpp"
 #include "puffinn/performance.hpp"
-
+#include <cassert>
 #include <iostream>
 #include <algorithm>
 #include <functional>
@@ -21,8 +21,6 @@ namespace puffinn {
         size_t n;
         size_t k;
         size_t capacity;
-        // This array of size `capacity` will be used to sort, indirectly, chunks 
-        // of the arrays similarities and indices
         std::vector<size_t> write_head;
         std::vector<float> minval;
         std::vector<ResultPair> data;
@@ -53,27 +51,29 @@ namespace puffinn {
             this->data.resize(2*k*n);
         }
 
-        // return the the k-th smallest value, if k elements 
-        // have been inserted, otherwise return a negative value
-        float kth_value(size_t idx) {
-            if (write_head[idx] >= k) {
-                filter(idx);
-                return data[idx*capacity + k - 1].second;
-            } else {
-                return -std::numeric_limits<float>::infinity();
-            }
+        float smallest_value(size_t idx) {
+            return minval[idx];
         }
 
         bool insert(size_t idx, size_t neighbor, float similarity) {
+            similarity = std::min(1.0f, std::max(0.0f, similarity));
             if (similarity <= minval[idx]) {
                 return false;
             }
 
+            size_t offset = idx * capacity;
+            for (size_t i=0; i<write_head[idx]; i++) {
+                if (data[offset + i].first == neighbor) {
+                    // insertion would be a duplicate, return true to signal that
+                    // the point is not discarded because it's a duplicate
+                    return true; 
+                }
+            }
+            
             if (write_head[idx] == capacity) {
                 filter(idx);
             }
 
-            size_t offset = idx * capacity;
             data[offset + write_head[idx]] = std::make_pair(neighbor, similarity);
             write_head[idx]++;
 
@@ -82,6 +82,8 @@ namespace puffinn {
 
         // Add all the best items stored in the `other` buffer
         void add_all(MaxBufferCollection & other) {
+            assert(capacity == other.capacity);
+            assert(n == other.n);
             #pragma omp parallel for
             for (size_t idx=0; idx<n; idx++) {
                 other.filter(idx);
@@ -132,29 +134,20 @@ namespace puffinn {
         void filter(size_t idx) {
             size_t offset = idx * capacity;
             // sort the indices buffer
-            std::sort(data.begin() + offset, data.begin() + offset + capacity, 
+            std::sort(data.begin() + offset, data.begin() + offset + write_head[idx], 
                 [](const ResultPair& a, const ResultPair& b) {
                     return a.second > b.second
                         || (a.second == b.second && a.first > b.first);
                 });
 
-            size_t deduplicated_values = std::min(1ul, write_head[idx]);
-            for (size_t i=1; i < write_head[idx]; i++) {
-                if (data[offset + i].first != data[offset + deduplicated_values-1].first) {
-                    data[offset + deduplicated_values] = data[offset + i];
-                    deduplicated_values++;
-                }
-            }
-            write_head[idx] = std::min(deduplicated_values, k);
+            // update the write head, effectively removing all the elements 
+            // with similarity smaller than minval[idx]
+            write_head[idx] = std::min(write_head[idx], k);
 
             // update minval
             if (write_head[idx] == k) {
                 minval[idx] = data[offset + k - 1].second;
             }
-
-            // update the write head, effectively removing all the elements 
-            // with similarity smaller than minval[idx]
-            write_head[idx] = k;
         }
 
     };
