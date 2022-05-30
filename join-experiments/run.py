@@ -344,10 +344,11 @@ class Algorithm(object):
     def save_result(self, hdf5_file, path):
         result = self.result()
         if path in hdf5_file:
-            existing = np.array(hdf5_file[path])
-            print(existing)
-            assert (existing == result).all()
-            return
+            del hdf5_file[path]
+        #     existing = np.array(hdf5_file[path])
+        #     print(existing)
+        #     assert (existing == result).all()
+        #     return
         hdf5_file[path] = result
     def times(self):
         """Returns the pair (index_time, workload_time)"""
@@ -442,7 +443,9 @@ class SubprocessAlgorithm(Algorithm):
             line = self._raw_line()
             if line[1] == "end":
                 break
-            rows.append(np.array([int(i) for i in line]))
+            row = np.array([int(i) for i in line])
+            assert np.unique(row).shape == row.shape
+            rows.append(row)
         rows = np.array(rows)
         print("Waiting for subprocess to finish")
         self._wait_for_completion()
@@ -904,7 +907,7 @@ DATASETS = {
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
 ALGORITHMS = {
-    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 2),
+    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 3),
     # Local top-k baselines
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
@@ -1015,21 +1018,6 @@ def run_config(configuration, debug=False):
 if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
-
-    run_config({
-        'dataset': 'glove-25',
-        'workload': 'local-top-k',
-        'k': 10,
-        'algorithm': 'PUFFINN',
-        'threads': 56,
-        'params': {
-            'method': 'LSHJoin',
-            'recall': 0.9,
-            'space_usage': 4096,
-            'hash_source': 'Independent'
-        }
-    }, debug=True)
-    sys.exit(0)
 
     with get_db() as db:
         compute_recalls(db)
