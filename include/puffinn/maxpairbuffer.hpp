@@ -79,6 +79,14 @@ namespace puffinn {
             return true;
         }
 
+        void add_all(MaxPairBuffer & other) {
+            other.filter();
+            for (size_t i=0; i<other.inserted_values; i++) {
+                insert(other.data[i].first, other.data[i].second);
+            }
+            filter();
+        }
+
         // Retrieve the `k` entries with the highest associated values.
         std::vector<ResultPair> best_entries() {
             filter();

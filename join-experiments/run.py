@@ -152,6 +152,14 @@ def compute_recall(k, baseline_indices, actual_indices, output_file=None, hdf5_g
     return avg_recall
 
 
+@numba.jit
+def jaccard(a, b):
+    if len(a) == 0 or len(b) == 0:
+         return 0
+    intersect = len(set(a) & set(b))
+    return intersect / (float)(len(a) + len(b) - intersect)
+
+
 def compute_distances(k, dataset, distancefn):
     if distancefn == 'angular' or distancefn == 'cosine':
         norms = np.linalg.norm(dataset, axis=1)[:, np.newaxis]
@@ -164,6 +172,13 @@ def compute_distances(k, dataset, distancefn):
         distances = all_distances[:, 1:]
         neighbors = all_neighbors[:, 1:]
         return distances, neighbors, avg_distances
+    if distancefn == 'jaccard':
+        import scipy
+        from scipy.spatial.distance import pdist
+        dataset = np.array(dataset)
+        print(dataset)
+        distances = pdist(np.array(dataset), jaccard)
+        print(distances)
     else:
         raise Exception("unsupported similarity measure {}".format(distancefn))
 
@@ -1035,8 +1050,25 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
 
-    with get_db() as db:
-        compute_recalls(db)
+    run_config({
+        'dataset': 'DBLP',
+        'workload': 'global-top-k',
+        'k': 10,
+        'algorithm': 'PUFFINN',
+        'threads': 56,
+        'params': {
+            'method': 'LSHJoinGlobal',
+            'recall': 0.9,
+            'space_usage': 512,
+            'hash_source': 'Independent'
+        }
+    }, debug=True)
+
+
+    sys.exit(0)
+
+    # with get_db() as db:
+    #     compute_recalls(db)
 
     run_config({
         'dataset': 'NYTimes',
@@ -1067,25 +1099,25 @@ if __name__ == "__main__":
     #         'params': {}
     #     })
 
-    for dataset in ['NYTimes', 'glove-25', 'DeepImage']:
+    for dataset in ['DBLP', 'NYTimes', 'glove-25', 'DeepImage']:
         # ----------------------------------------------------------------------
         # Faiss-HNSW
         # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-        for M in [48, 64]:
-            for efConstruction in [100, 500]:
-                for efSearch in [10, 40, 80, 120, 800]:
-                    run_config({
-                        'dataset': dataset,
-                        'workload': 'local-top-k',
-                        'k': 10,
-                        'algorithm': 'faiss-HNSW',
-                        'threads': threads,
-                        'params': {
-                            'M': M,
-                            'efConstruction': efConstruction,
-                            'efSearch': efSearch,
-                        }
-                    })
+        # for M in [48, 64]:
+        #     for efConstruction in [100, 500]:
+        #         for efSearch in [10, 40, 80, 120, 800]:
+        #             run_config({
+        #                 'dataset': dataset,
+        #                 'workload': 'local-top-k',
+        #                 'k': 10,
+        #                 'algorithm': 'faiss-HNSW',
+        #                 'threads': threads,
+        #                 'params': {
+        #                     'M': M,
+        #                     'efConstruction': efConstruction,
+        #                     'efSearch': efSearch,
+        #                 }
+        #             })
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
@@ -1105,45 +1137,45 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        for hash_source in ['Independent']:
-            for recall in [0.8, 0.9]:
-                for space_usage in [256, 512, 1024, 2048, 4096]:
-                    if dataset != 'DeepImage' or space_usage >= 32768:
-                        run_config({
-                            'dataset': dataset,
-                            'workload': 'local-top-k',
-                            'k': 10,
-                            'algorithm': 'PUFFINN',
-                            'threads': threads,
-                            'params': {
-                                'method': 'LSHJoin',
-                                'recall': recall,
-                                'space_usage': space_usage,
-                                'hash_source': hash_source
-                            }
-                        })
-
-
-        # ----------------------------------------------------------------------
-        # PUFFINN global top-k
         # for hash_source in ['Independent']:
         #     for recall in [0.8, 0.9]:
-        #         for space_usage in [1024, 2048, 4096, 8192, 16384, 32768, 65536]:
-        #             if dataset != 'DeepImage' or space_usage >= 16384:
+        #         for space_usage in [256, 512, 1024, 2048, 4096]:
+        #             if dataset != 'DeepImage' or space_usage >= 32768:
         #                 run_config({
         #                     'dataset': dataset,
-        #                     'workload': 'global-top-k',
+        #                     'workload': 'local-top-k',
         #                     'k': 10,
         #                     'algorithm': 'PUFFINN',
         #                     'threads': threads,
         #                     'params': {
-        #                         'method': 'LSHJoinGlobal',
+        #                         'method': 'LSHJoin',
         #                         'recall': recall,
         #                         'space_usage': space_usage,
         #                         'hash_source': hash_source
         #                     }
         #                 })
 
-    with get_db() as db:
-        compute_recalls(db)
+
+        # ----------------------------------------------------------------------
+        # PUFFINN global top-k
+        for hash_source in ['Independent']:
+            for recall in [0.8, 0.9]:
+                for space_usage in [512, 1024]:
+                    if dataset != 'DeepImage' or space_usage >= 16384:
+                        run_config({
+                            'dataset': dataset,
+                            'workload': 'global-top-k',
+                            'k': 10,
+                            'algorithm': 'PUFFINN',
+                            'threads': threads,
+                            'params': {
+                                'method': 'LSHJoinGlobal',
+                                'recall': recall,
+                                'space_usage': space_usage,
+                                'hash_source': hash_source
+                            }
+                        })
+
+    # with get_db() as db:
+    #     compute_recalls(db)
 
