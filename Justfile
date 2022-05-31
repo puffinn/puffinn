@@ -1,5 +1,12 @@
 set dotenv-load
 
+check:
+  cmake --build build --config RelWithDebInfo --target PuffinnJoin
+  build/PuffinnJoin < instructions.txt > /dev/null
+
+cache-misses exe:
+  sudo perf record -e cache-misses -p $(pgrep {{exe}})
+
 # produce a flamegraph.svg file
 profile exec: install-flamegraph
   flamegraph --root -p $(pgrep {{exec}})

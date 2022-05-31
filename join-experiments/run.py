@@ -225,35 +225,31 @@ def compute_recalls(db):
                 distances = hfp[dist_key]
                 neighbors = hfp[nn_key]
                 topk = []
-                for i, (dists, neigs) in enumerate(zip(distances, neighbors)):
+                for i, (dists, neighs) in tqdm(enumerate(zip(distances, neighbors)), total=neighbors.shape[0]):
                     for d, j in zip(dists, neighs):
-                        t = (d, min(i, j), max(i, j))
-                        if t not in topk:
-                            heapq.heappush(topk, t)
-                        if len(topk) > 1000:
-                            heapq.heappop(topk)
-                topk.sort()
-                print(topk)
+                        if i != j:
+                            t = (d, min(i, j), max(i, j))
+                            if len(topk) > 2000:
+                                heapq.heappushpop(topk, t)
+                            else:
+                                heapq.heappush(topk, t)
+                topk = list(set(topk)) # remove duplicates
+                topk.sort(reverse=True)
+                topk = topk[:1000]
+                hfp[top_pairs_key] = topk
+
+            baseline_pairs = set([(min(pair[0], pair[1]), max(pair[0], pair[1])) for pair in hfp[top_pairs_key][:k, 1:3].astype(np.int32)])
+            baseline_dists = hfp[top_pairs_key][:k, 0]
+
                  
-        sys.exit(0)
-
-
         print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
-        baseline = db.execute(
-            "SELECT output_file, hdf5_group FROM baselines_global WHERE dataset = :dataset AND k = :k AND workload = 'global-top-k';",
-            {"dataset": dataset, "k": k}
-        ).fetchone()
-        if baseline is None:
-            print("Missing baseline for global-top-k")
-            continue
-        print(baseline)
-        base_file, base_group = baseline
-        base_file = os.path.join(BASE_DIR, base_file)
+        print(baseline_pairs)
+        print(baseline_dists)
         output_file = os.path.join(BASE_DIR, output_file)
-        with h5py.File(base_file) as hfp:
-            baseline_pairs = set(map(tuple, hfp[base_group]['global-top-{}'.format(k)]))
         with h5py.File(output_file) as hfp:
             actual_pairs = set(map(tuple, hfp[hdf5_group]['global-top-{}'.format(k)]))
+        print("Actual pairs")
+        print(actual_pairs)
         matched = 0
         for pair in baseline_pairs:
             if pair in actual_pairs:
@@ -1039,8 +1035,8 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
 
-    # with get_db() as db:
-    #     compute_recalls(db)
+    with get_db() as db:
+        compute_recalls(db)
 
     run_config({
         'dataset': 'NYTimes',
@@ -1111,20 +1107,21 @@ if __name__ == "__main__":
         # PUFFINN local top-k
         for hash_source in ['Independent']:
             for recall in [0.8, 0.9]:
-                for space_usage in [32768, 65536]:
-                    run_config({
-                        'dataset': dataset,
-                        'workload': 'local-top-k',
-                        'k': 10,
-                        'algorithm': 'PUFFINN',
-                        'threads': threads,
-                        'params': {
-                            'method': 'LSHJoin',
-                            'recall': recall,
-                            'space_usage': space_usage,
-                            'hash_source': hash_source
-                        }
-                    })
+                for space_usage in [256, 512, 1024, 2048, 4096]:
+                    if dataset != 'DeepImage' or space_usage >= 32768:
+                        run_config({
+                            'dataset': dataset,
+                            'workload': 'local-top-k',
+                            'k': 10,
+                            'algorithm': 'PUFFINN',
+                            'threads': threads,
+                            'params': {
+                                'method': 'LSHJoin',
+                                'recall': recall,
+                                'space_usage': space_usage,
+                                'hash_source': hash_source
+                            }
+                        })
 
 
         # ----------------------------------------------------------------------
