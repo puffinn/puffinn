@@ -252,6 +252,7 @@ namespace puffinn {
         /// The number of threads used can be specified using the
         /// OMP_NUM_THREADS environment variable.
         void rebuild(bool with_sketches = true) {
+            TIMER_START(index_build);
             g_performance_metrics.start_timer(Computation::Indexing);
             if (with_sketches) {
                 // Compute sketches for the new vectors.
@@ -281,12 +282,7 @@ namespace puffinn {
                 throw std::invalid_argument("insufficient memory");
             }
 
-            if (num_tables > 1000) {
-                std::cerr << "Capping tables to max 1000." << std::endl;
-                num_tables = 1000;
-            } else {
-                std::cerr << "Number of tables: " << num_tables << std::endl;
-            }
+            std::cerr << "Number of tables: " << num_tables << std::endl;
 
             // if rebuild has been called before
             if (hash_source) {
@@ -340,6 +336,7 @@ namespace puffinn {
             }
             last_rebuild = dataset.get_size();
             g_performance_metrics.store_time(Computation::Indexing);
+            TIMER_STOP(index_build);
         }
 
         /// Search for the approximate ``k`` nearest neighbors to a query.
