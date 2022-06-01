@@ -779,6 +779,27 @@ def random_float(out_fn, n_dims, n_samples, centers):
     write_dense(out_fn, X)
     return out_fn
 
+def random_difficult(out_fn, n, d, k):
+    if os.path.isfile(out_fn):
+        return out_fn
+    
+    assert d % 3 == 0
+    assert n % k == 0
+
+    D = d // 3
+    # the base set of random vectors, expected unit length
+    X = np.random.normal(scale=1/D, size=(n//k, d))
+    
+    Y = np.zeros((n, d))
+    for i, x in enumerate(X):
+        Y[k * i] = x
+        for j in range(1, k):
+            # k random vectors at expected distance \sqrt{1/3} of x
+            Y[k * i + j] = np.concatenate((x[: 2 * D], np.random.normal(scale=1/D, size=D)))
+    X = X.astype(np.float32)
+    write_dense(out_fn, X)
+    return out_fn
+
 
 def glove(out_fn, dims):
     if os.path.isfile(out_fn):
@@ -1037,7 +1058,8 @@ DATASETS = {
     'Kosarak': lambda: kosarak(os.path.join(DATASET_DIR, 'kosarak.hdf5')),
     'DeepImage': lambda: deep_image(os.path.join(DATASET_DIR, 'deep_image.hdf5')),
     'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
-    'random-float-10k': lambda: random_float(os.path.join(DATASET_DIR, 'random-float-10k.hdf5' ), 20, 10000, 100)
+    'random-float-10k': lambda: random_float(os.path.join(DATASET_DIR, 'random-float-10k.hdf5' ), 20, 10000, 100),
+    'random-difficult': lambda: random_difficult(os.path.join(DATASET_DIR, 'random-float-difficult.hdf5' ), 1000000, 150, 10)
 }
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
@@ -1177,7 +1199,7 @@ if __name__ == "__main__":
     #     'params': {'prefix': 10000}
     # })
     run_config({
-        'dataset': 'random-float-10k',
+        'dataset': 'random-difficult',
         'workload': 'local-top-k',
         'k': 1000,
         'algorithm': 'BruteForceLocal',
