@@ -95,7 +95,7 @@ def plot_local_topk():
         width=1000,
         height=600,
         title="Recall vs. time"
-    ).add_selection(selection)
+    ).add_selection(selection).interactive()
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
 
