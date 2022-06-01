@@ -1090,7 +1090,7 @@ if __name__ == "__main__":
     for dataset in ['glove-25']:
         for k in [10]:
             for m in [4, 8, 16]:
-                for w in [4, 8]:
+                for w in [1, 2, 4]:
                     run_config({
                         'dataset': dataset,
                         'workload': 'global-top-k',

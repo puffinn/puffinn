@@ -14,8 +14,10 @@
 #include <algorithm>
 #include <string>
 #include <chrono>
+#include <omp.h>
 #include "protocol.hpp"
 #include "puffinn.hpp"
+#include "puffinn/performance.hpp"
 
 struct Pair
 {
@@ -190,6 +192,16 @@ std::pair<size_t, size_t> find_segment(std::vector<std::pair<uint64_t, size_t>> 
   return std::make_pair(from, to);
 }
 
+void merge(std::vector<Pair> & a, std::vector<Pair> & b, size_t k) {
+  for (Pair p : b) {
+    a.push_back(p);
+    if (a.size() > k) {
+      std::pop_heap(a.begin(), a.end(), cmp_pairs);
+      a.pop_back();
+    }
+  }
+}
+
 std::vector<Pair> cp3(
   std::vector<std::vector<float>> &dataset, 
   std::vector<std::pair<uint64_t, size_t>> & index, 
@@ -197,25 +209,31 @@ std::vector<Pair> cp3(
   size_t m, 
   size_t coord_grid_bits)
 {
-  std::vector<Pair> result;
+  int nthreads = omp_get_max_threads();
+  std::vector<std::vector<Pair>> tl_result(nthreads);
 
   std::pair<size_t, size_t> current = find_segment(index, 0);
   while (current.first < index.size()) {
     std::cerr << " current block from " << current.first << " to " << current.second << " with " << (current.second - current.first) << " elements" << std::endl;
     // Self join of the current node
+    #pragma omp parallel for
     for (size_t i=current.first; i < current.second; i++) {
+      int tid = omp_get_thread_num();
       auto & a = dataset[index[i].second];
       for (size_t j=i+1; j < current.second; j++) {
         auto & b = dataset[index[j].second];
         float d = euclidean(a, b);
-        result.push_back(Pair{index[i].second, index[j].second, d});
-        std::push_heap(result.begin(), result.end(), cmp_pairs);
+        tl_result[tid].push_back(Pair{index[i].second, index[j].second, d});
+        std::push_heap(tl_result[tid].begin(), tl_result[tid].end(), cmp_pairs);
 
-        if (result.size() > k) {
-          std::pop_heap(result.begin(), result.end(), cmp_pairs);
-          result.pop_back();
+        if (tl_result[tid].size() > k) {
+          std::pop_heap(tl_result[tid].begin(), tl_result[tid].end(), cmp_pairs);
+          tl_result[tid].pop_back();
         }
       }
+    }
+    for(int tid=1; tid < nthreads; tid++) {
+      merge(tl_result[0], tl_result[tid], k);
     }
 
     // explore a few of the next nodes
@@ -224,8 +242,8 @@ std::vector<Pair> cp3(
     while (next.first < index.size()) {
       // std::cerr << "   next block from " << next.first << " to " << next.second << " " << std::endl;
       // check if the next segment is too far away
-      if (result.size() == k) {
-        float d = result.front().distance;
+      if (tl_result[0].size() == k) {
+        float d = tl_result[0].front().distance;
         if (d < best) {
           best = d;
           std::cerr << " current best guess " << best << std::endl;
@@ -237,20 +255,25 @@ std::vector<Pair> cp3(
         break;
       }
     
+      #pragma omp parallel for
       for (size_t i=current.first; i < current.second; i++) {
+        int tid = omp_get_thread_num();
         auto & a = dataset[index[i].second];
         for (size_t j=next.first; j < next.second; j++) {
           auto & b = dataset[index[j].second];
 
           float d = euclidean(a, b);
-          result.push_back(Pair{index[i].second, index[j].second, d});
-          std::push_heap(result.begin(), result.end(), cmp_pairs);
+          tl_result[tid].push_back(Pair{index[i].second, index[j].second, d});
+          std::push_heap(tl_result[tid].begin(), tl_result[tid].end(), cmp_pairs);
 
-          if (result.size() > k) {
-            std::pop_heap(result.begin(), result.end(), cmp_pairs);
-            result.pop_back();
+          if (tl_result[tid].size() > k) {
+            std::pop_heap(tl_result[tid].begin(), tl_result[tid].end(), cmp_pairs);
+            tl_result[tid].pop_back();
           }
         }
+      }
+      for(int tid=1; tid < nthreads; tid++) {
+        merge(tl_result[0], tl_result[tid], k);
       }
 
       // go to the next block
@@ -259,7 +282,11 @@ std::vector<Pair> cp3(
     current = find_segment(index, current.second);
   }
 
-  return result;
+  for(int tid=1; tid < nthreads; tid++) {
+    merge(tl_result[0], tl_result[tid], k);
+  }
+
+  return tl_result[0];
 }
 
 
