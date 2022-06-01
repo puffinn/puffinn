@@ -74,7 +74,7 @@ float euclidean(std::vector<float> &a, std::vector<float> &b) {
     float diff = (a[i] - b[i]);
     s += diff * diff;
   }
-  return std::sqrtf(s);
+  return std::sqrt(s);
 }
 
 std::pair<std::vector<std::pair<uint64_t, size_t>>, size_t> build_index(std::vector<std::vector<float>> &dataset, size_t m, double w, size_t seed) {
@@ -85,10 +85,10 @@ std::pair<std::vector<std::pair<uint64_t, size_t>>, size_t> build_index(std::vec
   rng.seed(seed);
 
   float extent = compute_extent(dataset);
-  float f = std::ceilf( std::log2f(extent) + std::log2f(d) );
+  float f = std::ceil( std::log2f(extent) + std::log2f(d) );
 
   // Instantiate hash functions
-  std::uniform_real_distribution<> uniform(0.0, w * std::powf(2.0, f));
+  std::uniform_real_distribution<> uniform(0.0, w * std::pow(2.0, f));
   std::normal_distribution<> normal{0,1};
 
   std::vector<std::vector<float>> a; // the random projection vectors, in row major order
@@ -139,7 +139,7 @@ std::pair<std::vector<std::pair<uint64_t, size_t>>, size_t> build_index(std::vec
   size_t coord_grid_bits = 0;
   for (size_t i=0; i<m; i++) {
     float e = maxcoord[i] - mincoord[i];
-    uint64_t ncells = (uint64_t) std::ceilf(e / w);
+    uint64_t ncells = (uint64_t) std::ceil(e / w);
     std::cerr << "extent of projected coordinate " << i 
               << " is " << e << " (" << mincoord[i] << " to " << maxcoord[i] << ")"
               << ", divided in " 
@@ -162,7 +162,6 @@ std::pair<std::vector<std::pair<uint64_t, size_t>>, size_t> build_index(std::vec
     for (size_t coord = i*m; coord < (i+1)*m; coord++) {
       float proj = projections[coord];
       uint64_t h = (uint64_t) std::floor((proj - mincoord[coord % m]) / w);
-      assert(h < maxvalid);
       gridded.push_back(h);
     }
     uint64_t z = zorder(gridded, coord_grid_bits);
@@ -232,7 +231,7 @@ std::vector<Pair> cp3(
           std::cerr << " current best guess " << best << std::endl;
         }
       }
-      float block_bound = std::powf(2.0, 1 + coord_grid_bits - std::floorf(lcp(index[current.first].first, index[next.first].first) / m));
+      float block_bound = std::pow(2.0, 1 + coord_grid_bits - std::floor(lcp(index[current.first].first, index[next.first].first) / m));
       if (best < block_bound) {
         std::cerr << " early stopping loop block bound=" << block_bound << std::endl;
         break;
@@ -297,13 +296,12 @@ int main(void) {
     // Read the dataset
     expect("data");
     expect("cosine");
-    // std::cerr << "[c++] receiving data" << std::endl;
+    std::cerr << "[c++] receiving data" << std::endl;
     auto dataset = read_float_vectors_hdf5(true);
     std::cerr << "Loaded " << dataset.size() << " vectors of dimension " << dataset[0].size() << std::endl;
     send("ok");
 
     expect("index");
-    // TODO
     auto index_pair = build_index(dataset, m, w, seed);
     send("ok");
 

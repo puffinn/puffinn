@@ -443,6 +443,8 @@ class SubprocessAlgorithm(Algorithm):
 
     def feed_data(self, h5py_path):
         distance = h5py.File(h5py_path).attrs['distance']
+        if distance == "angular":
+            distance = "cosine"
         self._send("data")
         self._send(distance)
         program = self._subprocess_handle()
@@ -944,7 +946,8 @@ ALGORITHMS = {
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
     'faiss-IVF':       lambda: (FaissIVF(),                                 1),
     # Global top-k baselines
-    'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1)
+    'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1),
+    'LSBTree':         lambda: (SubprocessAlgorithm(["build/LSBTree"]),     1)
 }
 
 # =============================================================================
@@ -1050,23 +1053,6 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
 
-    run_config({
-        'dataset': 'DBLP',
-        'workload': 'global-top-k',
-        'k': 10,
-        'algorithm': 'PUFFINN',
-        'threads': 56,
-        'params': {
-            'method': 'LSHJoinGlobal',
-            'recall': 0.9,
-            'space_usage': 512,
-            'hash_source': 'Independent'
-        }
-    }, debug=True)
-
-
-    sys.exit(0)
-
     # with get_db() as db:
     #     compute_recalls(db)
 
@@ -1098,6 +1084,24 @@ if __name__ == "__main__":
     #         'algorithm': 'XiaoEtAl',
     #         'params': {}
     #     })
+
+    # ----------------------------------------------------------------------
+    # LSB-Tree global top-k
+    for dataset in ['glove-25']:
+        for k in [10]:
+            for m in [4, 8, 16]:
+                for w in [4, 8]:
+                    run_config({
+                        'dataset': dataset,
+                        'workload': 'global-top-k',
+                        'k': k,
+                        'algorithm': 'LSBTree',
+                        'params': {
+                            'm': m,
+                            'w': w
+                        }
+                    })
+
 
     for dataset in ['DBLP', 'NYTimes', 'glove-25', 'DeepImage']:
         # ----------------------------------------------------------------------
@@ -1160,7 +1164,7 @@ if __name__ == "__main__":
         # PUFFINN global top-k
         for hash_source in ['Independent']:
             for recall in [0.8, 0.9]:
-                for space_usage in [512, 1024]:
+                for space_usage in [512, 1024, 2048]:
                     if dataset != 'DeepImage' or space_usage >= 16384:
                         run_config({
                             'dataset': dataset,

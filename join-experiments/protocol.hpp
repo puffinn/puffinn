@@ -4,14 +4,14 @@
 #include "highfive/H5Easy.hpp"
 
 std::string expect(std::string what) {
-    // std::cerr << "[c++] Expecting to receive `sppv1 " << what << "`" << std::endl;
+    std::cerr << "[c++] Expecting to receive `sppv1 " << what << "`" << std::endl;
     std::string head = "sppv1 " + what;
     std::string protocol_line;
     std::getline(std::cin, protocol_line);
-    // std::cerr << "[c++] received`" << protocol_line << "`" << std::endl;
+    std::cerr << "[c++] received`" << protocol_line << "`" << std::endl;
     if (protocol_line.find(head) != 0) {
         std::cout << "sppv1 err" << std::endl;
-        throw "invalid message received";
+        throw std::invalid_argument("invalid message received");
     }
     std::string toret = protocol_line.substr(head.size());
     while (toret.size() > 0 && toret.at(0) == ' ') {

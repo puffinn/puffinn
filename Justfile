@@ -32,6 +32,8 @@ sqlite:
 
 run:
   cmake --build build --config RelWithDebInfo --target PuffinnJoin
+  cmake --build build --config RelWithDebInfo --target LSBTree
+  cmake --build build --config RelWithDebInfo --target XiaoEtAl
   env TOPK_DIR=/mnt/large_storage/topk-join/ python3 join-experiments/run.py
 
 plot:
