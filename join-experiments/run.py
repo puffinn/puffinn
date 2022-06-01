@@ -8,6 +8,7 @@
 # Datasets are taken from ann-benchmarks or created ad-hoc from
 # other sources (e.g. DBLP).
 
+import concurrent.futures
 import gzip
 import urllib.request
 import zipfile
@@ -21,10 +22,11 @@ import h5py
 import sys
 import yaml
 import shlex
-import faiss
 import os
 import hashlib
 import sqlite3
+import faiss
+import falconn
 import json
 import random
 import numba
@@ -88,7 +90,7 @@ MIGRATIONS = [
     GROUP BY 1;
 
     CREATE VIEW recent AS
-    SELECT * 
+    SELECT *
     FROM main
     NATURAL JOIN recent_versions;
     """
@@ -219,14 +221,14 @@ def compute_recalls(db):
             """,
             {"rowid": rowid, "recall": avg_recall}
         )
-        
+
     # Global topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'global-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
         # Compute the top-1000 distances for the dataset, if they are not already there
         dist_key, nn_key = '/top-1000-dists', '/top-1000-neighbors'
         top_pairs_key = '/top-1000-pairs'
-        
+
         dataset_path = DATASETS[dataset]()
         with h5py.File(dataset_path, 'r+') as hfp:
             if dist_key not in hfp or nn_key not in hfp:
@@ -256,7 +258,7 @@ def compute_recalls(db):
             baseline_pairs = set([(min(pair[0], pair[1]), max(pair[0], pair[1])) for pair in hfp[top_pairs_key][:k, 1:3].astype(np.int32)])
             baseline_dists = hfp[top_pairs_key][:k, 0]
 
-                 
+
         print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
         print(baseline_pairs)
         print(baseline_dists)
@@ -489,6 +491,7 @@ class SubprocessAlgorithm(Algorithm):
 
 
 class FaissIVF(Algorithm):
+
     def __init__(self):
         self.faiss_index = None
         self.k = None
@@ -591,6 +594,92 @@ class FaissHNSW(Algorithm):
         return self.time_index, self.time_run
 
 
+class FALCONN(Algorithm):
+
+    def __init__(self):
+        self._index = None
+        self.k = None
+        self.params = None
+        self.data = None
+        self.time_index = None
+        self.time_run = None
+        self.result_indices = None
+
+    def setup(self, k, params):
+        """Configure the parameters of the algorithm"""
+        self.k = k
+        self.params = params
+
+    def feed_data(self, h5py_path):
+        """Pass the data to the algorithm"""
+        f = h5py.File(h5py_path)
+        assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
+        self.data = np.array(f['train'])
+        f.close()
+
+    def index(self):
+        """Setup the index, if any. This is timed."""
+        print("  Building index")
+        start = time.time()
+
+        X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
+        if X.dtype != np.float32:
+            X = X.astype(np.float32)
+
+        params_cp = falconn.LSHConstructionParameters()
+        params_cp.dimension = X.shape[1]
+        params_cp.lsh_family = falconn.LSHFamily.CrossPolytope
+        params_cp.distance_function = falconn.DistanceFunction.NegativeInnerProduct
+        params_cp.storage_hash_table = falconn.StorageHashTable.FlatHashTable
+        params_cp.k = self.params["k"]
+        params_cp.l = self.params["L"]
+        params_cp.num_setup_threads = 0
+        params_cp.last_cp_dimension = 16
+        params_cp.num_rotations = 3
+        params_cp.seed = 833840234
+
+
+        self._index = falconn.LSHIndex(params_cp)
+        self._index.setup(X)
+        self.time_index = time.time() - start
+
+    def _run_individual_query(self, query):
+        qo = self._index.construct_query_object()
+        qo.set_num_probes(self.params["num_probes"])
+        res = qo.find_k_nearest_neighbors(query, self.k + 1)
+        if len(res) < self.k + 1:
+            res += [0] * (self.k + 1 - len(res))
+        return res
+
+    def run(self):
+        """Run the workload. This is timed."""
+        print("  Top-{} join".format(self.k))
+        start = time.time()
+        X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
+        if X.dtype != np.float32:
+            X = X.astype(np.float32)
+        self.result_indices = np.zeros((X.shape[0], self.k + 1))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.params["threads"]) as executor:
+            tasks = {executor.submit(self._run_individual_query, query): i for (i, query) in enumerate(X)}
+            for future in concurrent.futures.as_completed(tasks):
+                i = tasks[future]
+                res = future.result()
+                self.result_indices[i] = res
+
+        #for (i, query) in enumerate(X):
+        #    self.result_indices[i] = self._run_individual_query(query)
+
+        self.time_run = time.time() - start
+        self.result_indices = self.result_indices[:,1:]
+
+    def result(self):
+        return self.result_indices
+
+    def times(self):
+        """Returns the pair (index_time, workload_time)"""
+        return self.time_index, self.time_run
+
+
 class BruteForceLocal(Algorithm):
     def __init__(self):
         self.data = None
@@ -666,7 +755,7 @@ def write_dense(out_fn, vecs):
 # Adapted from ann-benchmarks
 def random_jaccard(out_fn, n=10000, size=50, universe=80):
     if os.path.isfile(out_fn):
-        return
+        return out_fn
     random.seed(1)
     l = list(range(universe))
     # We call the set of sets `train` to be compatible with datasets from
@@ -676,6 +765,40 @@ def random_jaccard(out_fn, n=10000, size=50, universe=80):
         train.append(random.sample(l, size))
 
     write_sparse(out_fn, train)
+    return out_fn
+
+def random_float(out_fn, n_dims, n_samples, centers):
+    import sklearn.datasets
+    if os.path.isfile(out_fn):
+        return out_fn
+
+    X, _ = sklearn.datasets.make_blobs(
+        n_samples=n_samples, n_features=n_dims,
+        centers=centers, random_state=1)
+    X = X.astype(np.float32)
+    write_dense(out_fn, X)
+    return out_fn
+
+def random_difficult(out_fn, n, d, k):
+    if os.path.isfile(out_fn):
+        return out_fn
+    
+    assert d % 3 == 0
+    assert n % (k + 1) == 0
+
+    D = d // 3
+    # the base set of random vectors, expected unit length
+    np.random.seed(1)
+    X = np.random.normal(scale=1/D, size=(n// (k + 1), d))
+    
+    Y = np.zeros((n, d))
+    for i, x in enumerate(X):
+        Y[(k + 1) * i] = x
+        for j in range(1, k + 1):
+            # k random vectors at expected distance \sqrt{1/3} of x
+            Y[(k + 1) * i + j] = np.concatenate((x[: 2 * D], np.random.normal(scale=1/D, size=D)))
+    X = X.astype(np.float32)
+    write_dense(out_fn, X)
     return out_fn
 
 
@@ -936,6 +1059,8 @@ DATASETS = {
     'Kosarak': lambda: kosarak(os.path.join(DATASET_DIR, 'kosarak.hdf5')),
     'DeepImage': lambda: deep_image(os.path.join(DATASET_DIR, 'deep_image.hdf5')),
     'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
+    'random-float-10k': lambda: random_float(os.path.join(DATASET_DIR, 'random-float-10k.hdf5' ), 20, 10000, 100),
+    'random-difficult': lambda: random_difficult(os.path.join(DATASET_DIR, 'random-float-difficult.hdf5' ), 1100000, 150, 10)
 }
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
@@ -945,6 +1070,7 @@ ALGORITHMS = {
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
     'faiss-IVF':       lambda: (FaissIVF(),                                 1),
+    'falconn':    lambda: (FALCONN(),                                   2),
     # Global top-k baselines
     'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1),
     'LSBTree':         lambda: (SubprocessAlgorithm(["build/LSBTree"]),     1)
@@ -972,7 +1098,9 @@ def get_output_file(configuration):
     params_hash = hashlib.sha256(params_string.encode('utf-8')).hexdigest()
     h5obj = h5py.File(os.path.join(BASE_DIR, fname), 'a')
     group = h5obj.require_group(params_hash)
+    print(params_list)
     for key, value in params_list:
+        print(key, value)
         group.attrs[key] = value
     return fname, params_hash, group
 
@@ -1056,20 +1184,27 @@ if __name__ == "__main__":
     # with get_db() as db:
     #     compute_recalls(db)
 
+    # run_config({
+    #     'dataset': 'NYTimes',
+    #     'workload': 'local-top-k',
+    #     'k': 1000,
+    #     'algorithm': 'BruteForceLocal',
+    #     'params': {}
+    # })
+
+    # run_config({
+    #     'dataset': 'DeepImage',
+    #     'workload': 'local-top-k',
+    #     'k': 1000,
+    #     'algorithm': 'BruteForceLocal',
+    #     'params': {'prefix': 10000}
+    # })
     run_config({
-        'dataset': 'NYTimes',
+        'dataset': 'random-difficult',
         'workload': 'local-top-k',
         'k': 1000,
         'algorithm': 'BruteForceLocal',
         'params': {}
-    })
-
-    run_config({
-        'dataset': 'DeepImage',
-        'workload': 'local-top-k',
-        'k': 1000,
-        'algorithm': 'BruteForceLocal',
-        'params': {'prefix': 10000}
     })
 
     threads = 56
@@ -1101,7 +1236,6 @@ if __name__ == "__main__":
                             'w': w
                         }
                     })
-
 
     for dataset in ['DBLP', 'NYTimes', 'glove-25', 'DeepImage']:
         # ----------------------------------------------------------------------
@@ -1143,6 +1277,22 @@ if __name__ == "__main__":
         # PUFFINN local top-k
         # for hash_source in ['Independent']:
         #     for recall in [0.8, 0.9]:
+
+        for L in [5, 10, 50, 100]:
+            for num_probes in [L, 2 * L, 5 * L, 10 * L]:
+                run_config({
+                    'dataset': dataset,
+                    'workload': 'local-top-k',
+                    'k': 10,
+                    'algorithm': 'falconn',
+                    'threads': threads,
+                    'params': {
+                        "k": 3,
+                        "L": L,
+                        "num_probes": num_probes,
+                    }
+                })
+
         #         for space_usage in [256, 512, 1024, 2048, 4096]:
         #             if dataset != 'DeepImage' or space_usage >= 32768:
         #                 run_config({
