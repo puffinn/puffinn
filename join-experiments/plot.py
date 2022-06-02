@@ -52,7 +52,8 @@ def plot_local_topk():
         select dataset, workload, k, algorithm, algorithm_version, params, threads, json_extract(params, '$.hash_source') as hash_source, 
                recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s 
         from recent 
-         where json_extract(params, '$.prefix') is null;
+         where json_extract(params, '$.prefix') is null
+           and workload = 'local-top-k';
         """, db)
     all = all.fillna(value={'hash_source': ''})
     all['algorithm'] = all['algorithm'] + all['hash_source']
@@ -94,7 +95,7 @@ def plot_local_topk():
         width=1000,
         height=600,
         title="Recall vs. time"
-    ).add_selection(selection)
+    ).add_selection(selection).interactive()
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
 
