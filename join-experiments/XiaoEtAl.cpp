@@ -261,31 +261,11 @@ std::vector<Pair> all_2_all(const puffinn::Dataset<puffinn::SetFormat> &dataset,
 }
 
 int main(void) {
-    // Read parameters
-    std::string protocol_line;
-    expect("setup");
-    unsigned int k = 10;
-    while (true) {
-        std::getline(std::cin, protocol_line);
-        if (protocol_line == "sppv1 end") {
-            break;
-        }
-        std::istringstream line(protocol_line);
-        std::string key;
-        line >> key;
-        if (key == "k") {
-            line >> k;
-        } else {
-          // ignore other parameters
-        }
-    }
-    send("ok");
-
     // Read the dataset
     expect("data");
     expect("jaccard");
     // std::cerr << "[c++] receiving data" << std::endl;
-    auto dataset = read_int_vectors_stdin();
+    auto dataset = read_int_vectors_hdf5();
     size_t universe = 0;
     for (auto & v : dataset) {
       for (auto x : v) {
@@ -304,19 +284,46 @@ int main(void) {
     // No index is built
     send("ok");
 
-    expect("workload");
-    auto top_pairs = topk(dataset, universe, k);
-    send("ok");
+    while (true) {
+      std::string next_workload = protocol_read();
+      std::cerr << "received " << next_workload << std::endl;
+      if (next_workload == "end_workloads") {
+          break;
+      }
+      std::string workload_params_str = next_workload.substr(std::string("workload ").size());
+      std::cerr << "NEW WORKLOAD ON INDEX " << workload_params_str << std::endl;
 
-    expect("result");
-    // std::cerr << "[c++] results size " << res.size() << std::endl; 
-    while (!top_pairs.empty()) {
-      std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
-      auto p = top_pairs.back();
-      top_pairs.pop_back();
-      std::cout << p.a << " " << p.b << std::endl;
+      // query params
+      unsigned int k = 1;
+
+      std::istringstream workload_params_stream(workload_params_str);
+      while (true) {
+          std::string key;
+          workload_params_stream >> key;
+          if (key == "") {
+              break;
+          }
+          if (key == "k") {
+              workload_params_stream >> k;
+          } else {
+              std::cout << "sppv1 err unknown parameter " << key << std::endl;
+              throw std::invalid_argument("unknown parameter");
+          }
+      }
+
+      auto top_pairs = topk(dataset, universe, k);
+      send("ok");
+
+      expect("result");
+      // std::cerr << "[c++] results size " << res.size() << std::endl; 
+      while (!top_pairs.empty()) {
+        std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
+        auto p = top_pairs.back();
+        top_pairs.pop_back();
+        std::cout << p.a << " " << p.b << std::endl;
+      }
+      send("end");
     }
-    send("end");
 
 
     return 0;

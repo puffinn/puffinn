@@ -115,6 +115,7 @@ def already_run(db, configuration):
     configuration['threads'] = configuration.get('threads', 1)
     configuration['params']['threads'] = configuration.get('threads', 1)
     configuration['params'] = json.dumps(configuration['params'], sort_keys=True)
+    print("ALREADY RUN?", configuration)
     configuration['algorithm_version'] = algorithm_version
     res = db.execute("""
     SELECT rowid FROM main
@@ -292,24 +293,24 @@ def compute_recalls(db):
 #
 # For algorithms interfacing over text streams, the protocol is as follows:
 #
-# - Setup phase
-#   - harness sends `sppv1 setup`, followed by parameters as `name value` pairs, followed by `sppv1 end`
-#   - program acknowledges using `sppv1 ok`
 # - Data ingestion
-#   - harness sends `sppv1 data`, `sspv1 distance_type`, followed by vectors, one per line, followed by `sppv1 end`
-#   - program acknowledges using `sppv1 ok`
+#   - harness sends `sppv2 data`, `sspv1 distance_type`, followed by vectors, one per line, followed by `sppv2 end`
+#   - program acknowledges using `sppv2 ok`
 # - Index construction (timed)
-#   - harness sends `sppv1 index`
-#   - program acknowledges using `sppv1 ok` when it's done
+#   - harness sends `sppv2 index param1 v1 param2 v2 ...`
+#   - program acknowledges using `sppv2 ok` when it's done
 # - Workload run (timed)
-#   - harness sends `sppv1 workload`
-#   - program acknowledges using `sppv1 ok` when it's done
+#   - harness sends `sppv2 workload param1 v1 param2 v2`
+#   - program acknowledges using `sppv2 ok` when it's done
 # - Result collection
-#   - harness sends `sppv1 result`
+#   - harness sends `sppv2 result`
 #   - program writes output on stdout, one item per line (for whatever "item" means for the workload)
-#   - program writes `sppv1 end`
+#   - program writes `sppv2 end`
+# - Iteration or stop
+#   - harness sends either `sppv2 end_workloads` to signal that we are done or
+#   - sends a new workload specification
 
-PROTOCOL = "sppv1" # Version of the communication protocol
+PROTOCOL = "sppv2" # Version of the communication protocol
 
 
 def text_encode_floats(v):
@@ -348,24 +349,28 @@ def h5cat(path, stream=sys.stdout):
 class Algorithm(object):
     """Manages the lifecycle of an algorithm"""
     def execute(self, k, params, h5py_path, output_file, output_hdf5_path):
-        self.setup(k, params)
-        self.feed_data(h5py_path)
-        self.index()
-        self.run()
-        self.save_result(output_file, output_hdf5_path)
-        return self.times()
-    def setup(self, k, params):
+        # self.setup(k, params)
+        # self.feed_data(h5py_path)
+        # self.index()
+        # self.run()
+        # self.save_result(output_file, output_hdf5_path)
+        # return self.times()
+        raise Exception("deprecated")
+    def setup(self, k):
         """Configure the parameters of the algorithm"""
-        pass
+        raise Exception("deprecated")
     def feed_data(self, h5py_path):
         """Pass the data to the algorithm"""
-        pass
-    def index(self):
-        """Setup the index, if any. This is timed."""
-        pass
-    def run(self):
-        """Run the workload. This is timed."""
-        pass
+        raise Exception("not implemented")
+    def index(self, params):
+        """Setup the index with the given parameters, if any. This is timed."""
+        raise Exception("not implemented")
+    def run(self, params):
+        """Run the workload with the given join params. This is timed."""
+        raise Exception("not implemented")
+    def clear(self):
+        """Clears the result of the previous run"""
+        raise Exception("not implemented")
     def result(self):
         """Return the result as a two-dimensional numpy array.
         The way it is interpreted depends on the application.
@@ -373,7 +378,7 @@ class Algorithm(object):
         For local top-k join, it is the list of
         nearest neighbors for each element.
         """
-        pass
+        raise Exception("not implemented")
     def save_result(self, hdf5_file, path):
         result = self.result()
         if path in hdf5_file:
@@ -385,6 +390,9 @@ class Algorithm(object):
         hdf5_file[path] = result
     def times(self):
         """Returns the pair (index_time, workload_time)"""
+        raise Exception("not implemented")
+    def done(self):
+        """Used to signal to implementations that we are done and that the index can be discarded"""
         pass
 
 
@@ -433,15 +441,15 @@ class SubprocessAlgorithm(Algorithm):
         self._subprocess_handle().wait()
         self._program = None
 
-    def setup(self, k, params_dict):
-        print("Setup")
-        self._send("setup")
-        program = self._subprocess_handle()
-        print("k", k, file=program.stdin)
-        for key, v in params_dict.items():
-            print(key, v, file=program.stdin)
-        self._send("end")
-        self._expect("ok", "setup failed")
+    # def setup(self, k, params_dict):
+    #     print("Setup")
+    #     self._send("setup")
+    #     program = self._subprocess_handle()
+    #     print("k", k, file=program.stdin)
+    #     for key, v in params_dict.items():
+    #         print(key, v, file=program.stdin)
+    #     self._send("end")
+    #     self._expect("ok", "setup failed")
 
     def feed_data(self, h5py_path):
         distance = h5py.File(h5py_path).attrs['distance']
@@ -453,18 +461,20 @@ class SubprocessAlgorithm(Algorithm):
         self._send("path " + h5py_path)
         self._expect("ok", "population phase failed")
 
-    def index(self):
+    def index(self, params):
         print("Building index")
         start_t = time.time()
-        self._send("index")
+        cmd_string = "index " + " ".join(["{} {}".format(k, v) for k, v in params.items()])
+        self._send(cmd_string)
         self._expect("ok", "workload phase failed")
         end_t = time.time()
         self.index_time = end_t - start_t
 
-    def run(self):
+    def run(self, params):
         print("Running workload")
         start_t = time.time()
-        self._send("workload")
+        cmd_string = "workload " + " ".join(["{} {}".format(k, v) for k, v in params.items()])
+        self._send(cmd_string)
         # Wait for the program to report success
         self._expect("ok", "workload phase failed")
         end_t = time.time()
@@ -476,15 +486,21 @@ class SubprocessAlgorithm(Algorithm):
         rows = []
         while True:
             line = self._raw_line()
-            if line[1] == "end":
+            if line[-1] == "end":
                 break
             row = np.array([int(i) for i in line])
             assert np.unique(row).shape == row.shape
             rows.append(row)
         rows = np.array(rows)
+        return rows
+
+    def done(self):
+        self._send("end_workloads")
         print("Waiting for subprocess to finish")
         self._wait_for_completion()
-        return rows
+
+    def clear(self):
+        pass # nothing to do here
 
     def times(self):
         return self.index_time, self.workload_time
@@ -495,29 +511,23 @@ class FaissIVF(Algorithm):
     def __init__(self):
         self.faiss_index = None
         self.k = None
-        self.params = None
         self.data = None
         self.time_index = None
         self.time_run = None
         self.result_indices = None
-    def setup(self, k, params):
-        """Configure the parameters of the algorithm"""
-        self.k = k
-        self.params = params
-        faiss.omp_set_num_threads(params['threads'])
     def feed_data(self, h5py_path):
         """Pass the data to the algorithm"""
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
         self.data = np.array(f['train'])
         f.close()
-    def index(self):
+    def index(self, params):
         """Setup the index, if any. This is timed."""
         print("  Building index")
         start = time.time()
+        faiss.omp_set_num_threads(params['threads'])
 
-        n_list = self.params["n_list"]
-        n_probe = self.params["n_probe"]
+        n_list = params["n_list"]
 
         X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
 
@@ -527,16 +537,18 @@ class FaissIVF(Algorithm):
         self.quantizer = faiss.IndexFlatL2(X.shape[1])
         index = faiss.IndexIVFFlat(
             self.quantizer, X.shape[1], n_list, faiss.METRIC_L2)
-        index.nprobe = n_probe
         index.train(X)
         index.add(X)
         self.faiss_index = index
         self.time_index = time.time() - start
-    def run(self):
+    def run(self, params):
         """Run the workload. This is timed."""
         print("  Top-{} join".format(self.k))
+        k = params['k']
         start = time.time()
-        _dists, idxs = self.faiss_index.search(self.data, self.k+1)
+        n_probe = params["n_probe"]
+        index.nprobe = n_probe
+        _dists, idxs = self.faiss_index.search(self.data, k+1)
         self.time_run = time.time() - start
         self.result_indices = idxs[:,1:]
     def result(self):
@@ -544,47 +556,45 @@ class FaissIVF(Algorithm):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
-
+    def clear(self):
+        self.result_indices = None
+        self.time_run = None
 
 
 class FaissHNSW(Algorithm):
     def __init__(self):
         self.faiss_index = None
         self.k = None
-        self.params = None
         self.data = None
         self.time_index = None
         self.time_run = None
         self.result_indices = None
-    def setup(self, k, params):
-        """Configure the parameters of the algorithm"""
-        self.k = k
-        self.params = params
-        faiss.omp_set_num_threads(params['threads'])
     def feed_data(self, h5py_path):
         """Pass the data to the algorithm"""
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
         self.data = np.array(f['train'])
         f.close()
-    def index(self):
+    def index(self, params):
         """Setup the index, if any. This is timed."""
         print("  Building index")
         start = time.time()
+        faiss.omp_set_num_threads(params['threads'])
         X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
 
         if X.dtype != np.float32:
             X = X.astype(np.float32)
-        self.faiss_index = faiss.IndexHNSWFlat(len(X[0]), self.params["M"])
-        self.faiss_index.hnsw.efConstruction = self.params["efConstruction"]
+        self.faiss_index = faiss.IndexHNSWFlat(len(X[0]), params["M"])
+        self.faiss_index.hnsw.efConstruction = params["efConstruction"]
         self.faiss_index.add(X)
         self.time_index = time.time() - start
-    def run(self):
+    def run(self, params):
         """Run the workload. This is timed."""
         print("  Top-{} join".format(self.k))
-        self.faiss_index.hnsw.efSearch = self.params["efSearch"]
+        self.faiss_index.hnsw.efSearch = params["efSearch"]
         start = time.time()
-        _dists, idxs = self.faiss_index.search(self.data, self.k+1)
+        k = params['k']
+        _dists, idxs = self.faiss_index.search(self.data, k+1)
         self.time_run = time.time() - start
         self.result_indices = idxs[:,1:]
     def result(self):
@@ -592,6 +602,9 @@ class FaissHNSW(Algorithm):
     def times(self):
         """Returns the pair (index_time, workload_time)"""
         return self.time_index, self.time_run
+    def clear(self):
+        self.result_indices = None
+        self.time_run = None
 
 
 class FALCONN(Algorithm):
@@ -599,16 +612,14 @@ class FALCONN(Algorithm):
     def __init__(self):
         self._index = None
         self.k = None
-        self.params = None
         self.data = None
         self.time_index = None
         self.time_run = None
         self.result_indices = None
 
-    def setup(self, k, params):
-        """Configure the parameters of the algorithm"""
-        self.k = k
-        self.params = params
+    def clear(self):
+        self.result_indices = None
+        self.time_run = None
 
     def feed_data(self, h5py_path):
         """Pass the data to the algorithm"""
@@ -617,7 +628,7 @@ class FALCONN(Algorithm):
         self.data = np.array(f['train'])
         f.close()
 
-    def index(self):
+    def index(self, params):
         """Setup the index, if any. This is timed."""
         print("  Building index")
         start = time.time()
@@ -631,36 +642,36 @@ class FALCONN(Algorithm):
         params_cp.lsh_family = falconn.LSHFamily.CrossPolytope
         params_cp.distance_function = falconn.DistanceFunction.NegativeInnerProduct
         params_cp.storage_hash_table = falconn.StorageHashTable.FlatHashTable
-        params_cp.k = self.params["k"]
-        params_cp.l = self.params["L"]
+        params_cp.k = params["k"]
+        params_cp.l = params["L"]
         params_cp.num_setup_threads = 0
         params_cp.last_cp_dimension = 16
         params_cp.num_rotations = 3
         params_cp.seed = 833840234
 
-
         self._index = falconn.LSHIndex(params_cp)
         self._index.setup(X)
         self.time_index = time.time() - start
 
-    def _run_individual_query(self, query):
+    def _run_individual_query(self, query, params):
         qo = self._index.construct_query_object()
-        qo.set_num_probes(self.params["num_probes"])
+        qo.set_num_probes(params["num_probes"])
         res = qo.find_k_nearest_neighbors(query, self.k + 1)
         if len(res) < self.k + 1:
             res += [0] * (self.k + 1 - len(res))
         return res
 
-    def run(self):
+    def run(self, params):
         """Run the workload. This is timed."""
         print("  Top-{} join".format(self.k))
         start = time.time()
+        k = params['k']
         X = sklearn.preprocessing.normalize(self.data, axis=1, norm='l2')
         if X.dtype != np.float32:
             X = X.astype(np.float32)
-        self.result_indices = np.zeros((X.shape[0], self.k + 1))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.params["threads"]) as executor:
-            tasks = {executor.submit(self._run_individual_query, query): i for (i, query) in enumerate(X)}
+        self.result_indices = np.zeros((X.shape[0], k + 1))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=params["threads"]) as executor:
+            tasks = {executor.submit(self._run_individual_query, query, params): i for (i, query) in enumerate(X)}
             for future in concurrent.futures.as_completed(tasks):
                 i = tasks[future]
                 res = future.result()
@@ -698,9 +709,9 @@ class BruteForceLocal(Algorithm):
         assert np.sum(norms == 0.0) == 0
         self.data /= norms
         f.close()
-    def index(self):
+    def index(self, params):
         self.time_index = 0
-    def run(self):
+    def run(self, params):
         print("  Top-{} join".format(self.k))
         start = time.time()
         index = faiss.IndexFlatIP(len(self.data[0]))
@@ -1177,6 +1188,93 @@ def run_config(configuration, debug=False):
             print("Average recall", avg_recall)
 
 
+def run_multiple(index_configuration, join_configurations, debug=False):
+    """
+    Instantiates an index with the given configuration, and run multiple joins, with different 
+    parameterizations (as described in `join_configurations`) on the same index. 
+    This allows to save the time of the indexing over multiple runs.
+    """
+    db = get_db()
+
+    hdf5_file = DATASETS[index_configuration['dataset']]()
+    assert hdf5_file is not None
+    algo, version = ALGORITHMS[index_configuration['algorithm']]()
+    index_params = index_configuration['params']
+    index_params['threads'] = index_configuration.get('threads', 1)
+
+    algo.feed_data(hdf5_file)
+    print("Building index with parameters", index_params)
+    algo.index(index_params)
+
+    for join_configuration in join_configurations:
+        algo.clear() # clears the result from the previous run
+
+        full_config = index_configuration.copy()
+        full_config['params'].update(join_configuration)
+        full_config['k'] = full_config['params']['k']
+        del full_config['params']['k']
+        print("running with join configuration", json.dumps(full_config['params'], sort_keys=True))
+        
+        if already_run(db, full_config):
+            print("Configuration already run, skipping")
+            continue # skip this configuration
+        print("running with full configuration", full_config)
+        output_file, group, output = get_output_file(full_config)
+
+        k = join_configuration['k']
+        if full_config['workload'] == 'local-top-k':
+            hdf5_path = 'local-top-{}'.format(k)
+        elif full_config['workload'] == 'global-top-k':
+            hdf5_path = 'global-top-{}'.format(k)
+        else:
+            raise RuntimeError("unsupported configuration")
+        print("=== k={} algorithm={} params={} dataset={}".format(
+            k,
+            full_config['algorithm'],
+            full_config['params'],
+            full_config['dataset']
+        ))
+
+        algo.run(join_configuration)
+        algo.save_result(output, hdf5_path)
+
+        time_index, time_workload = algo.times() 
+
+        print("   time to index", time_index)
+        print("   time for join", time_workload)
+        db.execute("""
+        INSERT INTO main VALUES (
+            :dataset,
+            :workload,
+            :k,
+            :algorithm,
+            :params,
+            :threads,
+            :time_index_s,
+            :time_join_s,
+            :recall,
+            :output_file,
+            :hdf5_group,
+            :algorithm_version
+        );
+        """, {
+            "dataset": full_config['dataset'],
+            'workload': full_config['workload'],
+            'k': k,
+            'algorithm': full_config['algorithm'],
+            'algorithm_version': version,
+            'threads': full_config.get('threads', 1),
+            'params': json.dumps(full_config['params'], sort_keys=True),
+            'time_index_s': time_index,
+            'time_join_s': time_workload,
+            'recall': None,
+            'output_file': output_file,
+            'hdf5_group': group
+        })
+    algo.done()
+
+
+
 if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
@@ -1199,136 +1297,160 @@ if __name__ == "__main__":
     #     'algorithm': 'BruteForceLocal',
     #     'params': {'prefix': 10000}
     # })
-    run_config({
-        'dataset': 'random-difficult',
-        'workload': 'local-top-k',
-        'k': 1000,
-        'algorithm': 'BruteForceLocal',
-        'params': {}
-    })
+    # run_config({
+    #     'dataset': 'random-difficult',
+    #     'workload': 'local-top-k',
+    #     'k': 1000,
+    #     'algorithm': 'BruteForceLocal',
+    #     'params': {}
+    # })
 
     threads = 56
 
     # ----------------------------------------------------------------------
     # Xiao et al. global top-k
-    # for k in [1, 10, 100, 1000]:
-    #     run_config({
+    # for dummy_just_for_scoping in [0]:
+    #     index_params = {
     #         'dataset': 'DBLP',
     #         'workload': 'global-top-k',
-    #         'k': k,
     #         'algorithm': 'XiaoEtAl',
     #         'params': {}
-    #     })
+    #     } 
+    #     query_params = [
+    #         {'k': k}
+    #         for k in [1, 10, 100, 1000]
+    #     ]
+
+    #     run_multiple(index_params, query_params)
 
     # ----------------------------------------------------------------------
     # LSB-Tree global top-k
-    for dataset in ['glove-25']:
-        for k in [10]:
-            for m in [4, 8, 16]:
-                for w in [1, 2, 4]:
-                    run_config({
-                        'dataset': dataset,
-                        'workload': 'global-top-k',
-                        'k': k,
-                        'algorithm': 'LSBTree',
-                        'params': {
-                            'm': m,
-                            'w': w
-                        }
-                    })
+    # for dataset in ['glove-25']:
+    #     for m in [4, 8, 16]:
+    #         for w in [1, 2, 4]:
+    #             index_params = {
+    #                 'dataset': dataset,
+    #                 'workload': 'global-top-k',
+    #                 'algorithm': 'LSBTree',
+    #                 'params': {
+    #                     'm': m,
+    #                     'w': w
+    #                 }
+    #             }
+    #             join_params = [
+    #                 {'k': k}
+    #                 for k in [10]
+    #             ]
+    #             run_multiple(index_params, join_params)
 
-    for dataset in ['DBLP', 'NYTimes', 'glove-25', 'DeepImage']:
+    for dataset in ['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
+        pass
         # ----------------------------------------------------------------------
         # Faiss-HNSW
-        # for M in [4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-        # for M in [48, 64]:
-        #     for efConstruction in [100, 500]:
-        #         for efSearch in [10, 40, 80, 120, 800]:
-        #             run_config({
-        #                 'dataset': dataset,
-        #                 'workload': 'local-top-k',
-        #                 'k': 10,
-        #                 'algorithm': 'faiss-HNSW',
-        #                 'threads': threads,
-        #                 'params': {
-        #                     'M': M,
-        #                     'efConstruction': efConstruction,
-        #                     'efSearch': efSearch,
-        #                 }
-        #             })
+        # if dataset != 'DBLP':
+        #     for M in [4, 8, 16, 48, 32, 64, 128, 256, 512, 1024]:
+        #         for efConstruction in [100, 500]:
+        #             index_params = {
+        #                 'M': M,
+        #                 'efConstruction': efConstruction
+        #             }
+        #             join_params = [
+        #                 {'efSearch': efSearch, 'k': 10}
+        #                 for efSearch in [10, 40, 80, 120, 800]
+        #             ]
+        #             run_multiple(
+        #                 {
+        #                     'dataset': dataset,
+        #                     'workload': 'local-top-k',
+        #                     'algorithm': 'faiss-HNSW',
+        #                     'threads': threads,
+        #                     'params': index_params
+        #                 }, 
+        #                 join_params
+        #             )
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
         # for n_list in [32, 64, 128, 256]:
-        #     for n_probe in [1, 5, 10, 50]:
-        #         run_config({
+        #     if dataset != 'DBLP':
+        #         index_params = {
         #             'dataset': dataset,
         #             'workload': 'local-top-k',
-        #             'k': 10,
         #             'algorithm': 'faiss-IVF',
         #             'threads': threads,
         #             'params': {
-        #                 'n_list': n_list,
-        #                 'n_probe': n_probe
+        #                 'n_list': n_list
         #             }
-        #         })
+        #         }
+        #         join_params = [
+        #             {'n_probe': n_probe, 'k': 10}
+        #             for n_probe in [1, 5, 10, 50]
+        #         ]
+        #         run_multiple(index_params, join_params)
+
+        # ----------------------------------------------------------------------
+        # FALCONN local top-k
+        # for L in [5, 10, 50, 100]:
+        #     if dataset != 'DBLP':
+        #         index_params = {
+        #             'dataset': dataset,
+        #             'workload': 'local-top-k',
+        #             'algorithm': 'falconn',
+        #             'threads': threads,
+        #             'params': {
+        #                 "k": 3,
+        #                 "L": L
+        #             }
+        #         }
+        #         join_params = [
+        #             {'k': 10, 'num_probes': num_probes, 'threads': threads}
+        #             for num_probes in [L, 2 * L, 5 * L, 10 * L]
+        #         ]
+        #         run_multiple(index_params, join_params)
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
         # for hash_source in ['Independent']:
-        #     for recall in [0.8, 0.9]:
-
-        for L in [5, 10, 50, 100]:
-            for num_probes in [L, 2 * L, 5 * L, 10 * L]:
-                run_config({
-                    'dataset': dataset,
-                    'workload': 'local-top-k',
-                    'k': 10,
-                    'algorithm': 'falconn',
-                    'threads': threads,
-                    'params': {
-                        "k": 3,
-                        "L": L,
-                        "num_probes": num_probes,
-                    }
-                })
-
-        #         for space_usage in [256, 512, 1024, 2048, 4096]:
-        #             if dataset != 'DeepImage' or space_usage >= 32768:
-        #                 run_config({
-        #                     'dataset': dataset,
-        #                     'workload': 'local-top-k',
-        #                     'k': 10,
-        #                     'algorithm': 'PUFFINN',
-        #                     'threads': threads,
-        #                     'params': {
-        #                         'method': 'LSHJoin',
-        #                         'recall': recall,
-        #                         'space_usage': space_usage,
-        #                         'hash_source': hash_source
-        #                     }
-        #                 })
+        #     for space_usage in [512, 1024, 2048, 4096]:
+        #         index_params = {
+        #             'dataset': dataset,
+        #             'workload': 'local-top-k',
+        #             'algorithm': 'PUFFINN',
+        #             'threads': threads,
+        #             'params': {
+        #                 'space_usage': space_usage,
+        #                 'hash_source': hash_source
+        #             }
+        #         }
+        #         query_params = [
+        #             {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+        #             for recall in [0.8, 0.9]
+        #             for k in [1, 10]
+        #         ]
+        #         run_multiple(index_params, query_params)
 
 
         # ----------------------------------------------------------------------
         # PUFFINN global top-k
-        for hash_source in ['Independent']:
-            for recall in [0.8, 0.9]:
-                for space_usage in [512, 1024, 2048]:
-                    if dataset != 'DeepImage' or space_usage >= 16384:
-                        run_config({
-                            'dataset': dataset,
-                            'workload': 'global-top-k',
-                            'k': 10,
-                            'algorithm': 'PUFFINN',
-                            'threads': threads,
-                            'params': {
-                                'method': 'LSHJoinGlobal',
-                                'recall': recall,
-                                'space_usage': space_usage,
-                                'hash_source': hash_source
-                            }
-                        })
+        # for hash_source in ['Independent']:
+        #     for space_usage in [512, 1024, 2048, 4096]:
+        #         index_params = {
+        #             'dataset': dataset,
+        #             'workload': 'global-top-k',
+        #             'algorithm': 'PUFFINN',
+        #             'threads': threads,
+        #             'params': {
+        #                 'space_usage': space_usage,
+        #                 'hash_source': hash_source
+        #             }
+        #         }
+        #         query_params = [
+        #             {'k': k, 'recall': recall, 'method': 'LSHJoinGlobal'}
+        #             for recall in [0.8, 0.9]
+        #             for k in [1, 10]
+        #         ]
+        #         run_multiple(index_params, query_params)
+
 
     # with get_db() as db:
     #     compute_recalls(db)

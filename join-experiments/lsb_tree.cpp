@@ -291,34 +291,6 @@ std::vector<Pair> cp3(
 
 
 int main(void) {
-    // Read parameters
-    std::string protocol_line;
-    expect("setup");
-    unsigned int k = 10;
-    size_t m = 16;
-    double w = 4.0;
-    size_t seed = 1234;
-    while (true) {
-        std::getline(std::cin, protocol_line);
-        if (protocol_line == "sppv1 end") {
-            break;
-        }
-        std::istringstream line(protocol_line);
-        std::string key;
-        line >> key;
-        if (key == "k") {
-            line >> k;
-        } else if (key == "m") {
-            line >> m;
-        } else if (key == "w") {
-            line >> w;
-        } else if (key == "seed") {
-            line >> seed;
-        } else {
-          // ignore other parameters
-        }
-    }
-    send("ok");
 
     // Read the dataset
     expect("data");
@@ -328,47 +300,100 @@ int main(void) {
     std::cerr << "Loaded " << dataset.size() << " vectors of dimension " << dataset[0].size() << std::endl;
     send("ok");
 
-    expect("index");
+    // Read parameters and build index
+    std::string index_params_str = expect("index");
+    std::cerr << "reading parameters from `" << index_params_str << "`" << std::endl;
+    std::istringstream index_params_stream(index_params_str);
+
+    size_t m = 16;
+    double w = 4.0;
+    size_t seed = 1234;
+    while (true) {
+        std::string key;
+        index_params_stream >> key;
+        std::cerr << "read key `" << key << "`" << std::endl;
+        if (key == "") {
+            break;
+        }
+        if (key == "m") {
+            index_params_stream >> m;
+        } else if (key == "w") {
+            index_params_stream >> w;
+        } else if (key == "seed") {
+            index_params_stream >> seed;
+        } else {
+          // ignore other parameters
+        }
+    }
+
     auto index_pair = build_index(dataset, m, w, seed);
     send("ok");
 
-    expect("workload");
-    auto top_pairs = cp3(dataset, index_pair.first, k, m, index_pair.second);
-    send("ok");
+    while (true) {
+      std::string next_workload = protocol_read();
+      std::cerr << "received " << next_workload << std::endl;
+      if (next_workload == "end_workloads") {
+          break;
+      }
+      std::string workload_params_str = next_workload.substr(std::string("workload ").size());
+      std::cerr << "NEW WORKLOAD ON INDEX " << workload_params_str << std::endl;
 
-    bool check = false;
-    std::vector<Pair> actual;
+      // query params
+      unsigned int k = 1;
 
-    if (check) {
-      std::cerr << "checking actual" << std::endl;
-      for (size_t i=0; i<dataset.size(); i++) {
-        for (size_t j=i+1; j<dataset.size(); j++) {
-          float d = euclidean(dataset[i], dataset[j]);
-          actual.push_back(Pair{i, j, d});
-          std::push_heap(actual.begin(), actual.end(), cmp_pairs);
-          if (actual.size() > k) {
-            std::pop_heap(actual.begin(), actual.end(), cmp_pairs);
-            actual.pop_back();
+      std::istringstream workload_params_stream(workload_params_str);
+      while (true) {
+          std::string key;
+          workload_params_stream >> key;
+          if (key == "") {
+              break;
+          }
+          if (key == "k") {
+              workload_params_stream >> k;
+          } else {
+              std::cout << "sppv1 err unknown parameter " << key << std::endl;
+              throw std::invalid_argument("unknown parameter");
+          }
+      }
+
+      auto top_pairs = cp3(dataset, index_pair.first, k, m, index_pair.second);
+      send("ok");
+
+      bool check = false;
+      std::vector<Pair> actual;
+
+      if (check) {
+        std::cerr << "checking actual" << std::endl;
+        for (size_t i=0; i<dataset.size(); i++) {
+          for (size_t j=i+1; j<dataset.size(); j++) {
+            float d = euclidean(dataset[i], dataset[j]);
+            actual.push_back(Pair{i, j, d});
+            std::push_heap(actual.begin(), actual.end(), cmp_pairs);
+            if (actual.size() > k) {
+              std::pop_heap(actual.begin(), actual.end(), cmp_pairs);
+              actual.pop_back();
+            }
           }
         }
       }
-    }
 
-    expect("result");
-    // std::cerr << "[c++] results size " << res.size() << std::endl; 
-    while (!top_pairs.empty()) {
-      std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
-      auto p = top_pairs.back();
-      top_pairs.pop_back();
-      std::cout << p.a << " " << p.b << std::endl;
-      if (check) {
-        std::pop_heap(actual.begin(), actual.end(), cmp_pairs);
-        auto pcheck = actual.back();
-        actual.pop_back();
-        std::cerr << "ground truth " << pcheck.a << " " << pcheck.b << " " << pcheck.distance << std::endl;
+      expect("result");
+      // std::cerr << "[c++] results size " << res.size() << std::endl; 
+      while (!top_pairs.empty()) {
+        std::pop_heap(top_pairs.begin(), top_pairs.end(), cmp_pairs);
+        auto p = top_pairs.back();
+        top_pairs.pop_back();
+        std::cout << p.a << " " << p.b << std::endl;
+        if (check) {
+          std::pop_heap(actual.begin(), actual.end(), cmp_pairs);
+          auto pcheck = actual.back();
+          actual.pop_back();
+          std::cerr << "ground truth " << pcheck.a << " " << pcheck.b << " " << pcheck.distance << std::endl;
+        }
       }
+      send("end");
+
     }
-    send("end");
 
     return 0;
 }
