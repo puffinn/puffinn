@@ -790,15 +790,15 @@ def random_difficult(out_fn, n, d, k):
     # the base set of random vectors, expected unit length
     np.random.seed(1)
     X = np.random.normal(scale=1/D, size=(n// (k + 1), d))
-    
+
     Y = np.zeros((n, d))
     for i, x in enumerate(X):
         Y[(k + 1) * i] = x
         for j in range(1, k + 1):
             # k random vectors at expected distance \sqrt{1/3} of x
             Y[(k + 1) * i + j] = np.concatenate((x[: 2 * D], np.random.normal(scale=1/D, size=D)))
-    X = X.astype(np.float32)
-    write_dense(out_fn, X)
+    Y = Y.astype(np.float32)
+    write_dense(out_fn, Y)
     return out_fn
 
 
