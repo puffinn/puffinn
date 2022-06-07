@@ -1343,7 +1343,7 @@ if __name__ == "__main__":
     #             ]
     #             run_multiple(index_params, join_params)
 
-    for dataset in ['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
+    for dataset in ['DeepImage']: #['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
         pass
         # ----------------------------------------------------------------------
         # Faiss-HNSW
@@ -1410,24 +1410,24 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        # for hash_source in ['Independent']:
-        #     for space_usage in [512, 1024, 2048, 4096]:
-        #         index_params = {
-        #             'dataset': dataset,
-        #             'workload': 'local-top-k',
-        #             'algorithm': 'PUFFINN',
-        #             'threads': threads,
-        #             'params': {
-        #                 'space_usage': space_usage,
-        #                 'hash_source': hash_source
-        #             }
-        #         }
-        #         query_params = [
-        #             {'k': k, 'recall': recall, 'method': 'LSHJoin'}
-        #             for recall in [0.8, 0.9]
-        #             for k in [1, 10]
-        #         ]
-        #         run_multiple(index_params, query_params)
+        for hash_source in ['Independent']:
+            for space_usage in [16384, 32768, 65536]: #[512, 1024, 2048, 4096]:
+                index_params = {
+                    'dataset': dataset,
+                    'workload': 'local-top-k',
+                    'algorithm': 'PUFFINN',
+                    'threads': threads,
+                    'params': {
+                        'space_usage': space_usage,
+                        'hash_source': hash_source
+                    }
+                }
+                query_params = [
+                    {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+                    for recall in [0.8, 0.9]
+                    for k in [1, 10]
+                ]
+                run_multiple(index_params, query_params)
 
 
         # ----------------------------------------------------------------------
