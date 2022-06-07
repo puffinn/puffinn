@@ -697,10 +697,10 @@ class BruteForceLocal(Algorithm):
         self.time_index = 0
         self.time_run = None
         self.result_indices = None
-    def setup(self, k, params):
-        self.k = k
-        self.prefix = params.get('prefix')
-        pass
+    # def setup(self, k, params):
+    #     self.k = k
+    #     self.prefix = params.get('prefix')
+    #     pass
     def feed_data(self, h5py_path):
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
@@ -709,6 +709,9 @@ class BruteForceLocal(Algorithm):
         assert np.sum(norms == 0.0) == 0
         self.data /= norms
         f.close()
+    def clear(self):
+        # Nothing to do here
+        pass
     def index(self, params):
         self.time_index = 0
     def run(self, params):
@@ -1320,8 +1323,19 @@ if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
     
-    print(DATASETS['Orkut']())
-    sys.exit(0)
+    for dummy_just_for_scoping in [0]:
+        index_params = {
+            'dataset': 'random-difficult',
+            'workload': 'local-top-k',
+            'algorithm': 'BruteForceLocal',
+            'params': {}
+        } 
+        query_params = [
+            {'k': k}
+            for k in [1000]
+        ]
+
+        run_multiple(index_params, query_params)
     
     # with get_db() as db:
     #     compute_recalls(db)
