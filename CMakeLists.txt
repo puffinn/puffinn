@@ -30,6 +30,11 @@ if (OpenMP_FOUND)
     target_link_libraries(PuffinnJoin ${OpenMP_CXX_LIBRARIES} HighFive)
 endif()
 
+add_executable(StoreJaccard "join-experiments/StoreJaccard.cpp")
+if (OpenMP_FOUND)
+    target_link_libraries(StoreJaccard ${OpenMP_CXX_LIBRARIES} HighFive)
+endif()
+
 add_executable(XiaoEtAl "join-experiments/XiaoEtAl.cpp")
 if (OpenMP_FOUND)
     target_link_libraries(XiaoEtAl ${OpenMP_CXX_LIBRARIES} HighFive)

@@ -42,6 +42,7 @@ int main(int argc, char ** argv) {
     size_t k = 1000;
 
     // load data
+    std::cerr << "loading data" << std::endl;
     H5Easy::File file(path, H5Easy::File::ReadOnly);
     std::vector<uint32_t> data = H5Easy::load<std::vector<uint32_t>>(file, "/train");
     std::vector<size_t> sizes = H5Easy::load<std::vector<size_t>>(file, "/size_train");
@@ -75,6 +76,9 @@ int main(int argc, char ** argv) {
     // std::cerr << test << std::endl;
     // return 0;
 
+    size_t progress = 0;
+
+    std::cerr << "computing similarities" << std::endl;
     // compute similarities
     #pragma omp parallel for
     for (size_t i=0; i<n; i++) {
@@ -107,6 +111,12 @@ int main(int argc, char ** argv) {
             // std::cerr << " [" << i << "] " << pair.first << " " << pair.second << std::endl;
             top_similarities[i].push_back(pair.second);
             top_neighbors[i].push_back(pair.first);
+        }
+        #pragma omp critical
+        {
+            if (++progress % 1000 == 0) {
+                std::cerr << "completed " << progress << "/" << n << std::endl;
+            }
         }
     }
 
