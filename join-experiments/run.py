@@ -401,6 +401,8 @@ class SubprocessAlgorithm(Algorithm):
     a Python interface"""
 
     def _raw_line(self):
+        if self._subprocess_handle().poll():
+            raise Exception('Subprocess killed')
         return shlex.split(
             self._subprocess_handle().stdout.readline().strip())
 
@@ -1204,7 +1206,11 @@ def run_multiple(index_configuration, join_configurations, debug=False):
 
     algo.feed_data(hdf5_file)
     print("Building index with parameters", index_params)
-    algo.index(index_params)
+    try:
+        algo.index(index_params)
+    except:
+        print("Error in index building")
+        return
 
     for join_configuration in join_configurations:
         algo.clear() # clears the result from the previous run
