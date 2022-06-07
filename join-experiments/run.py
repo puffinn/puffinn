@@ -920,6 +920,47 @@ def kosarak(out_fn):
     return out_fn
 
 
+CREATE_RAW = os.path.abspath("join-experiments/scripts/createraw.py")
+ORKUT_PY = os.path.abspath("join-experiments/scripts/orkut.py")
+
+
+# Adapted from https://github.com/Cecca/danny/blob/master/datasets/prepare.py
+def orkut(out_fn):
+    if os.path.isfile(out_fn):
+        return out_fn
+    local_fn = os.path.join(DATASET_DIR, "orkut.txt.gz")
+    directory = DATASET_DIR
+    download("https://socialnetworks.mpi-sws.org/data/orkut-groupmemberships.txt.gz", local_fn)
+    tmp = os.path.join(DATASET_DIR, "orkut.tmp")
+    if not os.path.isfile(tmp):
+        print("Building temporary file")
+        subprocess.run(
+            "cat {} | gunzip > tt.txt".format(local_fn), cwd=directory, shell=True, check=True
+        )
+        subprocess.run(
+            "{} users tt.txt > orkut.out".format(ORKUT_PY), cwd=directory, shell=True, check=True
+        )
+        subprocess.run(
+            "{} --bywhitespace orkut.out orkut-userswithgroups-raw.txt".format(CREATE_RAW),
+            cwd=directory,
+            shell=True,
+            check=True
+        )
+        subprocess.run(
+            "uniq orkut-userswithgroups-raw.txt > orkut.tmp", cwd=directory, shell=True, check=True
+        )
+
+    sets = []
+    with open(tmp) as fp:
+        for line in fp.readlines():
+            tokens = line.split()
+            items = [int(t) for t in tokens[2:]]
+            sets.append(items)
+    write_sparse(out_fn, sets)
+
+    return out_fn
+
+
 def dblp(out_fn):
     """Downloads and preprocesses a snapshot of DBLP"""
     import xml.sax
@@ -1054,8 +1095,6 @@ def dblp(out_fn):
     return out_fn
 
 
-
-
 # =============================================================================
 # Putting it all together
 # =======================
@@ -1072,7 +1111,8 @@ DATASETS = {
     'DeepImage': lambda: deep_image(os.path.join(DATASET_DIR, 'deep_image.hdf5')),
     'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
     'random-float-10k': lambda: random_float(os.path.join(DATASET_DIR, 'random-float-10k.hdf5' ), 20, 10000, 100),
-    'random-difficult': lambda: random_difficult(os.path.join(DATASET_DIR, 'random-float-difficult.hdf5' ), 1100000, 150, 10)
+    'random-difficult': lambda: random_difficult(os.path.join(DATASET_DIR, 'random-float-difficult.hdf5' ), 1100000, 150, 10),
+    'Orkut': lambda: orkut(os.path.join(DATASET_DIR, "orkut.hdf5"))
 }
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
@@ -1082,7 +1122,7 @@ ALGORITHMS = {
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
     'faiss-IVF':       lambda: (FaissIVF(),                                 1),
-    'falconn':    lambda: (FALCONN(),                                   2),
+    'falconn':         lambda: (FALCONN(),                                  2),
     # Global top-k baselines
     'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1),
     'LSBTree':         lambda: (SubprocessAlgorithm(["build/LSBTree"]),     1)
@@ -1279,6 +1319,9 @@ def run_multiple(index_configuration, join_configurations, debug=False):
 if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
+    
+    print(DATASETS['Orkut']())
+    sys.exit(0)
     
     # with get_db() as db:
     #     compute_recalls(db)
