@@ -817,7 +817,7 @@ def glove(out_fn, dims):
     if os.path.isfile(out_fn):
         return out_fn
     url = "https://nlp.stanford.edu/data/glove.twitter.27B.zip"
-    localzip = "datasets/glove.twitter.27B.zip"
+    localzip = os.path.join(DATASET_DIR, "glove.twitter.27B.zip")
     download(url, localzip)
 
     with zipfile.ZipFile(localzip) as zp:
@@ -1065,6 +1065,7 @@ def dblp(out_fn):
 
 DATASETS = {
     'glove-25': lambda: glove(os.path.join(DATASET_DIR, 'glove-25.hdf5'), 25),
+    'glove-200': lambda: glove(os.path.join(DATASET_DIR, 'glove-200.hdf5'), 200),
     'random-jaccard-10k': lambda: random_jaccard(os.path.join(DATASET_DIR, 'random-jaccard-10k.hdf5'), n=10000),
     'DBLP': lambda : dblp(os.path.join(DATASET_DIR, 'dblp.hdf5')),
     'Kosarak': lambda: kosarak(os.path.join(DATASET_DIR, 'kosarak.hdf5')),
@@ -1278,7 +1279,7 @@ def run_multiple(index_configuration, join_configurations, debug=False):
 if __name__ == "__main__":
     if not os.path.isdir(BASE_DIR):
         os.mkdir(BASE_DIR)
-
+    
     # with get_db() as db:
     #     compute_recalls(db)
 
