@@ -575,7 +575,7 @@ class FaissHNSW(Algorithm):
         """Pass the data to the algorithm"""
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
-        self.data = np.array(f['train'])
+        self.data = np.array(f['train']).astype(np.float32)
         f.close()
     def index(self, params):
         """Setup the index, if any. This is timed."""
@@ -1343,8 +1343,8 @@ if __name__ == "__main__":
 
         run_multiple(index_params, query_params)
     
-    # with get_db() as db:
-    #     compute_recalls(db)
+    with get_db() as db:
+        compute_recalls(db)
 
     # run_config({
     #     'dataset': 'NYTimes',
@@ -1407,31 +1407,33 @@ if __name__ == "__main__":
     #             ]
     #             run_multiple(index_params, join_params)
 
-    for dataset in ['DeepImage']: #['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
+    for dataset in ['glove-200']: #['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
         pass
         # ----------------------------------------------------------------------
         # Faiss-HNSW
-        # if dataset != 'DBLP':
-        #     for M in [4, 8, 16, 48, 32, 64, 128, 256, 512, 1024]:
-        #         for efConstruction in [100, 500]:
-        #             index_params = {
-        #                 'M': M,
-        #                 'efConstruction': efConstruction
-        #             }
-        #             join_params = [
-        #                 {'efSearch': efSearch, 'k': 10}
-        #                 for efSearch in [10, 40, 80, 120, 800]
-        #             ]
-        #             run_multiple(
-        #                 {
-        #                     'dataset': dataset,
-        #                     'workload': 'local-top-k',
-        #                     'algorithm': 'faiss-HNSW',
-        #                     'threads': threads,
-        #                     'params': index_params
-        #                 }, 
-        #                 join_params
-        #             )
+        if dataset != 'DBLP':
+            # for M in [4, 8, 16, 48, 32, 64, 128, 256, 512, 1024]:
+            for M in [48, 32, 64]:
+                for efConstruction in [100, 500]:
+                    index_params = {
+                        'M': M,
+                        'efConstruction': efConstruction
+                    }
+                    join_params = [
+                        {'efSearch': efSearch, 'k': 10}
+                        for efSearch in [80, 120]
+                        # for efSearch in [10, 40, 80, 120, 800]
+                    ]
+                    run_multiple(
+                        {
+                            'dataset': dataset,
+                            'workload': 'local-top-k',
+                            'algorithm': 'faiss-HNSW',
+                            'threads': threads,
+                            'params': index_params
+                        }, 
+                        join_params
+                    )
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
@@ -1475,7 +1477,7 @@ if __name__ == "__main__":
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
         for hash_source in ['Independent']:
-            for space_usage in [16384, 32768, 65536]: #[512, 1024, 2048, 4096]:
+            for space_usage in [512, 1024, 2048, 4096, 16384, 32768, 65536]:
                 index_params = {
                     'dataset': dataset,
                     'workload': 'local-top-k',
