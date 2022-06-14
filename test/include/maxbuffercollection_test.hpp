@@ -28,7 +28,7 @@ namespace Catch
 namespace puffinn {
     TEST_CASE("Single element, one buffer") {
         MaxBufferCollection buffer;
-        buffer.init(1, 2);
+        buffer.init(1, 1);
         buffer.insert(0, 2, 0.6);
         auto best = buffer.best_entries(0);
         REQUIRE(best == std::vector<MaxBufferCollection::ResultPair>{{2, 0.6}});
