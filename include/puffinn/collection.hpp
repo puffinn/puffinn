@@ -453,6 +453,35 @@ namespace puffinn {
             return res;
         }
 
+        void brute_force_some(std::vector<bool> & active, MaxBufferCollection & output) {
+            size_t n = dataset.get_size();
+            std::vector<size_t> indices;
+            for (size_t i=0; i<n; i++) {
+                if (active[i]) {
+                    indices.push_back(i);
+                }
+            }
+            if (indices.size() == 0) {
+                return;
+            }
+            std::cerr << "Brute forcing " << indices.size() << " vectors" << std::endl;
+
+            #pragma omp parallel for
+            for(size_t i=0; i<indices.size(); i++) {
+                size_t r = indices[i];
+                for (size_t s=0; s<n; s++) {
+                    if (r != s) {
+                        auto dist = TSim::compute_similarity(
+                            dataset[r],
+                            dataset[s],
+                            dataset.get_description());
+                        output.insert(r, s, dist);
+                    }
+                }
+            }
+        }
+
+
     public:
         /// Compute a per-point top-K self-join on the current index with ``recall``.
         ///
@@ -612,6 +641,7 @@ namespace puffinn {
         std::vector<std::vector<uint32_t>> lsh_join(
             unsigned int k,
             float recall,
+            float brute_force_perc,
             FilterType /*filter_type*/ = FilterType::Default
         ) {
             TIMER_START(pre_initialization);
@@ -716,7 +746,8 @@ namespace puffinn {
                 size_t active_count = count_true(active);
                 TIMER_STOP(count_active);
                 std::cerr << "Active nodes: " << active_count << std::endl;
-                if (active_count == 0) {
+                if (active_count <= brute_force_perc * dataset.get_size()) {
+                    brute_force_some(active, tl_maxbuffers[0]);
                     break;
                 }
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());

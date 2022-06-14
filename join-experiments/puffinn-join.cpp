@@ -74,6 +74,7 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
         unsigned int k = 10;
         float recall = 0.8;
         std::string method = "BF";
+        float brute_force_perc = 0.0;
 
         std::istringstream workload_params_stream(workload_params_str);
         while (true) {
@@ -88,6 +89,8 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
                 workload_params_stream >> recall;
             } else if (key == "method") {
                 workload_params_stream >> method;
+            } else if (key == "brute_force_perc") {
+                workload_params_stream >> brute_force_perc;
             } else {
                 std::cout << "sppv1 err unknown parameter " << key << std::endl;
                 throw std::invalid_argument("unknown parameter");
@@ -103,7 +106,7 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
         } else if (method == "LSH") {
             res = index.naive_lsh_join(k, recall);
         } else if (method == "LSHJoin") {
-            res = index.lsh_join(k, recall);
+            res = index.lsh_join(k, recall, brute_force_perc);
         } else if (method == "LSHJoinGlobal") {
             auto pairs = index.global_lsh_join(k, recall);
             for (auto entry : pairs.best_indices()) {

@@ -131,7 +131,7 @@ void bench_join(const std::vector<std::vector<float>> & dataset) {
         .timeUnit(std::chrono::milliseconds(1), "ms");
 
     bencher.run("LSH join", [&] {
-        index.lsh_join(10, 0.9);
+        index.lsh_join(10, 0.9, 0.0);
     });
 }
 
