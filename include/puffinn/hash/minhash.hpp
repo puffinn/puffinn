@@ -218,6 +218,10 @@ namespace puffinn {
             float miss_collision_prob = num_possible_hashes/(set_size-1);
             return similarity+(1-similarity)*miss_collision_prob;
         }
+
+        float icollision_probability(float p) const {
+            throw std::logic_error("not yet implemented");
+        }
     };
 
     class MinHash1BitFunction {
@@ -279,6 +283,10 @@ namespace puffinn {
         float collision_probability(float similarity, int_fast8_t num_bits) const {
             if (num_bits > 1) { num_bits = 1; }
             return minhash.collision_probability(similarity, num_bits);
+        }
+
+        float icollision_probability(float p) const {
+            return 2.0 * p - 1.0;
         }
     };
 }

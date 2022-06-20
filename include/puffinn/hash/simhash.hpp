@@ -100,5 +100,9 @@ namespace puffinn {
                 return 1.0-std::acos(2*similarity-1)/M_PI;
             }
         }
+
+        float icollision_probability(float p) const {
+            return (std::cos(M_PI * (1-p)) + 1.0) / 2.0;
+        }
     };
 }

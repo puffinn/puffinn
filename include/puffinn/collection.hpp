@@ -255,6 +255,7 @@ namespace puffinn {
             TIMER_START(index_build);
             g_performance_metrics.start_timer(Computation::Indexing);
             if (with_sketches) {
+                std::cerr << "Building sketches" << std::endl;
                 // Compute sketches for the new vectors.
                 g_performance_metrics.start_timer(Computation::IndexSketching);
                 filterer.add_sketches(dataset, last_rebuild);
@@ -652,14 +653,9 @@ namespace puffinn {
             
             size_t nthreads = omp_get_max_threads();
             
-#define MBCOLL
             
             // Allocate a buffer for each data point, for each thread
-#ifdef MBCOLL
             std::vector<MaxBufferCollection> tl_maxbuffers(nthreads);
-#else
-            std::vector<std::vector<MaxBuffer>> tl_maxbuffers;
-#endif
 
             // Is a point still active?
             // This vector is only written to in the `remove inactive nodes` phase,
@@ -675,15 +671,7 @@ namespace puffinn {
             TIMER_START(maxbuffer_population);
             #pragma omp parallel for schedule(static, 1)
             for (size_t tid = 0; tid < nthreads; tid++) {
-                #ifdef MBCOLL
                 tl_maxbuffers[tid].init(dataset.get_size(), k);
-                #else
-                std::vector<MaxBuffer> bufs;
-                for (size_t i=0; i < dataset.get_size(); i++) {
-                    bufs.emplace_back(k);
-                }
-                tl_maxbuffers.push_back(bufs);
-                #endif
             }
             TIMER_STOP(maxbuffer_population);
 
@@ -707,7 +695,6 @@ namespace puffinn {
                     }
                 }    
 
-                double dbg_dist = 0;
                 // Carry out initial all-to-all comparisons within a segment.
                 // We leave out the first and last segment since it's filled up with filler elements.
                 for (size_t j = 2; j < segments[i].size() - 1; j++) { 
@@ -720,18 +707,11 @@ namespace puffinn {
                                 dataset[R], 
                                 dataset[S], 
                                 dataset.get_description());
-                            #ifdef MBCOLL
                             tl_maxbuffers[tid].insert(R, S, dist);
                             tl_maxbuffers[tid].insert(S, R, dist);
-                            #else
-                            tl_maxbuffers[tid][R].insert(S, dist);
-                            tl_maxbuffers[tid][S].insert(R, dist);
-                            #endif
-                            dbg_dist += dist;
                         }
                     }
                 }
-                std::cout << "dbg_dist" << dbg_dist << std::endl;
             }
             g_performance_metrics.store_time(Computation::SearchInit);
             std::cerr << "Initial scan done (" << g_performance_metrics.get_total_time(Computation::SearchInit) << ")" << std::endl;
@@ -790,6 +770,7 @@ namespace puffinn {
                                         // for longer prefixes.
                                         auto R = lsh_maps[i].indices[r];
                                         auto S = lsh_maps[i].indices[s];
+
                                         if (R == S) {
                                             // skip trivial matches
                                             continue;
@@ -797,18 +778,19 @@ namespace puffinn {
                                         if (!active[R] && !active[S]) {
                                             continue;
                                         }
-                                        // cnt_dists[tid]++;
-                                        auto dist = TSim::compute_similarity(
-                                            dataset[R], 
-                                            dataset[S], 
-                                            dataset.get_description());
-                                        #ifdef MBCOLL
-                                        tl_maxbuffers[tid].insert(R, S, dist);
-                                        tl_maxbuffers[tid].insert(S, R, dist);
-                                        #else
-                                        tl_maxbuffers[tid][R].insert(S, dist);
-                                        tl_maxbuffers[tid][S].insert(R, dist);
-                                        #endif
+
+                                        float R_smallest = tl_maxbuffers[tid].smallest_value(R);
+                                        float S_smallest = tl_maxbuffers[tid].smallest_value(S);
+
+                                        auto sketch_sim_ub = filterer.similarity_upper_bound(R, S, 0.01);
+                                        if (sketch_sim_ub >= R_smallest || sketch_sim_ub >= S_smallest) {
+                                            auto sim = TSim::compute_similarity(
+                                                dataset[R], 
+                                                dataset[S], 
+                                                dataset.get_description());
+                                            tl_maxbuffers[tid].insert(R, S, sim);
+                                            tl_maxbuffers[tid].insert(S, R, sim);
+                                        }
                                     }
                                 }
                             } 
@@ -824,13 +806,7 @@ namespace puffinn {
                 // which will be used for all subsequent evaluations about deactivation
                 // of single nodes
                 for(size_t tid = 1; tid < nthreads; tid++) {
-                    #ifdef MBCOLL
                     tl_maxbuffers[0].add_all(tl_maxbuffers[tid]);
-                    #else
-                    for (size_t i=0; i < dataset.get_size(); i++) {
-                        tl_maxbuffers[0][i].add_all(tl_maxbuffers[tid][i]);
-                    }
-                    #endif
                 }
                 TIMER_STOP(reconcile_buffers);
 
@@ -843,11 +819,7 @@ namespace puffinn {
                 for (size_t v=0; v < dataset.get_size(); v++) {
                     if (active[v]) {
                         // we have reconciled the thread local max buffers, so we can look at the first
-                        #ifdef MBCOLL
                         auto kth_similarity = tl_maxbuffers[0].smallest_value(v);
-                        #else
-                        auto kth_similarity = tl_maxbuffers[0][v].smallest_value();
-                        #endif
                         if (kth_similarity > 0.0) { // the similarity is negative if we have yet to collect k neighbors for v
                             auto table_idx = lsh_maps.size();
                             auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
@@ -880,11 +852,7 @@ namespace puffinn {
                       << std::endl;
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
-                #ifdef MBCOLL
                 auto best = tl_maxbuffers[0].best_indices(i);
-                #else
-                auto best = tl_maxbuffers[0][i].best_indices();
-                #endif
                 res.push_back(best);
             }
             return res;

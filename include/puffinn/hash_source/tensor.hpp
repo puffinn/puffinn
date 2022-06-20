@@ -196,6 +196,10 @@ namespace puffinn {
             return state->hashes[lhs_idx] | state->hashes[state->hashes.size()/2+rhs_idx];
         }
 
+        float icollision_probability(float p) const {
+            return independent_hash_source.icollision_probability(p);
+        }
+
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits

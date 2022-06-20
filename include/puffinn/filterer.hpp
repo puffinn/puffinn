@@ -6,6 +6,7 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/performance.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <immintrin.h>
@@ -126,5 +127,34 @@ namespace puffinn {
         FilterLshDatatype get_sketch(uint32_t idx, int_fast32_t sketch_idx) const {
             return sketches[(idx << LOG_NUM_SKETCHES) | sketch_idx];
         }
+
+        // the number of different bits between sketches associated to a and b
+        size_t hamming_distance(uint32_t a, uint32_t b) const {
+            size_t hd = 0;
+            for (size_t sketch_idx=0; sketch_idx<NUM_SKETCHES; sketch_idx++) {
+                auto sa = get_sketch(a, sketch_idx);
+                auto sb = get_sketch(b, sketch_idx);
+                hd += popcountll(sa ^ sb);
+            }
+            return hd;    
+        }
+
+        float similarity_upper_bound(uint32_t a, uint32_t b, float delta) {
+            // probability of bits being different
+            const size_t SKETCH_BITS = NUM_SKETCHES*NUM_FILTER_HASHBITS;
+            float theta = std::sqrt(
+                2.0 / SKETCH_BITS * std::log(1.0/delta)
+            );
+            float est = (((float)SKETCH_BITS) - hamming_distance(a, b)) / SKETCH_BITS;
+            float upper_prob = est + theta;
+            // std::cerr << "estimated cp=" << est 
+            //           <<  " upper prob bound=" << upper_prob
+            //           << std::endl;
+            if (upper_prob > 1.0) {
+                upper_prob = 1.0;
+            }
+            return hash_source->icollision_probability(upper_prob);
+        }
     };
+
 }
