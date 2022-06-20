@@ -648,6 +648,8 @@ namespace puffinn {
             TIMER_START(pre_initialization);
             std::vector<std::vector<uint32_t>> res;
 
+            bool has_sketches = filterer.size() > 0;
+
             g_performance_metrics.new_query();
             g_performance_metrics.start_timer(Computation::Total);
             
@@ -779,11 +781,19 @@ namespace puffinn {
                                             continue;
                                         }
 
-                                        float R_smallest = tl_maxbuffers[tid].smallest_value(R);
-                                        float S_smallest = tl_maxbuffers[tid].smallest_value(S);
-
-                                        auto sketch_sim_ub = filterer.similarity_upper_bound(R, S, 0.01);
-                                        if (sketch_sim_ub >= R_smallest || sketch_sim_ub >= S_smallest) {
+                                        if (has_sketches) {
+                                            float R_smallest = tl_maxbuffers[tid].smallest_value(R);
+                                            float S_smallest = tl_maxbuffers[tid].smallest_value(S);
+                                            auto sketch_sim_ub = filterer.similarity_upper_bound(R, S, 0.01);
+                                            if (sketch_sim_ub >= R_smallest || sketch_sim_ub >= S_smallest) {
+                                                auto sim = TSim::compute_similarity(
+                                                    dataset[R], 
+                                                    dataset[S], 
+                                                    dataset.get_description());
+                                                tl_maxbuffers[tid].insert(R, S, sim);
+                                                tl_maxbuffers[tid].insert(S, R, sim);
+                                            }
+                                        } else {
                                             auto sim = TSim::compute_similarity(
                                                 dataset[R], 
                                                 dataset[S], 
