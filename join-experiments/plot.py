@@ -7,6 +7,9 @@ import sys
 from scipy.spatial import ConvexHull
 import os
 import pandas as pd
+import h5py
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 DIR_ENVVAR = 'TOPK_DIR'
 try:
@@ -99,6 +102,23 @@ def plot_local_topk():
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
 
+def plot_distance_histogram(path, k):
+    f = h5py.File(path)
+    name = os.path.basename(path)
+    kth_dist = f['top-1000-dists'][:,k-1]
+    print(kth_dist)
+    print("k=", k, "minimum similarity is", np.min(kth_dist))
+    plt.figure()
+    sns.kdeplot(kth_dist)
+    plt.title("{} {}-nn distribution".format(name, k))
+    plt.savefig(path + ".dists-k={}.png".format(k))
+
+
 if __name__ == "__main__":
-    plot_local_topk()
+    if len(sys.argv) == 2:
+        dataset_path = sys.argv[1]
+        for k in [1, 10, 100, 1000]:
+            plot_distance_histogram(dataset_path, k)
+    else:
+        plot_local_topk()
 
