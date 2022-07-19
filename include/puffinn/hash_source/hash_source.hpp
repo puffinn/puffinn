@@ -46,6 +46,11 @@ namespace puffinn {
             uint_fast8_t num_bits
         ) const = 0;
 
+        // get the similarity that corresponds to the given collision probability
+        virtual float icollision_probability(
+            float prob
+        ) const = 0;
+
         // The probability that a point in the true top k was not found by looking at the given
         // number of tables.
         virtual float failure_probability(

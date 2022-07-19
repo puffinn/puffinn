@@ -200,6 +200,10 @@ namespace puffinn {
             return state;
         }
 
+        float icollision_probability(float p) const {
+            return hash_family.icollision_probability(p);
+        }
+
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits

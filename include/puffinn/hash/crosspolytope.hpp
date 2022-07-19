@@ -309,6 +309,10 @@ namespace puffinn {
         ) const {
             return estimates.get_collision_probability(similarity, num_bits);
         }
+
+        float icollision_probability(float p) const {
+            throw std::logic_error("not yet implemented");
+        }
     };
 
     class CrossPolytopeHashFunction {
@@ -467,5 +471,10 @@ namespace puffinn {
         ) const {
             return estimates.get_collision_probability(similarity, num_bits);
         }
+
+        float icollision_probability(float p) const {
+            throw std::logic_error("not yet implemented");
+        }
+
     };
 }

@@ -37,7 +37,7 @@ std::pair<std::vector<std::vector<uint32_t>>, size_t> do_read_vectors<std::vecto
 }
 
 template<typename Similarity, typename HashSourceArgs, typename HashFn, typename RawData>
-void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usage) {
+void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usage, bool with_sketches) {
     // Construct the search index.
     // Here we use the cosine similarity measure with the default hash functions.
     // The index expects vectors with the same dimensionality as the first row of the dataset
@@ -53,7 +53,7 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
     auto start_time = std::chrono::steady_clock::now();
     std::cerr << "Building the index. This can take a while..." << std::endl; 
     // Rebuild the index to include the inserted points
-    index.rebuild(false);
+    index.rebuild(with_sketches);
     auto end_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed = (end_time - start_time);
     auto throughput = ((float) dataset.size()) / elapsed.count();
@@ -74,6 +74,7 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
         unsigned int k = 10;
         float recall = 0.8;
         std::string method = "BF";
+        float brute_force_perc = 0.0;
 
         std::istringstream workload_params_stream(workload_params_str);
         while (true) {
@@ -88,6 +89,8 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
                 workload_params_stream >> recall;
             } else if (key == "method") {
                 workload_params_stream >> method;
+            } else if (key == "brute_force_perc") {
+                workload_params_stream >> brute_force_perc;
             } else {
                 std::cout << "sppv1 err unknown parameter " << key << std::endl;
                 throw std::invalid_argument("unknown parameter");
@@ -103,7 +106,7 @@ void run_index(std::vector<RawData> dataset, size_t dimensions, size_t space_usa
         } else if (method == "LSH") {
             res = index.naive_lsh_join(k, recall);
         } else if (method == "LSHJoin") {
-            res = index.lsh_join(k, recall);
+            res = index.lsh_join(k, recall, brute_force_perc);
         } else if (method == "LSHJoinGlobal") {
             auto pairs = index.global_lsh_join(k, recall);
             for (auto entry : pairs.best_indices()) {
@@ -144,6 +147,7 @@ void run() {
     std::string hash_source = "Independent"; // in alternative, Tensored
     unsigned long long space_usage = 100*MB;
     int threads = -1;
+    bool with_sketches = false;
 
     std::string index_params_str = expect("index");
     std::cerr << "reading parameters from `" << index_params_str << "`" << std::endl;
@@ -163,6 +167,8 @@ void run() {
             space_usage *= MB;
         } else if (key == "threads") {
             index_params_stream >> threads;
+        } else if (key == "with_sketches") {
+            index_params_stream >> with_sketches;
         } else {
             std::cout << "sppv1 err unknown parameter `" << key << "`" << std::endl;
             std::cerr << "sppv1 err unknown parameter `" << key << "`" << std::endl;
@@ -173,11 +179,11 @@ void run() {
 
     if (hash_source == "Independent") {
         run_index<Similarity, puffinn::IndependentHashArgs<HashFn>, HashFn, RawData>(
-            dataset, dimensions, space_usage
+            dataset, dimensions, space_usage, with_sketches
         );
     } else if (hash_source == "Tensored") {
         run_index<Similarity, puffinn::TensoredHashArgs<HashFn>, HashFn, RawData>(
-            dataset, dimensions, space_usage
+            dataset, dimensions, space_usage, with_sketches
         );
     } 
 }

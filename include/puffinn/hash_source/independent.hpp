@@ -143,6 +143,10 @@ namespace puffinn {
             return hash_family.collision_probability(similarity, num_bits);
         }
 
+        float icollision_probability(float p) const {
+            return hash_family.icollision_probability(p);
+        }
+
         float failure_probability(
             uint_fast8_t hash_length,
             uint_fast32_t tables,
