@@ -668,6 +668,9 @@ namespace puffinn {
             for (size_t i = 0; i < dataset.get_size(); i++) {
                 active[i] = true;
             }
+
+            // Store the maximum number of allowed bits of difference in 64-bits sketches
+            std::vector<uint8_t> sketch_diff_threshold(dataset.get_size(), 64);
             TIMER_STOP(pre_initialization);
             
             TIMER_START(maxbuffer_population);
@@ -719,6 +722,9 @@ namespace puffinn {
             std::cerr << "Initial scan done (" << g_performance_metrics.get_total_time(Computation::SearchInit) << ")" << std::endl;
             TIMER_STOP(initial_scan);
 
+            size_t sketch_discarded_cnt = 0;
+            size_t collision_cnt = 0;
+
             uint32_t prefix_mask = 0xffffffff;
             for (int depth = MAX_HASHBITS; depth >= 0; depth--) {
                 // check current level
@@ -738,6 +744,8 @@ namespace puffinn {
                 TIMER_START(join_segments);
                 #pragma omp parallel for
                 for (size_t i = 0; i < lsh_maps.size(); i++) {
+                    size_t tl_sketch_discarded_cnt = 0;
+                    size_t tl_collision_cnt = 0;
                     int tid = omp_get_thread_num();
                     // This push is safe to do in parallel because each entry of `new_segments` is touched by only one thread
                     new_segments[i].push_back(0); 
@@ -781,17 +789,27 @@ namespace puffinn {
                                             continue;
                                         }
 
+                                        tl_collision_cnt++;
                                         if (has_sketches) {
-                                            float R_smallest = tl_maxbuffers[tid].smallest_value(R);
-                                            float S_smallest = tl_maxbuffers[tid].smallest_value(S);
-                                            auto sketch_sim_ub = filterer.similarity_upper_bound(R, S, 0.01);
-                                            if (sketch_sim_ub >= R_smallest || sketch_sim_ub >= S_smallest) {
+                                            size_t sketch_idx = i % NUM_SKETCHES;
+
+                                            size_t R_threshold = sketch_diff_threshold[R];
+                                            size_t S_threshold = sketch_diff_threshold[S];
+
+                                            auto R_sketch = filterer.get_sketch(R, sketch_idx);
+                                            auto S_sketch = filterer.get_sketch(S, sketch_idx);
+
+                                            size_t hd = popcountll(R_sketch ^ S_sketch);
+
+                                            if (hd <= R_threshold || hd <= S_threshold) {
                                                 auto sim = TSim::compute_similarity(
                                                     dataset[R], 
                                                     dataset[S], 
                                                     dataset.get_description());
                                                 tl_maxbuffers[tid].insert(R, S, sim);
                                                 tl_maxbuffers[tid].insert(S, R, sim);
+                                            } else {
+                                                tl_sketch_discarded_cnt++;
                                             }
                                         } else {
                                             auto sim = TSim::compute_similarity(
@@ -808,6 +826,10 @@ namespace puffinn {
                             new_segments[i].push_back(segments[i][j]);
                         }
                     }
+                    #pragma omp atomic
+                    sketch_discarded_cnt += tl_sketch_discarded_cnt;
+                    #pragma omp atomic
+                    collision_cnt += tl_collision_cnt;
                 }
                 TIMER_STOP(join_segments);
 
@@ -839,6 +861,9 @@ namespace puffinn {
                                 last_tables,
                                 kth_similarity
                             );
+                            if (has_sketches) {
+                                sketch_diff_threshold[v] = filterer.get_max_sketch_diff(kth_similarity);
+                            }
                             if (failure_prob <= 1-recall) {
                                 active[v] = false;
                             }
@@ -860,6 +885,8 @@ namespace puffinn {
                       << std::endl << "  filtering: " << g_performance_metrics.get_total_time(Computation::Filtering)
                       << std::endl << "  max buffer filter: " << g_performance_metrics.get_total_time(Computation::MaxbufferFilter)
                       << std::endl;
+            std::cerr << "collisions " << collision_cnt << " sketch discarded " << sketch_discarded_cnt
+                      << " i.e. " << (100.0 * sketch_discarded_cnt / collision_cnt) << "%" << std::endl;
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
                 auto best = tl_maxbuffers[0].best_indices(i);

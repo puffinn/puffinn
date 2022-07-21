@@ -2,7 +2,7 @@ set dotenv-load
 
 check:
   cmake --build build --config RelWithDebInfo --target PuffinnJoin
-  build/PuffinnJoin < join-experiments/instructions.txt > result.dsv
+  build/PuffinnJoin < instructions.txt > result.dsv
 
 cache-misses exe:
   sudo perf record -e cache-misses -p $(pgrep {{exe}})
