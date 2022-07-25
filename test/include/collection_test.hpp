@@ -192,8 +192,6 @@ namespace collection {
         }
         table.rebuild(false);
 
-
-
         for (auto k : ks) {            
             auto exact = table.bf_join(k);
             for (auto recall : recalls) {
@@ -237,7 +235,7 @@ namespace collection {
     }
 
     TEST_CASE("Index::lsh_join") {
-        std::vector<int> dimensions = {5, 100};
+        std::vector<int> dimensions = {5};
 
         for (auto d : dimensions) {
             std::unique_ptr<HashSourceArgs<SimHash>> args =

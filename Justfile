@@ -20,7 +20,7 @@ install-flamegraph:
 
 test:
   cmake --build build --config RelWithDebInfo --target Test
-  env OMP_NUM_THREADS=56 build/Test
+  env OMP_NUM_THREADS=56 build/Test Index::lsh_join
 
 bench:
   cmake --build build --config RelWithDebInfo --target Bench

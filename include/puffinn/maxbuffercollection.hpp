@@ -93,12 +93,7 @@ namespace puffinn {
                 size_t offset = capacity*idx;
                 for (size_t i=0; i<k; i++) {
                     auto & o = other.data[offset+i];
-                    if ( !insert(idx, o.first, o.second) ) {
-                        // we stop inserting as soon as we hit the first
-                        // value smaller than the minimum of `this`, since the
-                        // iteration on `other` is by decreasing values
-                        break;
-                    }
+                    insert(idx, o.first, o.second);
                 }
             }
         }
@@ -106,10 +101,13 @@ namespace puffinn {
         std::vector<ResultPair> best_entries(size_t idx) {
             std::vector<std::pair<uint32_t, float>> res;
             size_t offset = idx*capacity;
-            for (size_t i=0; i<k; i++) {
+            for (size_t i=0; i<capacity; i++) {
                 res.push_back(data[offset + i]);
             }
             std::sort(res.begin(), res.end(), cmp_pair);
+            while (res.size() > k) {
+                res.pop_back();
+            }
             return res;
         }
 

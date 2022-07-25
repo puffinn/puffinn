@@ -1124,7 +1124,7 @@ DATASETS = {
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
 ALGORITHMS = {
-    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 5),
+    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 6),
     # Local top-k baselines
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),

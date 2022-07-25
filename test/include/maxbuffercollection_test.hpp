@@ -48,6 +48,7 @@ namespace puffinn {
             {6, 0.56},
             {5, 0.46}
         });
+        REQUIRE(buffer.smallest_value(0) == 0.46f);
     }
 
     TEST_CASE("Multiple elements, two buffers") {
@@ -69,10 +70,12 @@ namespace puffinn {
             {6, 0.56},
             {5, 0.46}
         });
+        REQUIRE(buffer.smallest_value(0) == 0.46f);
         REQUIRE(buffer.best_entries(1) == std::vector<MaxBufferCollection::ResultPair>{
             {6, 0.53},
             {5, 0.43}
         });
+        REQUIRE(buffer.smallest_value(1) == 0.43f);
     }
     
     TEST_CASE("Multiple elements, two buffers, with duplicates") {

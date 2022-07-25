@@ -655,9 +655,13 @@ namespace puffinn {
             
             size_t nthreads = omp_get_max_threads();
             
-            
             // Allocate a buffer for each data point, for each thread
+#define BUFFCOLL // use the buffer collection
+#ifdef BUFFCOLL
             std::vector<MaxBufferCollection> tl_maxbuffers(nthreads);
+#else
+            std::vector<std::vector<MaxBuffer>> tl_maxbuffers(nthreads);
+#endif
 
             // Is a point still active?
             // This vector is only written to in the `remove inactive nodes` phase,
@@ -676,7 +680,13 @@ namespace puffinn {
             TIMER_START(maxbuffer_population);
             #pragma omp parallel for schedule(static, 1)
             for (size_t tid = 0; tid < nthreads; tid++) {
+#ifdef BUFFCOLL
                 tl_maxbuffers[tid].init(dataset.get_size(), k);
+#else
+                for (size_t i=0; i<dataset.get_size(); i++) {
+                    tl_maxbuffers[tid].emplace_back(k);
+                }
+#endif
             }
             TIMER_STOP(maxbuffer_population);
 
@@ -712,8 +722,13 @@ namespace puffinn {
                                 dataset[R], 
                                 dataset[S], 
                                 dataset.get_description());
+#ifdef BUFFCOLL
                             tl_maxbuffers[tid].insert(R, S, dist);
                             tl_maxbuffers[tid].insert(S, R, dist);
+#else
+                            tl_maxbuffers[tid][R].insert(S, dist);
+                            tl_maxbuffers[tid][S].insert(R, dist);
+#endif
                         }
                     }
                 }
@@ -734,10 +749,13 @@ namespace puffinn {
                 size_t active_count = count_true(active);
                 TIMER_STOP(count_active);
                 std::cerr << "Active nodes: " << active_count << std::endl;
-                if (active_count <= brute_force_perc * dataset.get_size()) {
-                    brute_force_some(active, tl_maxbuffers[0]);
+                if (active_count == 0) {
                     break;
                 }
+                /* if (active_count <= brute_force_perc * dataset.get_size()) { */
+                /*     brute_force_some(active, tl_maxbuffers[0]); */
+                /*     break; */
+                /* } */
                 std::vector<std::vector<uint32_t>> new_segments (lsh_maps.size());
 
 
@@ -806,8 +824,13 @@ namespace puffinn {
                                                     dataset[R], 
                                                     dataset[S], 
                                                     dataset.get_description());
+#ifdef BUFFCOLL
                                                 tl_maxbuffers[tid].insert(R, S, sim);
                                                 tl_maxbuffers[tid].insert(S, R, sim);
+#else
+                                                tl_maxbuffers[tid][R].insert(S, sim);
+                                                tl_maxbuffers[tid][S].insert(R, sim);
+#endif
                                             } else {
                                                 tl_sketch_discarded_cnt++;
                                             }
@@ -816,8 +839,13 @@ namespace puffinn {
                                                 dataset[R], 
                                                 dataset[S], 
                                                 dataset.get_description());
+#ifdef BUFFCOLL
                                             tl_maxbuffers[tid].insert(R, S, sim);
                                             tl_maxbuffers[tid].insert(S, R, sim);
+#else
+                                            tl_maxbuffers[tid][R].insert(S, sim);
+                                            tl_maxbuffers[tid][S].insert(R, sim);
+#endif
                                         }
                                     }
                                 }
@@ -838,7 +866,13 @@ namespace puffinn {
                 // which will be used for all subsequent evaluations about deactivation
                 // of single nodes
                 for(size_t tid = 1; tid < nthreads; tid++) {
+#ifdef BUFFCOLL
                     tl_maxbuffers[0].add_all(tl_maxbuffers[tid]);
+#else
+                    for (size_t i=0; i<dataset.get_size(); i++) {
+                        tl_maxbuffers[0][i].add_all(tl_maxbuffers[tid][i]);
+                    }
+#endif
                 }
                 TIMER_STOP(reconcile_buffers);
 
@@ -851,7 +885,11 @@ namespace puffinn {
                 for (size_t v=0; v < dataset.get_size(); v++) {
                     if (active[v]) {
                         // we have reconciled the thread local max buffers, so we can look at the first
+#ifdef BUFFCOLL
                         auto kth_similarity = tl_maxbuffers[0].smallest_value(v);
+#else
+                        auto kth_similarity = tl_maxbuffers[0][v].smallest_value();
+#endif
                         if (kth_similarity > 0.0) { // the similarity is negative if we have yet to collect k neighbors for v
                             auto table_idx = lsh_maps.size();
                             auto last_tables = (depth == MAX_HASHBITS ? table_idx : lsh_maps.size());
@@ -861,6 +899,7 @@ namespace puffinn {
                                 last_tables,
                                 kth_similarity
                             );
+                            /* printf("Failure probability %f, similarity %f\n", failure_prob, kth_similarity); */
                             if (has_sketches) {
                                 sketch_diff_threshold[v] = filterer.get_max_sketch_diff(kth_similarity);
                             }
@@ -889,7 +928,11 @@ namespace puffinn {
                       << " i.e. " << (100.0 * sketch_discarded_cnt / collision_cnt) << "%" << std::endl;
 
             for (size_t i = 0; i < dataset.get_size(); i++) {
+#ifdef BUFFCOLL
                 auto best = tl_maxbuffers[0].best_indices(i);
+#else
+                auto best = tl_maxbuffers[0][i].best_indices();
+#endif
                 res.push_back(best);
             }
             return res;
