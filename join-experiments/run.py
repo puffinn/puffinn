@@ -223,6 +223,7 @@ def compute_recalls(db):
             {"rowid": rowid, "recall": avg_recall}
         )
 
+    return
     # Global topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'global-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
@@ -706,7 +707,7 @@ class BruteForceLocal(Algorithm):
     def feed_data(self, h5py_path):
         f = h5py.File(h5py_path)
         assert f.attrs['distance'] == 'cosine' or f.attrs['distance'] == 'angular'
-        self.data = np.array(f['train'])
+        self.data = np.array(f['train']).astype(np.float32)
         norms = np.linalg.norm(self.data, axis=1)[:, np.newaxis]
         assert np.sum(norms == 0.0) == 0
         self.data /= norms
@@ -717,16 +718,17 @@ class BruteForceLocal(Algorithm):
     def index(self, params):
         self.time_index = 0
     def run(self, params):
-        print("  Top-{} join".format(self.k))
+        k = params['k']
+        print("  Top-{} join".format(k))
         start = time.time()
         index = faiss.IndexFlatIP(len(self.data[0]))
         index.add(self.data)
-        if self.prefix is None:
+        if 'prefix' not in params:
             queries = self.data
         else:
-            queries = self.data[0:self.prefix]
+            queries = self.data[0:params['prefix']]
             print(queries)
-        self.result_indices = index.search(queries, self.k+1)[1][:, 1:]
+        self.result_indices = index.search(queries, k+1)[1][:, 1:]
         print(self.result_indices)
         self.time_run = time.time() - start
     def result(self):
@@ -1122,7 +1124,7 @@ DATASETS = {
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
 ALGORITHMS = {
-    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 4),
+    'PUFFINN':         lambda: (SubprocessAlgorithm(["build/PuffinnJoin"]), 5),
     # Local top-k baselines
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
@@ -1331,10 +1333,10 @@ if __name__ == "__main__":
     
     for dummy_just_for_scoping in [0]:
         index_params = {
-            'dataset': 'random-difficult',
+            'dataset': 'glove-200',
             'workload': 'local-top-k',
             'algorithm': 'BruteForceLocal',
-            'params': {}
+            'params': {'prefix': 10000}
         } 
         query_params = [
             {'k': k}
@@ -1411,29 +1413,29 @@ if __name__ == "__main__":
         pass
         # ----------------------------------------------------------------------
         # Faiss-HNSW
-        if dataset != 'DBLP':
-            # for M in [4, 8, 16, 48, 32, 64, 128, 256, 512, 1024]:
-            for M in [48, 32, 64]:
-                for efConstruction in [100, 500]:
-                    index_params = {
-                        'M': M,
-                        'efConstruction': efConstruction
-                    }
-                    join_params = [
-                        {'efSearch': efSearch, 'k': 10}
-                        for efSearch in [80, 120]
-                        # for efSearch in [10, 40, 80, 120, 800]
-                    ]
-                    run_multiple(
-                        {
-                            'dataset': dataset,
-                            'workload': 'local-top-k',
-                            'algorithm': 'faiss-HNSW',
-                            'threads': threads,
-                            'params': index_params
-                        }, 
-                        join_params
-                    )
+        # if dataset != 'DBLP':
+        #     # for M in [4, 8, 16, 48, 32, 64, 128, 256, 512, 1024]:
+        #     for M in [48, 32, 64]:
+        #         for efConstruction in [100, 500]:
+        #             index_params = {
+        #                 'M': M,
+        #                 'efConstruction': efConstruction
+        #             }
+        #             join_params = [
+        #                 {'efSearch': efSearch, 'k': 10}
+        #                 for efSearch in [80, 120]
+        #                 # for efSearch in [10, 40, 80, 120, 800]
+        #             ]
+        #             run_multiple(
+        #                 {
+        #                     'dataset': dataset,
+        #                     'workload': 'local-top-k',
+        #                     'algorithm': 'faiss-HNSW',
+        #                     'threads': threads,
+        #                     'params': index_params
+        #                 }, 
+        #                 join_params
+        #             )
 
         # ----------------------------------------------------------------------
         # Faiss-IVF
@@ -1477,7 +1479,7 @@ if __name__ == "__main__":
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
         for hash_source in ['Independent']:
-            for space_usage in [512, 1024, 2048, 4096, 16384, 32768, 65536]:
+            for space_usage in [2048, 4096]:#, 16384, 32768, 65536]:
                 index_params = {
                     'dataset': dataset,
                     'workload': 'local-top-k',
@@ -1485,7 +1487,8 @@ if __name__ == "__main__":
                     'threads': threads,
                     'params': {
                         'space_usage': space_usage,
-                        'hash_source': hash_source
+                        'hash_source': hash_source,
+                        'with_sketches': '0'
                     }
                 }
                 query_params = [

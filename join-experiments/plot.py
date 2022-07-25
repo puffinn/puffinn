@@ -56,6 +56,7 @@ def plot_local_topk():
                recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s 
         from recent 
          where json_extract(params, '$.prefix') is null
+           and k = 10
            and workload = 'local-top-k';
         """, db)
     all = all.fillna(value={'hash_source': ''})
