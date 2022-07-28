@@ -31,8 +31,10 @@ import json
 import random
 import numba
 import heapq
+import copy
 from urllib.request import urlopen
 from urllib.request import urlretrieve
+from pprint import pprint
 
 
 DIR_ENVVAR = 'TOPK_DIR'
@@ -1242,6 +1244,14 @@ def run_multiple(index_configuration, join_configurations, debug=False):
     parameterizations (as described in `join_configurations`) on the same index. 
     This allows to save the time of the indexing over multiple runs.
     """
+    def merge_config(index_configuration, join_configuration):
+        full_config = copy.deepcopy(index_configuration)
+        full_config.update(index_configuration)
+        full_config['params'].update(join_configuration)
+        full_config['k'] = full_config['params']['k']
+        del full_config['params']['k']
+        return full_config
+
     db = get_db()
 
     hdf5_file = DATASETS[index_configuration['dataset']]()
@@ -1250,22 +1260,40 @@ def run_multiple(index_configuration, join_configurations, debug=False):
     index_params = index_configuration['params']
     index_params['threads'] = index_configuration.get('threads', 1)
 
+    print("BEFORE")
+    pprint(index_configuration)
+    configs_to_run = [
+        join_config
+        for join_config in join_configurations
+        if not already_run(db, merge_config(
+            copy.deepcopy(index_configuration), join_config
+        ))
+    ]
+    print("AFTER")
+    pprint(index_configuration)
+    pprint(configs_to_run)
+
+    if len(configs_to_run) == 0:
+        return
+
     algo.feed_data(hdf5_file)
     print("Building index with parameters", index_params)
     try:
         algo.index(index_params)
     except:
         print("Error in index building")
+        sys.exit(1)
         return
 
-    for join_configuration in join_configurations:
+    for join_configuration in configs_to_run:
         algo.clear() # clears the result from the previous run
 
-        full_config = index_configuration.copy()
-        full_config['params'].update(join_configuration)
-        full_config['k'] = full_config['params']['k']
-        del full_config['params']['k']
-        print("running with join configuration", json.dumps(full_config['params'], sort_keys=True))
+        full_config = merge_config(index_configuration, join_configuration)
+        # full_config = index_configuration.copy()
+        # full_config['params'].update(join_configuration)
+        # full_config['k'] = full_config['params']['k']
+        # del full_config['params']['k']
+        # print("running with join configuration", json.dumps(full_config['params'], sort_keys=True))
         
         if already_run(db, full_config):
             print("Configuration already run, skipping")
@@ -1409,7 +1437,7 @@ if __name__ == "__main__":
     #             ]
     #             run_multiple(index_params, join_params)
 
-    for dataset in ['glove-200']: #['glove-25', 'DBLP', 'NYTimes', 'DeepImage']:
+    for dataset in ['glove-200', 'Orkut', 'DeepImage']:
         pass
         # ----------------------------------------------------------------------
         # Faiss-HNSW
@@ -1479,24 +1507,31 @@ if __name__ == "__main__":
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
         for hash_source in ['Independent']:
-            for space_usage in [2048, 4096]:#, 16384, 32768, 65536]:
-                index_params = {
-                    'dataset': dataset,
-                    'workload': 'local-top-k',
-                    'algorithm': 'PUFFINN',
-                    'threads': threads,
-                    'params': {
-                        'space_usage': space_usage,
-                        'hash_source': hash_source,
-                        'with_sketches': '0'
+            space_usage = {
+                'DeepImage': [32768, 65536],
+                'glove-200': [2048, 4096, 8192, 16384],
+                'Orkut': [8192, 16384],
+                'DBLP': [2048, 4096, 8192, 16384],
+            }
+            for space_usage in space_usage[dataset]:
+                for sketches in ['1']:
+                    index_params = {
+                        'dataset': dataset,
+                        'workload': 'local-top-k',
+                        'algorithm': 'PUFFINN',
+                        'threads': threads,
+                        'params': {
+                            'space_usage': space_usage,
+                            'hash_source': hash_source,
+                            'with_sketches': sketches
+                        }
                     }
-                }
-                query_params = [
-                    {'k': k, 'recall': recall, 'method': 'LSHJoin'}
-                    for recall in [0.8, 0.9]
-                    for k in [1, 10]
-                ]
-                run_multiple(index_params, query_params)
+                    query_params = [
+                        {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+                        for recall in [0.8, 0.9]
+                        for k in [1, 10]
+                    ]
+                    run_multiple(index_params, query_params)
 
 
         # ----------------------------------------------------------------------
@@ -1521,6 +1556,6 @@ if __name__ == "__main__":
         #         run_multiple(index_params, query_params)
 
 
-    # with get_db() as db:
-    #     compute_recalls(db)
+    with get_db() as db:
+        compute_recalls(db)
 
