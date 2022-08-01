@@ -33,16 +33,23 @@ bool cmp_pairs(const ResultPair &a, const ResultPair &b) {
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 2) {
-        std::cerr << "USAGE: StoreJaccard <dataset>" << std::endl;
+    std::string path;
+    size_t k = 1000;
+    size_t sample_size = 0;
+
+    if (argc == 2) {
+        path = argv[1];
+    } else if (argc == 4) {
+        assert(argv[1] == "--sample");
+        sample_size = atoi(argv[2]);
+        path = argv[3];
+    } else {
+        std::cerr << "USAGE: StoreJaccard [--sample SIZE] <dataset>" << std::endl;
         return 1;
     }
 
-    std::string path = argv[1];
-    size_t k = 1000;
-
     // load data
-    std::cerr << "loading data" << std::endl;
+    std::cerr << "loading data from " << path << std::endl;
     H5Easy::File file(path, H5Easy::File::ReadWrite);
     std::vector<uint32_t> data = H5Easy::load<std::vector<uint32_t>>(file, "/train");
     std::vector<size_t> sizes = H5Easy::load<std::vector<size_t>>(file, "/size_train");
@@ -54,34 +61,29 @@ int main(int argc, char ** argv) {
         offset += sizes[i];
     }
 
+    size_t step = 1;
+    if (sample_size > 0) {
+        step = n / sample_size;
+    }
+    std::vector<size_t> indices;
+    for (size_t i=0; i<n; i += step) {
+        indices.push_back(i);
+    }
+    if (sample_size > 0) {
+        H5Easy::dump(file, "/sample_indices", indices);
+    }
+
     std::vector<std::vector<float>> top_similarities(n);
     std::vector<std::vector<uint32_t>> top_neighbors(n);
     std::vector<float> avg_similarities(n);
-
-    // size_t i=n-2, j=n-3;
-    // for (auto it=data.begin() +offsets[i]; it != data.begin() + offsets[i] + sizes[i]; it++) {
-    //     std::cerr << " "  << *it;
-    // }
-    // std::cerr << std::endl;
-    // for (auto it=data.begin() +offsets[j]; it != data.begin() + offsets[j] + sizes[j]; it++) {
-    //     std::cerr << " "  << *it;
-    // }
-    // std::cerr << std::endl;
-    // float test = jaccard(
-    //     data.begin() + offsets[i],
-    //     data.begin() + offsets[i] + sizes[i],
-    //     data.begin() + offsets[j],
-    //     data.begin() + offsets[j] + sizes[j]
-    // );
-    // std::cerr << test << std::endl;
-    // return 0;
 
     size_t progress = 0;
 
     std::cerr << "computing similarities" << std::endl;
     // compute similarities
     #pragma omp parallel for schedule(dynamic)
-    for (size_t i=0; i<n; i++) {
+    for (size_t h=0; h<indices.size(); h++) {
+        size_t i = indices[h];
         std::vector<ResultPair> topk;
         for (size_t h=0; h<k; h++) {
             topk.emplace_back(std::numeric_limits<uint32_t>::max(), -1.0);
@@ -115,7 +117,7 @@ int main(int argc, char ** argv) {
         #pragma omp critical
         {
             if (++progress % 1000 == 0) {
-                std::cerr << "completed " << progress << "/" << n << std::endl;
+                std::cerr << "completed " << progress << "/" << indices.size() << std::endl;
             }
         }
     }

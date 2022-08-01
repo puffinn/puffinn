@@ -207,7 +207,7 @@ def compute_recalls(db):
     # Local topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
-        if k > 10:
+        if k > 10: # FIXME handle the case for k > 10 instead of skipping it
             continue
         print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
         baseline_indices = get_baseline_indices(db, dataset, k)
@@ -228,7 +228,8 @@ def compute_recalls(db):
             {"rowid": rowid, "recall": avg_recall}
         )
 
-    return
+    return # FIXME remove this return and evaluate the recall also for the top-k
+
     # Global topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'global-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
