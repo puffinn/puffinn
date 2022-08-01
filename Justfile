@@ -1,6 +1,7 @@
 set dotenv-load
 
 check:
+  #!/bin/bash
   cmake --build build --config RelWithDebInfo --target PuffinnJoin
   time build/PuffinnJoin < instructions.txt > result.dsv
 
@@ -19,7 +20,7 @@ install-flamegraph:
 
 test:
   cmake --build build --config RelWithDebInfo --target Test
-  env OMP_NUM_THREADS=56 build/Test "Jaccard*"
+  env OMP_NUM_THREADS=56 build/Test "*collision*"
 
 bench:
   cmake --build build --config RelWithDebInfo --target Bench
