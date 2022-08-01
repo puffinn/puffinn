@@ -8,6 +8,31 @@
 #include <random>
 
 namespace puffinn {
+    class MultiplyAddHash {
+        uint64_t a;
+        uint64_t b;
+
+    public:
+        MultiplyAddHash(std::mt19937_64& rng) {
+            a = rng();
+            b = rng();
+        }
+
+        MultiplyAddHash(std::istream& in) {
+            in.read(reinterpret_cast<char*>(&a), sizeof(uint64_t));
+            in.read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
+        }
+
+        void serialize(std::ostream& out) const {
+            out.write(reinterpret_cast<const char*>(&a), sizeof(uint64_t));
+            out.write(reinterpret_cast<const char*>(&b), sizeof(uint64_t));
+        }
+
+        uint64_t operator()(uint32_t val) const {
+            return (((uint64_t) val) * a + b) >> 32;
+        }
+    };
+
     class TabulationHash {
         uint64_t t1[256];
         uint64_t t2[256];
@@ -95,11 +120,11 @@ namespace puffinn {
     };
 
     class MinHashFunction {
-        TabulationHash hash;
+        MultiplyAddHash hash;
         BitPermutation permutation;
 
     public:
-        MinHashFunction(TabulationHash hash, BitPermutation perm) : hash(hash), permutation(perm) {
+        MinHashFunction(MultiplyAddHash hash, BitPermutation perm) : hash(hash), permutation(perm) {
         }
 
         MinHashFunction(std::istream& in)
@@ -203,7 +228,7 @@ namespace puffinn {
             rng.seed(get_default_random_generator()());
 
             BitPermutation perm(rng, set_size, args.randomized_bits);
-            return Function(TabulationHash(rng), perm);
+            return Function(MultiplyAddHash(rng), perm);
         }
 
         unsigned int bits_per_function() const {
