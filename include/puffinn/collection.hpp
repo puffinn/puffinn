@@ -317,7 +317,7 @@ namespace puffinn {
             for (size_t i=0; i < tl_hash_values.size(); i++) {
                 tl_hash_values[i].resize(lsh_maps.size());
             }
-            #pragma omp parallel for
+            #pragma omp parallel for schedule(dynamic)
             for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
                 auto tid = omp_get_thread_num();
                 auto & hash_values = tl_hash_values[tid];
