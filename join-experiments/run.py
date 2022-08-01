@@ -190,6 +190,10 @@ def compute_distances(k, dataset, distancefn):
 
 
 def get_baseline_indices(db, dataset, k):
+    with h5py.File(DATASETS[dataset]()) as hfp:
+        # Read the neighbors directly from the dataset file, if those are available
+        if 'top-1000-neighbors' in hfp:
+            return hfp['top-1000-neighbors'][:,:k]
     baseline = db.execute(
         "SELECT output_file, hdf5_group FROM baselines WHERE dataset = :dataset AND workload = 'local-top-k';",
         {"dataset": dataset}
