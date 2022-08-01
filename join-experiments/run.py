@@ -32,6 +32,8 @@ import random
 import numba
 import heapq
 import copy
+import pynndescent
+import scipy
 from urllib.request import urlopen
 from urllib.request import urlretrieve
 from pprint import pprint
@@ -178,7 +180,6 @@ def compute_distances(k, dataset, distancefn):
         neighbors = all_neighbors[:, 1:]
         return distances, neighbors, avg_distances
     if distancefn == 'jaccard':
-        import scipy
         from scipy.spatial.distance import pdist
         dataset = np.array(dataset)
         print(dataset)
@@ -206,6 +207,8 @@ def compute_recalls(db):
     # Local topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
+        if k > 10:
+            continue
         print("Computing recalls for {} {} on {} with k={}".format(algorithm, params, dataset, k))
         baseline_indices = get_baseline_indices(db, dataset, k)
         if baseline_indices is None:
@@ -397,6 +400,85 @@ class Algorithm(object):
     def done(self):
         """Used to signal to implementations that we are done and that the index can be discarded"""
         pass
+
+
+class PyNNDescent(Algorithm):
+    def __init__(self):
+        self._query_matrix = None
+        self.data = None
+        self.metric = None
+        self._index = None
+
+    def feed_data(self, h5py_path):
+        """Pass the data to the algorithm"""
+
+        distance = h5py.File(h5py_path).attrs['distance']
+        self.metric = distance
+        if distance == "angular":
+            distance = "cosine"
+
+        if distance == "jaccard":
+            # Load sparse data into a sparse matrix.
+            X = list(stream_sparse(h5py_path))
+            sizes = [len(x) for x in X]
+            n_cols = max([max(x) for x in X]) + 1
+            matrix = scipy.sparse.csr_matrix((len(X), n_cols), dtype=np.float32)
+            matrix.indices = np.hstack(X).astype(np.int32)
+            matrix.indptr = np.concatenate([[0], np.cumsum(sizes)]).astype(np.int32)
+            matrix.data = np.ones(matrix.indices.shape[0], dtype=np.float32)
+            matrix.sort_indices()
+            X = matrix
+        else:
+            X = h5py.File(h5py_path)['train'][:]
+        self.data = X
+
+    def index(self, params):
+        """Setup the index with the given parameters, if any. This is timed."""
+        start = time.time()
+        self._index = pynndescent.NNDescent(
+            self.data,
+            n_neighbors=params['n_neighbors'],
+            metric=self.metric,
+            low_memory=True,
+            leaf_size=params['leaf_size'],
+            pruning_degree_multiplier=params['pruning_degree_multiplier'],
+            diversify_prob=params['diversify_prob'],
+            # n_trees=params['n_trees'],
+            # n_search_trees=params['n_search_trees'],
+            compressed=False,
+            verbose=True
+        )
+        end = time.time()
+        self.index_time = end - start
+
+    def run(self, params):
+        """Run the workload with the given join params. This is timed."""
+        k = params['k']
+        start = time.time()
+        # Since we are doing a self-join we can and should use the graph
+        # that is built into the index
+        ind = self._index.neighbor_graph[0][:,1:(k+1)]
+        end = time.time()
+        self.workload_time = end - start
+        self.result_indices = ind
+
+    def clear(self):
+        """Clears the result of the previous run"""
+        self.workload_time = None
+        self.result_indices = None
+
+    def result(self):
+        """Return the result as a two-dimensional numpy array.
+        The way it is interpreted depends on the application.
+        For global top-k join, it is the list of top-k pairs of indices.
+        For local top-k join, it is the list of
+        nearest neighbors for each element.
+        """
+        return self.result_indices
+
+    def times(self):
+        """Returns the pair (index_time, workload_time)"""
+        return self.index_time, self.workload_time
 
 
 class SubprocessAlgorithm(Algorithm):
@@ -772,6 +854,17 @@ def write_dense(out_fn, vecs):
     hfile.create_dataset("train", shape=(len(vecs), len(vecs[0])), dtype=vecs[0].dtype, data=vecs, compression="gzip")
     hfile.close()
 
+def stream_sparse(in_fn):
+    file = h5py.File(in_fn)
+    data = np.array(file['train'])
+    sizes = np.array(file['size_train'])
+    offsets = np.zeros(sizes.shape, dtype=np.int64)
+    offsets[1:] = np.cumsum(sizes[:-1])
+    for offset, size in zip(offsets, sizes):
+        v = data[offset:offset+size]
+        if len(v) > 0:
+            yield v
+
 # Adapted from ann-benchmarks
 def random_jaccard(out_fn, n=10000, size=50, universe=80):
     if os.path.isfile(out_fn):
@@ -1131,6 +1224,7 @@ ALGORITHMS = {
     'BruteForceLocal': lambda: (BruteForceLocal(),                          1),
     'faiss-HNSW':      lambda: (FaissHNSW(),                                1),
     'faiss-IVF':       lambda: (FaissIVF(),                                 1),
+    'pynndescent':     lambda: (PyNNDescent(),                              1),
     'falconn':         lambda: (FALCONN(),                                  2),
     # Global top-k baselines
     'XiaoEtAl':        lambda: (SubprocessAlgorithm(["build/XiaoEtAl"]),    1),
@@ -1437,8 +1531,35 @@ if __name__ == "__main__":
     #             ]
     #             run_multiple(index_params, join_params)
 
-    for dataset in ['glove-200', 'Orkut', 'DeepImage']:
+    for dataset in ['glove-200', 'DeepImage']:#, 'Orkut', 'DeepImage']:
         pass
+        # ----------------------------------------------------------------------
+        # pynndescent
+        for n_neighbors in [20, 30, 50, 100]:
+            for diversify_prob in [0.5, 0.75, 1.0]:
+                for pruning_degree_multiplier in [1.0, 1.5]:
+                    for leaf_size in [32]:
+                        index_params = {
+                            'n_neighbors': n_neighbors,
+                            'leaf_size': leaf_size,
+                            'pruning_degree_multiplier': pruning_degree_multiplier,
+                            'diversify_prob': diversify_prob
+                        }
+                        join_params = [
+                            {'k': k}
+                            for k in [1, 10, 100]
+                        ]
+                        run_multiple(
+                            {
+                                'dataset': dataset,
+                                'workload': 'local-top-k',
+                                'algorithm': 'pynndescent',
+                                'threads': threads,
+                                'params': index_params
+                            }, 
+                            join_params
+                        )
+
         # ----------------------------------------------------------------------
         # Faiss-HNSW
         # if dataset != 'DBLP':
@@ -1506,32 +1627,32 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        for hash_source in ['Independent']:
-            space_usage = {
-                'DeepImage': [32768, 65536],
-                'glove-200': [2048, 4096, 8192, 16384],
-                'Orkut': [8192, 16384],
-                'DBLP': [2048, 4096, 8192, 16384],
-            }
-            for space_usage in space_usage[dataset]:
-                for sketches in ['1']:
-                    index_params = {
-                        'dataset': dataset,
-                        'workload': 'local-top-k',
-                        'algorithm': 'PUFFINN',
-                        'threads': threads,
-                        'params': {
-                            'space_usage': space_usage,
-                            'hash_source': hash_source,
-                            'with_sketches': sketches
-                        }
-                    }
-                    query_params = [
-                        {'k': k, 'recall': recall, 'method': 'LSHJoin'}
-                        for recall in [0.8, 0.9]
-                        for k in [1, 10]
-                    ]
-                    run_multiple(index_params, query_params)
+        # for hash_source in ['Independent']:
+        #     space_usage = {
+        #         'DeepImage': [32768, 65536],
+        #         'glove-200': [2048, 4096, 8192, 16384],
+        #         'Orkut': [8192, 16384],
+        #         'DBLP': [2048, 4096, 8192, 16384],
+        #     }
+        #     for space_usage in space_usage[dataset]:
+        #         for sketches in ['1']:
+        #             index_params = {
+        #                 'dataset': dataset,
+        #                 'workload': 'local-top-k',
+        #                 'algorithm': 'PUFFINN',
+        #                 'threads': threads,
+        #                 'params': {
+        #                     'space_usage': space_usage,
+        #                     'hash_source': hash_source,
+        #                     'with_sketches': sketches
+        #                 }
+        #             }
+        #             query_params = [
+        #                 {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+        #                 for recall in [0.8, 0.9]
+        #                 for k in [1, 10]
+        #             ]
+        #             run_multiple(index_params, query_params)
 
 
         # ----------------------------------------------------------------------
