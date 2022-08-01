@@ -71,15 +71,20 @@ namespace similarity_measure {
         SetFormat::store({}, &a, d);
         SetFormat::store({}, &b, d);
         REQUIRE(JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description()) == 0);
+        REQUIRE(JaccardSimilarity::compute_similarity_gallop(&a, &b) == 0);
 
         SetFormat::store({1, 2, 3}, &a, d);
         SetFormat::store({1, 2, 3}, &b, d);
         REQUIRE(JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description()) == 1.0);
+        REQUIRE(JaccardSimilarity::compute_similarity_gallop(&a, &b) == 1.0);
 
         SetFormat::store({1, 2, 3}, &a, d);
         SetFormat::store({4, 5, 3}, &b, d);
         REQUIRE(
             JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description())
+            == Approx(1.0/5.0));
+        REQUIRE(
+            JaccardSimilarity::compute_similarity_gallop(&a, &b, dataset)
             == Approx(1.0/5.0));
 
         SetFormat::store({1}, &a, d);
@@ -87,15 +92,22 @@ namespace similarity_measure {
         REQUIRE(
             JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description())
             == Approx(1.0/6.0));
+        REQUIRE(
+            JaccardSimilarity::compute_similarity_gallop(&a, &b, dataset)
+            == Approx(1.0/6.0));
 
         SetFormat::store({1, 2, 3}, &a, d);
         SetFormat::store({4, 5, 6}, &b, d);
         REQUIRE(JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description()) == 0.0);
+        REQUIRE(JaccardSimilarity::compute_similarity_gallop(&a, &b, dataset) == 0.0);
 
         SetFormat::store({5, 7, 1}, &a, d);
         SetFormat::store({1, 2, 3, 4, 5, 6}, &b, d);
         REQUIRE(
             JaccardSimilarity::compute_similarity(&a, &b, dataset.get_description())
+            == Approx(2.0/7.0));
+        REQUIRE(
+            JaccardSimilarity::compute_similarity_gallop(&a, &b, dataset)
             == Approx(2.0/7.0));
     }
 }

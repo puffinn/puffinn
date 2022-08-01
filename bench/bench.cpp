@@ -9,6 +9,7 @@
 #include "puffinn/similarity_measure/cosine.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
 #include "alternatives.hpp"
+#include "highfive/H5Easy.hpp"
 #include <vector>
 #include <fstream>
 #include <sstream>
@@ -229,19 +230,89 @@ void bench_hash(const std::vector<std::vector<float>> & vectors) {
     run_static<puffinn::SimHash>(&bencher, "SimHash (static)", dataset);
 }
 
+void bench_jaccard(const std::vector<std::vector<uint32_t>> & vectors) {
+    uint32_t dimensions = 0;
+    for (auto & v : vectors) {
+        for (auto & x : v) {
+            if (x > dimensions) {
+                dimensions = x;
+            }
+        }
+    }
+    dimensions++;
+
+    puffinn::Dataset<puffinn::JaccardSimilarity::Format> dataset(dimensions);
+    for (auto v : vectors) {
+        dataset.insert(v);
+    }
+    size_t n = dataset.get_size();
+
+    auto bencher = ankerl::nanobench::Bench()
+        .title("Jaccard")
+        .minEpochIterations(1000)
+        .timeUnit(std::chrono::nanoseconds(1), "ns");
+
+    bencher.run("Jaccard similarity, long-long", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n-1], dataset[n-2]));
+    });
+
+    bencher.run("Jaccard similarity, long-short", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n-1], dataset[n/4]));
+    });
+
+    bencher.run("Jaccard similarity, short-short", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n/4+1], dataset[n/4]));
+    });
+
+
+    bencher.run("Jaccard similarity (gallop), long-long", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_gallop(dataset[n-2], dataset[n-1]));
+    });
+
+    bencher.run("Jaccard similarity (gallop), long-short ", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_gallop(dataset[n-1], dataset[n/4]));
+    });
+
+    bencher.run("Jaccard similarity (gallop), short-short", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_gallop(dataset[n/4+1], dataset[n/4]));
+    });
+
+}
+
+std::vector<std::vector<uint32_t>> read_int_vectors_hdf5(std::string path) {
+    H5Easy::File file(path, H5Easy::File::ReadOnly);
+    std::vector<uint32_t> data = H5Easy::load<std::vector<uint32_t>>(file, "/train");
+    std::vector<size_t> sizes = H5Easy::load<std::vector<size_t>>(file, "/size_train");
+    size_t offset = 0;
+    std::vector<std::vector<uint32_t>> res;
+    for (size_t s : sizes) {
+        std::vector<uint32_t> elem(data.begin() + offset, data.begin() + offset + s);
+        res.push_back(elem);
+        offset += s;
+    }
+    std::cerr << "loaded data" << std::endl;
+    return res;
+}
 
 int main(int argc, char ** argv) {
     if (argc != 2) {
         std::cerr << "USAGE: Bench <FILE>" << std::endl;
         return 1;
     }
-    auto dataset = read_glove(argv[1]);
+    auto dataset = read_int_vectors_hdf5(argv[1]);
 
     // bench_api_simhash(dataset);
     // bench_query(dataset);
     // bench_index_build(dataset);
     // bench_hash(dataset);
-    bench_join(dataset);
+    // bench_join(dataset);
+    bench_jaccard(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {

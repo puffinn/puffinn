@@ -59,7 +59,7 @@ add_library(nanobench "bench/nanobench.cpp")
 add_executable(Bench "bench/bench.cpp")
 target_link_libraries(Bench nanobench)
 if (OpenMP_FOUND)
-    target_link_libraries(Bench ${OpenMP_CXX_LIBRARIES})
+    target_link_libraries(Bench ${OpenMP_CXX_LIBRARIES} HighFive)
 endif()
 
 add_executable(SortBench "bench/sorthash_bench.cpp")

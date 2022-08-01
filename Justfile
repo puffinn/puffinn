@@ -5,11 +5,10 @@ check:
   time build/PuffinnJoin < instructions.txt > result.dsv
 
 cache-misses exe:
-  sudo perf record -e cache-misses -p $(pgrep {{exe}})
+  perf record --call-graph dwarf -e cache-misses -p $(pgrep {{exe}})
 
-# produce a flamegraph.svg file
-profile exec: install-flamegraph
-  flamegraph --root -p $(pgrep {{exec}})
+profile exec:
+  perf record --call-graph dwarf -p $(pgrep {{exec}})
 
 # install flamegraph
 install-flamegraph:
@@ -20,11 +19,11 @@ install-flamegraph:
 
 test:
   cmake --build build --config RelWithDebInfo --target Test
-  env OMP_NUM_THREADS=56 build/Test Index::lsh_join
+  env OMP_NUM_THREADS=56 build/Test "Jaccard*"
 
 bench:
   cmake --build build --config RelWithDebInfo --target Bench
-  env OMP_NUM_THREADS=56 build/Bench glove.25d.100k.txt >> bench_results.txt
+  env OMP_NUM_THREADS=56 build/Bench /mnt/large_storage/topk-join/datasets/orkut.hdf5 # >> bench_results.txt
 
 # open the sqlite result database
 sqlite:
