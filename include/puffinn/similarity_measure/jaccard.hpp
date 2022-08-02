@@ -36,48 +36,59 @@ namespace puffinn {
             return -(low+1);
         }
 
-        static size_t intersection_size_gallop(Format::Type* small_ptr, Format::Type* large_ptr) {
-            size_t size_small = small_ptr->size();
-            size_t size_large = large_ptr->size();
-            if (size_small > size_large) {
-                // Swap the arguments
-                return intersection_size_gallop(large_ptr, small_ptr);
+        /// Starting from `begin`, returns the first index in the given vector such that
+        /// the corresponding value is >= the given key
+        static size_t gallop(Format::Type* vec_ptr, uint32_t key, size_t begin, size_t end) {
+            size_t range_end = end;
+            auto& vec = *vec_ptr;
+            size_t offset = 1;
+            // Jump with geometrically increasing windows until we find the window
+            // containing the sought key.
+            while (begin + offset < end && vec[begin + offset] < key) {
+                begin += offset;
+                offset *= 2;
             }
-            auto& small = *small_ptr;
-            auto& large = *large_ptr;
-            size_t size = 0;
-            size_t small_idx = 0;
-            size_t large_idx = 0;
-            size_t index = 0;
-            while(small_idx < size_small && large_idx < size_large) {
-                auto target = small[small_idx];
-                size_t diff = 1;
-                while (large_idx + diff < size_large && large[large_idx + diff] < target) {
-                    diff *= 2;
-                }
-                size_t end = large_idx + diff;
-                if (end > size_large) {
-                    end = size_large;
-                }
+            if (begin + offset < end) {
+                end = begin + offset + 1;
+            }
 
-                {
-                    size_t n = end - large_idx;
-                    if (n == 0) {
-                        return size;
-                    }
-                    auto base = large_idx;
-                    while (n > 1) {
-                        size_t half = n >> 1;
-                        base = (large[base + half] < target) ? base + half : base;
-                        n -= half;
-                    }
-                    index = (large[base] < target) ? base + 1 : base;
+            // Binary search the key in the range
+            size_t low = begin;
+            size_t high = end - 1;
+            while (low <= high) {
+                size_t middleIndex = (low + high) >> 1;
+                size_t middleValue = vec[middleIndex];
+                if (middleValue < key) {
+                    low = middleIndex + 1;
+                } else if (middleValue > key) {
+                    high = middleIndex - 1;
+                } else {
+                    return middleIndex;
                 }
-                if ((index < size_large) && (large[index] == target)) {
+            }
+            return low;
+        }
+
+        static size_t intersection_size_gallop(Format::Type* lhs_ptr, Format::Type* rhs_ptr) {
+            size_t size = 0;
+            auto& lhs = *lhs_ptr;
+            auto& rhs = *rhs_ptr;
+
+            size_t lhs_idx = 0;
+            size_t rhs_idx = 0;
+            size_t lhs_size = lhs.size();
+            size_t rhs_size = rhs.size();
+
+            while (lhs_idx < lhs_size && rhs_idx < rhs_size) {
+                if (lhs[lhs_idx] == rhs[rhs_idx]) {
                     size++;
+                    lhs_idx++;
+                    rhs_idx++;
+                } else if (lhs[lhs_idx] < rhs[rhs_idx]) {
+                    lhs_idx = gallop(lhs_ptr, rhs[rhs_idx], lhs_idx, lhs_size);
+                } else {
+                    rhs_idx = gallop(rhs_ptr, lhs[lhs_idx], rhs_idx, rhs_size);
                 }
-                small_idx++;
-                large_idx = index;
             }
 
             return size;
@@ -102,7 +113,6 @@ namespace puffinn {
             }
             return intersection_size;
         }
-
 
         static float compute_similarity(Format::Type* lhs_ptr, Format::Type* rhs_ptr, DatasetDescription<Format>) {
             return compute_similarity_linear(lhs_ptr, rhs_ptr);

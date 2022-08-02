@@ -257,6 +257,11 @@ void bench_jaccard(const std::vector<std::vector<uint32_t>> & vectors) {
             puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n-1], dataset[n-2]));
     });
 
+    bencher.run("Jaccard similarity, longish-longish", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n-100], dataset[n-101]));
+    });
+
     bencher.run("Jaccard similarity, long-short", [&] {
         ankerl::nanobench::doNotOptimizeAway(
             puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n-1], dataset[n/4]));
@@ -267,10 +272,14 @@ void bench_jaccard(const std::vector<std::vector<uint32_t>> & vectors) {
             puffinn::JaccardSimilarity::compute_similarity_linear(dataset[n/4+1], dataset[n/4]));
     });
 
-
     bencher.run("Jaccard similarity (gallop), long-long", [&] {
         ankerl::nanobench::doNotOptimizeAway(
             puffinn::JaccardSimilarity::compute_similarity_gallop(dataset[n-2], dataset[n-1]));
+    });
+
+    bencher.run("Jaccard similarity (gallop), longish-longish", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::JaccardSimilarity::compute_similarity_gallop(dataset[n-100], dataset[n-101]));
     });
 
     bencher.run("Jaccard similarity (gallop), long-short ", [&] {
