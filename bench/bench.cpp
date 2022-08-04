@@ -230,6 +230,28 @@ void bench_hash(const std::vector<std::vector<float>> & vectors) {
     run_static<puffinn::SimHash>(&bencher, "SimHash (static)", dataset);
 }
 
+void bench_cosine(const std::vector<std::vector<float>> & vectors) {
+    uint32_t dimensions = vectors[0].size();
+
+    puffinn::Dataset<puffinn::CosineSimilarity::Format> dataset(dimensions);
+    for (auto v : vectors) {
+        dataset.insert(v);
+    }
+    size_t n = dataset.get_size();
+    auto desc = dataset.get_description();
+
+    auto bencher = ankerl::nanobench::Bench()
+        .title("Cosine")
+        .minEpochIterations(1000)
+        .timeUnit(std::chrono::nanoseconds(1), "ns");
+
+    bencher.run("Cosine similarity", [&] {
+        ankerl::nanobench::doNotOptimizeAway(
+            puffinn::CosineSimilarity::compute_similarity(dataset[0], dataset[1], desc));
+    });
+}
+
+
 void bench_jaccard(const std::vector<std::vector<uint32_t>> & vectors) {
     uint32_t dimensions = 0;
     for (auto & v : vectors) {
@@ -309,19 +331,46 @@ std::vector<std::vector<uint32_t>> read_int_vectors_hdf5(std::string path) {
     return res;
 }
 
+
+float norm(std::vector<float> & v) {
+    float n = 0.0;
+    for (auto x : v) {
+        n += x * x;
+    }
+    return n;
+}
+
+
+std::vector<std::vector<float>> read_float_vectors_hdf5(std::string path, bool normalize) {
+    H5Easy::File file(path, H5Easy::File::ReadOnly);
+    std::vector<std::vector<float>> data = H5Easy::load<std::vector<std::vector<float>>>(file, "/train");
+    if (normalize) {
+        for (size_t i=0; i<data.size(); i++) {
+            float n = norm(data[i]);
+            for (size_t j=0; j<data[i].size(); j++) {
+                data[i][j] /= n;
+            }
+        }
+    }
+    return data;
+}
+
+
 int main(int argc, char ** argv) {
     if (argc != 2) {
         std::cerr << "USAGE: Bench <FILE>" << std::endl;
         return 1;
     }
-    auto dataset = read_int_vectors_hdf5(argv[1]);
+    // auto dataset = read_int_vectors_hdf5(argv[1]);
+    auto dataset = read_float_vectors_hdf5(argv[1], true);
 
     // bench_api_simhash(dataset);
     // bench_query(dataset);
     // bench_index_build(dataset);
     // bench_hash(dataset);
     // bench_join(dataset);
-    bench_jaccard(dataset);
+    // bench_jaccard(dataset);
+    bench_cosine(dataset);
 }
 
 std::vector<std::vector<float>> read_glove(const std::string& filename) {

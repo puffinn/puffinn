@@ -24,7 +24,8 @@ test:
 
 bench:
   cmake --build build --config RelWithDebInfo --target Bench
-  env OMP_NUM_THREADS=56 build/Bench /mnt/large_storage/topk-join/datasets/orkut.hdf5 # >> bench_results.txt
+  # env OMP_NUM_THREADS=56 build/Bench /mnt/large_storage/topk-join/datasets/orkut.hdf5 # >> bench_results.txt
+  env OMP_NUM_THREADS=56 build/Bench /mnt/large_storage/topk-join/datasets/glove-200.hdf5 
 
 # open the sqlite result database
 sqlite:
