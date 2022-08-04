@@ -209,7 +209,8 @@ def get_baseline_indices(db, dataset, k):
 
 def compute_recalls(db):
     # Local topk
-    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k';").fetchall()
+    missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k' and k <= 10;").fetchall()
+    print("there are {} missing recalls".format(len(missing_recalls)))
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
         if k > 10: # FIXME handle the case for k > 10 instead of skipping it
             continue
@@ -1536,7 +1537,7 @@ if __name__ == "__main__":
     #             ]
     #             run_multiple(index_params, join_params)
 
-    for dataset in ['glove-200', 'DeepImage']:#, 'Orkut', 'DeepImage']:
+    for dataset in ['DBLP']:#, 'Orkut', 'DeepImage']:
         pass
         # ----------------------------------------------------------------------
         # pynndescent
@@ -1632,32 +1633,32 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        # for hash_source in ['Independent']:
-        #     space_usage = {
-        #         'DeepImage': [32768, 65536],
-        #         'glove-200': [2048, 4096, 8192, 16384],
-        #         'Orkut': [8192, 16384],
-        #         'DBLP': [2048, 4096, 8192, 16384],
-        #     }
-        #     for space_usage in space_usage[dataset]:
-        #         for sketches in ['1']:
-        #             index_params = {
-        #                 'dataset': dataset,
-        #                 'workload': 'local-top-k',
-        #                 'algorithm': 'PUFFINN',
-        #                 'threads': threads,
-        #                 'params': {
-        #                     'space_usage': space_usage,
-        #                     'hash_source': hash_source,
-        #                     'with_sketches': sketches
-        #                 }
-        #             }
-        #             query_params = [
-        #                 {'k': k, 'recall': recall, 'method': 'LSHJoin'}
-        #                 for recall in [0.8, 0.9]
-        #                 for k in [1, 10]
-        #             ]
-        #             run_multiple(index_params, query_params)
+        for hash_source in ['Independent']:
+            space_usage = {
+                'DeepImage': [32768, 65536],
+                'glove-200': [2048, 4096, 8192, 16384],
+                'Orkut': [16384, 32768],
+                'DBLP': [2048, 4096, 8192, 16384],
+            }
+            for space_usage in space_usage[dataset]:
+                for sketches in ['1', '0']:
+                    index_params = {
+                        'dataset': dataset,
+                        'workload': 'local-top-k',
+                        'algorithm': 'PUFFINN',
+                        'threads': threads,
+                        'params': {
+                            'space_usage': space_usage,
+                            'hash_source': hash_source,
+                            'with_sketches': sketches
+                        }
+                    }
+                    query_params = [
+                        {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+                        for recall in [0.8, 0.9]
+                        for k in [1, 10]
+                    ]
+                    run_multiple(index_params, query_params)
 
 
         # ----------------------------------------------------------------------
