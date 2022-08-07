@@ -113,9 +113,26 @@ def plot_topk(workload):
            and workload = '{workload}-top-k';
         """, db)
     all = all.fillna(value={'hash_source': ''})
-    all['algorithm'] = all['algorithm'] + all['hash_source']
+    # all['algorithm'] = all['algorithm'] + all['hash_source']
     print(all)
     data = get_pareto(all)
+
+    algorithms = [
+        t[0]
+        for t in db.execute(f"select distinct algorithm from recent where workload = '{workload}-top-k' order by 1;").fetchall()
+    ]
+    colors = [
+      "#5778a4",
+      "#e49444",
+      "#d1615d",
+      "#85b6b2",
+      "#6a9f58",
+      "#e7ca60",
+      "#a87c9f",
+      "#f1a2a9",
+      "#967662",
+      "#b8b0ac"
+    ]
 
     datasets = [
         t[0]
@@ -125,6 +142,9 @@ def plot_topk(workload):
         t[0]
         for t in db.execute(f"select distinct k from recent where workload = '{workload}-top-k' order by 1;").fetchall()
     ]
+    color_mapping = alt.Color('algorithm', 
+                              type='nominal', 
+                              scale=alt.Scale(domain=algorithms, range=colors))
 
     k_radio = alt.binding_radio(options=ks, name='K: ')
     input_dropdown = alt.binding_select(options=datasets, name='Dataset: ')
@@ -134,7 +154,7 @@ def plot_topk(workload):
     chart_pareto = alt.Chart(data).transform_filter(selection & k_selection).mark_line(point=True).encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
-        color='algorithm:N',
+        color=color_mapping,
         tooltip=[
             'algorithm:N',
             'params:N',
@@ -145,7 +165,7 @@ def plot_topk(workload):
     chart_all = alt.Chart(all).transform_filter(selection & k_selection).mark_point().encode(
         x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
         y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
-        color='algorithm:N',
+        color=color_mapping,
         tooltip=[
             'algorithm:N',
             'params:N',
