@@ -1518,7 +1518,7 @@ if __name__ == "__main__":
         # ----------------------------------------------------------------------
         # PUFFINN global top-k
         for hash_source in ['Independent']:
-            for space_usage in [2048, 4096, 8192]:
+            for space_usage in [1024, 2048, 4096, 8192]:
                 index_params = {
                     'dataset': dataset,
                     'workload': 'global-top-k',

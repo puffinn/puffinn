@@ -103,6 +103,67 @@ def plot_local_topk():
     chart.save(os.path.join(BASE_DIR, "plot.html"))
 
 
+def plot_topk(workload):
+    db = get_db()
+    all = pd.read_sql(f"""
+        select dataset, workload, k, algorithm, algorithm_version, params, threads, json_extract(params, '$.hash_source') as hash_source, 
+               recall, time_index_s, time_join_s, time_index_s + time_join_s as time_total_s 
+        from recent 
+         where json_extract(params, '$.prefix') is null
+           and workload = '{workload}-top-k';
+        """, db)
+    all = all.fillna(value={'hash_source': ''})
+    all['algorithm'] = all['algorithm'] + all['hash_source']
+    print(all)
+    data = get_pareto(all)
+
+    datasets = [
+        t[0]
+        for t in db.execute(f"select distinct dataset from recent where workload = '{workload}-top-k' order by 1;").fetchall()
+    ]
+    ks = [
+        t[0]
+        for t in db.execute(f"select distinct k from recent where workload = '{workload}-top-k' order by 1;").fetchall()
+    ]
+
+    k_radio = alt.binding_radio(options=ks, name='K: ')
+    input_dropdown = alt.binding_select(options=datasets, name='Dataset: ')
+    selection = alt.selection_single(fields=['dataset'], bind=input_dropdown, empty='none')
+    k_selection = alt.selection_single(fields=['k'], bind=k_radio, empty='none')
+
+    chart_pareto = alt.Chart(data).transform_filter(selection & k_selection).mark_line(point=True).encode(
+        x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
+        y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
+        color='algorithm:N',
+        tooltip=[
+            'algorithm:N',
+            'params:N',
+            'recall:Q',
+            'time_total_s:Q'
+        ]
+    )
+    chart_all = alt.Chart(all).transform_filter(selection & k_selection).mark_point().encode(
+        x=alt.X('recall', type='quantitative', scale=alt.Scale(domain=(0, 1))),
+        y=alt.Y('time_total_s', type='quantitative', scale=alt.Scale(type='log')),
+        color='algorithm:N',
+        tooltip=[
+            'algorithm:N',
+            'params:N',
+            'recall:Q',
+            'time_total_s:Q',
+            'k:Q'
+        ]
+    )
+    
+    chart = alt.layer(chart_all, chart_pareto).properties(
+        width=1000,
+        height=600,
+        title="Recall vs. time"
+    ).add_selection(selection).add_selection(k_selection).interactive()
+    chart.save(os.path.join(BASE_DIR, f"plot-{workload}.html"))
+
+
+
 def plot_distance_histogram(path, k):
     f = h5py.File(path)
     name = os.path.basename(path)
@@ -121,5 +182,6 @@ if __name__ == "__main__":
         for k in [1, 10, 100, 1000]:
             plot_distance_histogram(dataset_path, k)
     else:
-        plot_local_topk()
+        plot_topk("global")
+        plot_topk("local")
 
