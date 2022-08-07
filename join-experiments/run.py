@@ -210,7 +210,7 @@ def get_baseline_indices(db, dataset, k):
 def compute_recalls(db):
     # Local topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'local-top-k' and k <= 10;").fetchall()
-    print("there are {} missing recalls".format(len(missing_recalls)))
+    print("there are {} missing recalls for local topk".format(len(missing_recalls)))
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
         if k > 10: # FIXME handle the case for k > 10 instead of skipping it
             continue
@@ -233,10 +233,9 @@ def compute_recalls(db):
             {"rowid": rowid, "recall": avg_recall}
         )
 
-    return # FIXME remove this return and evaluate the recall also for the top-k
-
     # Global topk
     missing_recalls = db.execute("SELECT rowid, algorithm, params, dataset, k, output_file, hdf5_group FROM main WHERE recall IS NULL AND WORKLOAD = 'global-top-k';").fetchall()
+    print("There are {} missing recalls for global-top-k".format(len(missing_recalls)))
     for rowid, algorithm, params, dataset, k, output_file, hdf5_group in missing_recalls:
         # Compute the top-1000 distances for the dataset, if they are not already there
         dist_key, nn_key = '/top-1000-dists', '/top-1000-neighbors'
@@ -245,13 +244,13 @@ def compute_recalls(db):
         dataset_path = DATASETS[dataset]()
         with h5py.File(dataset_path, 'r+') as hfp:
             if dist_key not in hfp or nn_key not in hfp:
-                print('Computing top distances for', dataset_path)
+                print('Computing top distances for', dataset)
                 distances, neighbors, avg_distance = compute_distances(1000, hfp['/train'], hfp.attrs['distance'])
                 hfp[dist_key] = distances
                 hfp[nn_key] = neighbors
                 hfp['/average_distance'] = avg_distance
             if top_pairs_key not in hfp:
-                print('Computing top 1000 pairs')
+                print('Computing top 1000 pairs for', dataset)
                 distances = hfp[dist_key]
                 neighbors = hfp[nn_key]
                 topk = []
@@ -1501,21 +1500,41 @@ if __name__ == "__main__":
 
     threads = 56
 
-    # ----------------------------------------------------------------------
-    # Xiao et al. global top-k
-    # for dummy_just_for_scoping in [0]:
-    #     index_params = {
-    #         'dataset': 'DBLP',
-    #         'workload': 'global-top-k',
-    #         'algorithm': 'XiaoEtAl',
-    #         'params': {}
-    #     } 
-    #     query_params = [
-    #         {'k': k}
-    #         for k in [1, 10, 100, 1000]
-    #     ]
+    for dataset in ['DBLP', 'Orkut']:
+        # ----------------------------------------------------------------------
+        # Xiao et al. global top-k
+        index_params = {
+            'dataset': dataset,
+            'workload': 'global-top-k',
+            'algorithm': 'XiaoEtAl',
+            'params': {}
+        } 
+        query_params = [
+            {'k': k}
+            for k in [1, 10, 100, 1000]
+        ]
+        run_multiple(index_params, query_params)
 
-    #     run_multiple(index_params, query_params)
+        # ----------------------------------------------------------------------
+        # PUFFINN global top-k
+        for hash_source in ['Independent']:
+            for space_usage in [2048, 4096, 8192]:
+                index_params = {
+                    'dataset': dataset,
+                    'workload': 'global-top-k',
+                    'algorithm': 'PUFFINN',
+                    'threads': threads,
+                    'params': {
+                        'space_usage': space_usage,
+                        'hash_source': hash_source
+                    }
+                }
+                query_params = [
+                    {'k': k, 'recall': recall, 'method': 'LSHJoinGlobal'}
+                    for recall in [0.8, 0.9]
+                    for k in [1, 10, 100, 1000]
+                ]
+                run_multiple(index_params, query_params)
 
     # ----------------------------------------------------------------------
     # LSB-Tree global top-k
@@ -1541,30 +1560,30 @@ if __name__ == "__main__":
         pass
         # ----------------------------------------------------------------------
         # pynndescent
-        for n_neighbors in [20, 30, 50, 100]:
-            for diversify_prob in [0.5, 0.75, 1.0]:
-                for pruning_degree_multiplier in [1.0, 1.5]:
-                    for leaf_size in [32]:
-                        index_params = {
-                            'n_neighbors': n_neighbors,
-                            'leaf_size': leaf_size,
-                            'pruning_degree_multiplier': pruning_degree_multiplier,
-                            'diversify_prob': diversify_prob
-                        }
-                        join_params = [
-                            {'k': k}
-                            for k in [1, 10, 100]
-                        ]
-                        run_multiple(
-                            {
-                                'dataset': dataset,
-                                'workload': 'local-top-k',
-                                'algorithm': 'pynndescent',
-                                'threads': threads,
-                                'params': index_params
-                            }, 
-                            join_params
-                        )
+        # for n_neighbors in [20, 30, 50, 100]:
+        #     for diversify_prob in [0.5, 0.75, 1.0]:
+        #         for pruning_degree_multiplier in [1.0, 1.5]:
+        #             for leaf_size in [32]:
+        #                 index_params = {
+        #                     'n_neighbors': n_neighbors,
+        #                     'leaf_size': leaf_size,
+        #                     'pruning_degree_multiplier': pruning_degree_multiplier,
+        #                     'diversify_prob': diversify_prob
+        #                 }
+        #                 join_params = [
+        #                     {'k': k}
+        #                     for k in [1, 10, 100]
+        #                 ]
+        #                 run_multiple(
+        #                     {
+        #                         'dataset': dataset,
+        #                         'workload': 'local-top-k',
+        #                         'algorithm': 'pynndescent',
+        #                         'threads': threads,
+        #                         'params': index_params
+        #                     }, 
+        #                     join_params
+        #                 )
 
         # ----------------------------------------------------------------------
         # Faiss-HNSW
@@ -1633,54 +1652,34 @@ if __name__ == "__main__":
 
         # ----------------------------------------------------------------------
         # PUFFINN local top-k
-        for hash_source in ['Independent']:
-            space_usage = {
-                'DeepImage': [32768, 65536],
-                'glove-200': [2048, 4096, 8192, 16384],
-                'Orkut': [16384, 32768],
-                'DBLP': [2048, 4096, 8192, 16384],
-            }
-            for space_usage in space_usage[dataset]:
-                for sketches in ['1', '0']:
-                    index_params = {
-                        'dataset': dataset,
-                        'workload': 'local-top-k',
-                        'algorithm': 'PUFFINN',
-                        'threads': threads,
-                        'params': {
-                            'space_usage': space_usage,
-                            'hash_source': hash_source,
-                            'with_sketches': sketches
-                        }
-                    }
-                    query_params = [
-                        {'k': k, 'recall': recall, 'method': 'LSHJoin'}
-                        for recall in [0.8, 0.9]
-                        for k in [1, 10]
-                    ]
-                    run_multiple(index_params, query_params)
-
-
-        # ----------------------------------------------------------------------
-        # PUFFINN global top-k
         # for hash_source in ['Independent']:
-        #     for space_usage in [512, 1024, 2048, 4096]:
-        #         index_params = {
-        #             'dataset': dataset,
-        #             'workload': 'global-top-k',
-        #             'algorithm': 'PUFFINN',
-        #             'threads': threads,
-        #             'params': {
-        #                 'space_usage': space_usage,
-        #                 'hash_source': hash_source
+        #     space_usage = {
+        #         'DeepImage': [32768, 65536],
+        #         'glove-200': [2048, 4096, 8192, 16384],
+        #         'Orkut': [16384, 32768],
+        #         'DBLP': [2048, 4096, 8192, 16384],
+        #     }
+        #     for space_usage in space_usage[dataset]:
+        #         for sketches in ['1', '0']:
+        #             index_params = {
+        #                 'dataset': dataset,
+        #                 'workload': 'local-top-k',
+        #                 'algorithm': 'PUFFINN',
+        #                 'threads': threads,
+        #                 'params': {
+        #                     'space_usage': space_usage,
+        #                     'hash_source': hash_source,
+        #                     'with_sketches': sketches
+        #                 }
         #             }
-        #         }
-        #         query_params = [
-        #             {'k': k, 'recall': recall, 'method': 'LSHJoinGlobal'}
-        #             for recall in [0.8, 0.9]
-        #             for k in [1, 10]
-        #         ]
-        #         run_multiple(index_params, query_params)
+        #             query_params = [
+        #                 {'k': k, 'recall': recall, 'method': 'LSHJoin'}
+        #                 for recall in [0.8, 0.9]
+        #                 for k in [1, 10]
+        #             ]
+        #             run_multiple(index_params, query_params)
+
+
 
 
     with get_db() as db:
