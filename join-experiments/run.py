@@ -1500,25 +1500,32 @@ if __name__ == "__main__":
 
     threads = 56
 
-    for dataset in ['DBLP', 'Orkut']:
+    for dataset in ['glove-200', 'DeepImage', 'DBLP', 'Orkut']:
         # ----------------------------------------------------------------------
         # Xiao et al. global top-k
-        index_params = {
-            'dataset': dataset,
-            'workload': 'global-top-k',
-            'algorithm': 'XiaoEtAl',
-            'params': {}
-        } 
-        query_params = [
-            {'k': k}
-            for k in [1, 10, 100, 1000]
-        ]
-        run_multiple(index_params, query_params)
+        if dataset in ['DBLP', "Orkut"]:
+            index_params = {
+                'dataset': dataset,
+                'workload': 'global-top-k',
+                'algorithm': 'XiaoEtAl',
+                'params': {}
+            } 
+            query_params = [
+                {'k': k}
+                for k in [1, 10, 100, 1000]
+            ]
+            run_multiple(index_params, query_params)
 
         # ----------------------------------------------------------------------
         # PUFFINN global top-k
         for hash_source in ['Independent']:
-            for space_usage in [1024, 2048, 4096, 8192]:
+            space_usage = {
+                'DeepImage': [32768, 65536],
+                'glove-200': [2048, 4096, 8192, 16384],
+                'Orkut': [16384, 32768],
+                'DBLP': [2048, 4096, 8192, 16384],
+            }
+            for space_usage in space_usage[dataset]:
                 index_params = {
                     'dataset': dataset,
                     'workload': 'global-top-k',
