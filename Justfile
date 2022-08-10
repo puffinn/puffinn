@@ -40,8 +40,14 @@ run:
 plot:
   env TOPK_DIR=/mnt/large_storage/topk-join/ python3 join-experiments/plot.py
 
+distr data:
+  env TOPK_DIR=/mnt/large_storage/topk-join/ python3 join-experiments/plot.py {{data}}
+
 console:
   cd join-experiments && env TOPK_DIR=/mnt/large_storage/topk-join/ python3
+
+bash:
+  cd /mnt/large_storage/topk-join/ && bash
 
 compute-recalls:
   cd join-experiments && env TOPK_DIR=/mnt/large_storage/topk-join/ python3 -c 'import run; run.compute_recalls(run.get_db())'

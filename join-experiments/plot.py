@@ -104,6 +104,10 @@ def plot_local_topk():
 
 
 def plot_topk(workload):
+    plotdir = os.path.join(BASE_DIR, "plots")
+    if not os.path.isdir(plotdir):
+        os.mkdir(plotdir)
+
     db = get_db()
     all = pd.read_sql(f"""
         select dataset, workload, k, algorithm, algorithm_version, params, threads, json_extract(params, '$.hash_source') as hash_source, 
@@ -180,11 +184,39 @@ def plot_topk(workload):
         height=600,
         title="Recall vs. time"
     ).add_selection(selection).add_selection(k_selection).interactive()
-    chart.save(os.path.join(BASE_DIR, f"plot-{workload}.html"))
+    chart.save(os.path.join(plotdir, f"plot-{workload}.html"))
+
+    for dataset in datasets:
+        for k in ks:
+            plotdata = data[data['dataset'] == dataset]
+            plotdata = plotdata[plotdata['k'] == k]
+            if plotdata.shape[1] > 0:
+                plt.figure()
+                print(plotdata)
+                sns.lineplot(
+                    x = "recall",
+                    y = "time_total_s",
+                    hue = "algorithm",
+                    palette = dict(zip(algorithms, colors)),
+                    data=plotdata
+                )
+                sns.scatterplot(
+                    x = "recall",
+                    y = "time_total_s",
+                    hue = "algorithm",
+                    legend = False,
+                    palette = dict(zip(algorithms, colors)),
+                    data=plotdata
+                )
+                plt.yscale('log')
+                plt.savefig(os.path.join(plotdir, f"plot-{workload}-{dataset}-k{k}.pdf"))
 
 
 
 def plot_distance_histogram(path, k):
+    plotdir = os.path.join(BASE_DIR, "plots")
+    if not os.path.isdir(plotdir):
+        os.mkdir(plotdir)
     f = h5py.File(path)
     name = os.path.basename(path)
     kth_dist = f['top-1000-dists'][:,k-1]
@@ -193,12 +225,15 @@ def plot_distance_histogram(path, k):
     plt.figure()
     sns.kdeplot(kth_dist)
     plt.title("{} {}-nn distribution".format(name, k))
-    plt.savefig(path + ".dists-k={}.png".format(k))
+    outfile = os.path.join(plotdir, path + ".dists-k={}.pdf".format(k))
+    print("saving to", outfile)
+    plt.savefig(outfile)
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
-        dataset_path = sys.argv[1]
+        import run
+        dataset_path = run.DATASETS[sys.argv[1]]()
         for k in [1, 10, 100, 1000]:
             plot_distance_histogram(dataset_path, k)
     else:
