@@ -1027,6 +1027,54 @@ def kosarak(out_fn):
     write_sparse(out_fn, X)
     return out_fn
 
+# adapted from https://github.com/erikbern/ann-benchmarks/blob/master/ann_benchmarks/datasets.py
+def movielens(fn, ratings_file, out_fn, separator='::', ignore_header=False):
+    import zipfile
+    if os.path.isfile(out_fn):
+        return out_fn
+
+    url = 'http://files.grouplens.org/datasets/movielens/%s' % fn
+
+    download(url, fn)
+    with zipfile.ZipFile(fn) as z:
+        file = z.open(ratings_file)
+        if ignore_header:
+            file.readline()
+
+        print('preparing %s' % out_fn)
+
+        users = {}
+        X = []
+        dimension = 0
+        for line in file:
+            el = line.decode('UTF-8').split(separator)
+
+            userId = el[0]
+            itemId = int(el[1])
+            rating = float(el[2])
+
+            if rating < 3: # We only keep ratings >= 3
+                continue
+
+            if not userId in users:
+                users[userId] = len(users)
+                X.append([])
+
+            X[users[userId]].append(itemId)
+            dimension = max(dimension, itemId+1)
+
+        write_sparse(out_fn, X)
+    return out_fn
+
+def movielens1m(out_fn):
+    return movielens('ml-1m.zip', 'ml-1m/ratings.dat', out_fn)
+
+def movielens10m(out_fn):
+    return movielens('ml-10m.zip', 'ml-10M100K/ratings.dat', out_fn)
+
+def movielens20m(out_fn):
+    return movielens('ml-20m.zip', 'ml-20m/ratings.csv', out_fn, ',', True)
+
 
 CREATE_RAW = os.path.abspath("join-experiments/scripts/createraw.py")
 ORKUT_PY = os.path.abspath("join-experiments/scripts/orkut.py")
@@ -1220,7 +1268,10 @@ DATASETS = {
     'NYTimes': lambda: nytimes(os.path.join(DATASET_DIR, 'nytimes.hdf5'), 256),
     'random-float-10k': lambda: random_float(os.path.join(DATASET_DIR, 'random-float-10k.hdf5' ), 20, 10000, 100),
     'random-difficult': lambda: random_difficult(os.path.join(DATASET_DIR, 'random-float-difficult.hdf5' ), 1100000, 150, 10),
-    'Orkut': lambda: orkut(os.path.join(DATASET_DIR, "orkut.hdf5"))
+    'Orkut': lambda: orkut(os.path.join(DATASET_DIR, "orkut.hdf5")),
+    'movielens-1M': lambda: movielens1m(os.path.join(DATASET_DIR, "movielens-1M.hdf5")),
+    'movielens-10M': lambda: movielens10m(os.path.join(DATASET_DIR, "movielens-10M.hdf5")),
+    'movielens-20M': lambda: movielens20m(os.path.join(DATASET_DIR, "movielens-20M.hdf5")),
 }
 
 # Stores lazily the algorithm (i.e. as funcions to be called) along with their version
