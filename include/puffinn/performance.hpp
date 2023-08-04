@@ -101,6 +101,26 @@ namespace puffinn {
             return res;
         }
 
+        std::vector<std::unordered_map<std::string, long long>> get_readable_metrics() {
+            std::vector<std::unordered_map<std::string, long long>> res;
+            for (size_t i=1; i < queries.size(); i++) {
+                auto query = queries[i];
+                std::unordered_map<std::string, long long> m;
+
+                m["candidates"] = query.candidates;
+                m["hash_length"] = query.hash_length;
+                m["distances_computations"] = query.distance_computations;
+
+                m["time:total"] = query.get_time(Computation::Total);
+                m["time:hashing"] = query.get_time(Computation::Hashing);
+                m["time:sketching"] = query.get_time(Computation::Sketching);
+                m["time:search"] = query.get_time(Computation::Search);
+                
+                res.push_back(m);
+            }
+            return res;
+        }
+
         double get_total_time(Computation computation) {
             double res = 0;
             for (auto& q : queries) {
