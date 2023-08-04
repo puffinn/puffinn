@@ -32,6 +32,7 @@ struct PySerializeIter {
 
 struct AbstractIndex {
     virtual void rebuild() = 0;
+    virtual void rebuild_num_tables(unsigned int num_tables) = 0;
     virtual std::vector<uint32_t> search_from_index(
         uint32_t idx,
         unsigned int k,
@@ -55,6 +56,12 @@ public:
         const std::vector<float>& vec,
         unsigned int k,
         float recall,
+        FilterType filter_type
+    ) = 0;
+    virtual std::vector<uint32_t> search_probes(
+        const std::vector<float>& vec,
+        unsigned int k,
+        unsigned int max_probes,
         FilterType filter_type
     ) = 0;
 };
@@ -85,6 +92,10 @@ public:
         table.rebuild();
     }
 
+    void rebuild_num_tables(unsigned int num_tables) {
+        table.rebuild(num_tables);
+    }
+
     std::vector<uint32_t> search(
         const std::vector<float>& vec,
         unsigned int k,
@@ -92,6 +103,15 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<uint32_t> search_probes(
+        const std::vector<float>& vec,
+        unsigned int k,
+        unsigned int max_probes,
+        FilterType filter_type
+    ) {
+        return table.search_probes(vec, k, max_probes, filter_type);
     }
 
     std::vector<uint32_t> search_from_index(
@@ -142,6 +162,12 @@ public:
         float recall,
         FilterType filter_type
     ) = 0;
+    virtual std::vector<uint32_t> search_probes(
+        const std::vector<uint32_t>& vec,
+        unsigned int k,
+        unsigned int max_probes,
+        FilterType filter_type
+    ) = 0;
 };
 
 template <typename T, typename U = MinHash1Bit>
@@ -174,6 +200,10 @@ public:
         table.rebuild();
     }
 
+    void rebuild_num_tables(unsigned int num_tables) {
+        table.rebuild(num_tables);
+    }
+
     std::vector<uint32_t> search(
         const std::vector<uint32_t>& vec,
         unsigned int k,
@@ -181,6 +211,15 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<uint32_t> search_probes(
+        const std::vector<uint32_t>& vec,
+        unsigned int k,
+        unsigned int max_probes,
+        FilterType filter_type
+    ) {
+        return table.search_probes(vec, k, max_probes, filter_type);
     }
 
     std::vector<uint32_t> search_from_index(
@@ -292,6 +331,14 @@ public:
         }
     }
 
+    void rebuild_num_tables(unsigned int num_tables) {
+        if (real_table) {
+            real_table->rebuild_num_tables(num_tables);
+        } else {
+            set_table->rebuild_num_tables(num_tables);
+        }
+    }
+
     FilterType get_filter_type(const std::string& name) {
         FilterType filter_type;
         if (name == "default") {
@@ -319,6 +366,22 @@ public:
         } else {
             auto vec = list.cast<std::vector<unsigned int>>();
             return set_table->search(vec, k, recall, filter_type);
+        }
+    }
+
+    std::vector<uint32_t> search_probes(
+        py::list list,
+        unsigned int k,
+        unsigned int max_probes,
+        std::string filter_name
+    ) {
+        auto filter_type = get_filter_type(filter_name);
+        if (real_table) {
+            auto vec = list.cast<std::vector<float>>();
+            return real_table->search_probes(vec, k, max_probes, filter_type);
+        } else {
+            auto vec = list.cast<std::vector<unsigned int>>();
+            return set_table->search_probes(vec, k, max_probes, filter_type);
         }
     }
 
@@ -515,13 +578,22 @@ py::tuple Index::reduce() {
     );
 }
 
+std::vector<std::unordered_map<std::string, long long>> get_query_metrics() {
+    return g_performance_metrics.get_readable_metrics();
+}
+
 PYBIND11_MODULE(puffinn, m) {
     py::class_<Index>(m, "Index")
         .def(py::init<const std::string&, const unsigned int&, const uint64_t&, const py::kwargs&>())
         .def("insert", &Index::insert)
         .def("rebuild", &Index::rebuild)
+        .def("rebuild_tables", &Index::rebuild_num_tables, py::arg("tables") )
         .def("search", &Index::search,
              py::arg("vec"), py::arg("k"), py::arg("recall"),
+             py::arg("filter_type") = "default"
+         )
+        .def("search_probes", &Index::search_probes,
+             py::arg("vec"), py::arg("k"), py::arg("probes"),
              py::arg("filter_type") = "default"
          )
         .def("search_from_index", &Index::search_from_index,
@@ -544,6 +616,8 @@ PYBIND11_MODULE(puffinn, m) {
 
     py::class_<PySerializeIter>(m, "PySerializeIter")
         .def("__next__", &PySerializeIter::next);
+
+    m.def("query_statistics", &get_query_metrics);
 }
 } // namespace python
 } // namespace puffinn

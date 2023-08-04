@@ -12,7 +12,7 @@
 #include <cassert>
 #include <istream>
 #include <memory>
-#include <ostream>
+#include <iostream>
 #include <vector>
 
 namespace puffinn {
@@ -244,6 +244,7 @@ namespace puffinn {
             uint64_t required_mem = dataset.memory_usage()+filterer_bytes; 
             unsigned int num_tables = 0;
             uint64_t table_mem = 0;
+            std::cout << required_mem << " " << table_mem << " " << memory_limit;
             while (required_mem + table_mem < memory_limit) {
                 num_tables++;
                 table_mem = hash_args->memory_usage(desc, num_tables, MAX_HASHBITS)
@@ -253,56 +254,19 @@ namespace puffinn {
                 num_tables--;
             }
 
+            std::cout << "building " << num_tables << " tables" << std::endl;
+
             // Not enough memory for at least one table
             if (num_tables == 0) {
                 throw std::invalid_argument("insufficient memory");
             }
 
-            // if rebuild has been called before
-            if (hash_source) {
-                // Resize the number of tables
-                while (lsh_maps.size() > num_tables) {
-                    // Discard the last tables. Since values are never deleted,
-                    // the number of tables is not going to increase again.
-                    lsh_maps.pop_back();
-                }
-            } else {
-                hash_source = hash_args->build(
-                    dataset.get_description(),
-                    num_tables,
-                    MAX_HASHBITS);
-                // Construct the prefixmaps.
-                lsh_maps.reserve(num_tables);
-                for (unsigned int repetition=0; repetition < num_tables; repetition++) {
-                    lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
-                }
-            }
+            _rebuild(num_tables);
+        }
 
-            for (auto& map : lsh_maps) {
-                map.reserve(dataset.get_size());
-            }
-
-            // Compute hashes for the new vectors in order, so that caching works.
-            // Hash a vector in all the different ways needed.
-            for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
-                auto hash_state = this->hash_source->reset(dataset[idx], true);
-                // Only parallelize if this step is computationally expensive.
-                if (hash_source->precomputed_hashes()) {
-                    for (auto& map : lsh_maps) {
-                        map.insert(idx, hash_state.get());
-                    }
-                } else {
-                    #pragma omp parallel for
-                    for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                        lsh_maps[map_idx].insert(idx, hash_state.get());
-                    }
-                }
-            }
-
-            for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
-                lsh_maps[map_idx].rebuild();
-            }
-            last_rebuild = dataset.get_size();
+        void rebuild(unsigned int num_tables) {
+            filterer.add_sketches(dataset, last_rebuild);
+            _rebuild(num_tables);
         }
 
         /// Search for the approximate ``k`` nearest neighbors to a query.
@@ -330,6 +294,29 @@ namespace puffinn {
             auto desc = dataset.get_description();
             auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
             return search_formatted_query(stored_query.get(), k, recall, filter_type);
+        }
+
+        /// Search for the approximate ``k`` nearest neighbors to a query with maximum probing value.
+        ///
+        /// @param query The query value.
+        /// It follows the same constraints as when inserting a value.
+        /// @param k The number of neighbors to search for.
+        /// @param max_probes The maximum number of candidates
+        /// @param filter_type The approach used to filter candidates.
+        /// Unless the expected recall needs to be strictly above the ``recall`` parameter, the default should be used.
+        /// @return The indices of the ``k`` nearest found neighbors.
+        /// Indices are assigned incrementally to each point in the order they are inserted into the dataset, starting at 0.
+        /// The result is ordered so that the most similar neighbor is first.
+        template <typename T>
+        std::vector<uint32_t> search_probes(
+            const T& query,
+            unsigned int k,
+            unsigned int max_probes,
+            FilterType filter_type = FilterType::Default
+        ) const {
+            auto desc = dataset.get_description();
+            auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
+            return search_formatted_query_probes(stored_query.get(), k, max_probes, filter_type);
         }
 
         /// Search for the approximate ``k`` nearest neighbors to a value already inserted into the index.
@@ -385,6 +372,62 @@ namespace puffinn {
         }
 
     private:
+
+        void _rebuild(const unsigned int num_tables) {
+            std::cout << "building " << num_tables << " tables" << std::endl;
+            // if rebuild has been called before
+            if (hash_source) {
+                // Resize the number of tables
+                while (lsh_maps.size() > num_tables) {
+                    // Discard the last tables. Since values are never deleted,
+                    // the number of tables is not going to increase again.
+                    lsh_maps.pop_back();
+                }
+            } else {
+                hash_source = hash_args->build(
+                    dataset.get_description(),
+                    num_tables,
+                    MAX_HASHBITS);
+                // Construct the prefixmaps.
+                lsh_maps.reserve(num_tables);
+                for (unsigned int repetition=0; repetition < num_tables; repetition++) {
+                    lsh_maps.emplace_back(this->hash_source->sample(), MAX_HASHBITS);
+                }
+            }
+
+            for (auto& map : lsh_maps) {
+                map.reserve(dataset.get_size());
+            }
+
+            std::cout << "compute hashes" << std::endl;
+
+
+            // Compute hashes for the new vectors in order, so that caching works.
+            // Hash a vector in all the different ways needed.
+            for (size_t idx=last_rebuild; idx < dataset.get_size(); idx++) {
+                std::cout << idx << std::endl;
+                auto hash_state = this->hash_source->reset(dataset[idx], true);
+                // Only parallelize if this step is computationally expensive.
+                if (hash_source->precomputed_hashes()) {
+                    for (auto& map : lsh_maps) {
+                        map.insert(idx, hash_state.get());
+                    }
+                } else {
+                    #pragma omp parallel for
+                    for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
+                        lsh_maps[map_idx].insert(idx, hash_state.get());
+                    }
+                }
+            }
+
+            for (size_t map_idx = 0; map_idx < lsh_maps.size(); map_idx++) {
+                
+                std::cout << "build hash map " << map_idx << std::endl;
+                lsh_maps[map_idx].rebuild();
+            }
+            last_rebuild = dataset.get_size();
+        }
+
         std::vector<unsigned int> search_bf_formatted_query(
             typename TSim::Format::Type* query,
             unsigned int k
@@ -447,6 +490,44 @@ namespace puffinn {
                     break;
                 default:
                     search_maps(query, maxbuffer, recall, sketches, hash_state.get());
+            }
+            g_performance_metrics.store_time(Computation::Search);
+
+            auto res = maxbuffer.best_indices();
+            g_performance_metrics.store_time(Computation::Total);
+            return res;
+        }
+
+        std::vector<uint32_t> search_formatted_query_probes(
+            typename TSim::Format::Type* query,
+            unsigned int k,
+            unsigned int max_probes,
+            FilterType filter_type
+        ) const {
+            if (dataset.get_size() < 100) {
+                // Due to optimizations values near the edges in prefixmaps are discarded.
+                // When there are fewer total values than SEGMENT_SIZE, all values will be skipped.
+                // However at that point, brute force is likely to be faster regardless.
+                return search_bf_formatted_query(query, k);
+            }
+            g_performance_metrics.new_query();
+            g_performance_metrics.start_timer(Computation::Total);
+
+            MaxBuffer maxbuffer(k);
+            g_performance_metrics.start_timer(Computation::Hashing);
+            auto hash_state = hash_source->reset(query, false);
+            g_performance_metrics.store_time(Computation::Hashing);
+            g_performance_metrics.start_timer(Computation::Sketching);
+            auto sketches = filterer.reset(query);
+            g_performance_metrics.store_time(Computation::Sketching);
+
+            g_performance_metrics.start_timer(Computation::Search);
+            switch (filter_type) {
+                case FilterType::Default:
+                    search_maps_fix_probes(query, maxbuffer, max_probes, sketches, hash_state.get()); 
+                    break;                   
+                default:
+                    throw std::invalid_argument("insufficient filter type for probing queries");
             }
             g_performance_metrics.store_time(Computation::Search);
 
@@ -790,6 +871,178 @@ namespace puffinn {
                         g_performance_metrics.set_hash_length(depth);
                         g_performance_metrics.set_considered_maps(
                             (MAX_HASHBITS-depth)*lsh_maps.size()+table_idx);
+                        return;
+                    }
+                    g_performance_metrics.start_timer(Computation::Filtering);
+                }
+                g_performance_metrics.store_time(Computation::Filtering);
+            }
+        }
+
+        // Search all maps and insert the candidates into the buffer.
+        void search_maps_fix_probes(
+            typename TSim::Format::Type* query,
+            MaxBuffer& maxbuffer,
+            unsigned int max_probes,
+            QuerySketches sketches,
+            HashSourceState* hash_state
+        ) const {
+            const size_t FILTER_BUFFER_SIZE = 128;
+
+            SearchBuffers buffers(lsh_maps, sketches, hash_state);
+            // Buffer for values passing filtering and should have distances computed.
+            // 8*RING_SIZE is necessary additional space as that is the maximum that can be added
+            // between the last check of the size and it being emptied.
+            uint32_t passing_filter[FILTER_BUFFER_SIZE+8*RING_SIZE];
+
+            unsigned int probes = 0;
+
+            // foreach possible bit in hash
+            for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
+                // Find next ranges to consider
+                buffers.fill_ranges(lsh_maps);
+                g_performance_metrics.start_timer(Computation::Filtering);
+                // Filter values
+                const static int PREFETCH_DIST = 3;
+                const static int PREREQ_PREFETCH_DIST = 5;
+                const uint32_t* ring[RING_SIZE];
+                // From which range are we currently moving values into the ring.
+                uint_fast32_t range_idx = 0;
+
+                // Number of values missing for the ring to be full
+                // When there are missing values, the rest can contain invalid pointers that should not be dereferenced.
+                // Prefetching is ok
+                int_fast32_t missing_ring_vals = RING_SIZE;
+                // Fill ring
+                for (int_fast8_t i=0; i < RING_SIZE; i++) {
+                    auto& range = buffers.ranges[range_idx];
+                    ring[i] = range.first;
+                    range.first += 4;
+                    missing_ring_vals -= (range_idx < buffers.num_ranges);
+                    range_idx += (range.first == range.second);
+                }
+
+                while (range_idx < buffers.num_ranges) {
+                    uint_fast32_t num_passing_filter = 0;
+                    // Can potentially add 4xRING_SIZE values to the buffer
+                    while (num_passing_filter < FILTER_BUFFER_SIZE && missing_ring_vals == 0) {
+                        // We know that the ring is full, so we can iter through it entirely.
+                        // This should be completely unrolled
+                        for (int_fast32_t ring_idx=0; ring_idx < RING_SIZE; ring_idx++) {
+                            auto prefetch_ring_idx = (ring_idx+PREFETCH_DIST)&(RING_SIZE-1);
+                            auto prefetch_segment = ring[prefetch_ring_idx];
+                            filterer.prefetch(prefetch_segment[0], prefetch_ring_idx);
+                            filterer.prefetch(prefetch_segment[1], prefetch_ring_idx);
+                            filterer.prefetch(prefetch_segment[2], prefetch_ring_idx);
+                            filterer.prefetch(prefetch_segment[3], prefetch_ring_idx);
+
+                            auto prereq_prefetch_segment =
+                                ring[(ring_idx+PREREQ_PREFETCH_DIST)&(RING_SIZE-1)];
+                            prefetch_addr(&prereq_prefetch_segment[0]);
+                            prefetch_addr(&prereq_prefetch_segment[1]);
+                            prefetch_addr(&prereq_prefetch_segment[2]);
+                            prefetch_addr(&prereq_prefetch_segment[3]);
+
+                            // indices
+                            auto v1 = ring[ring_idx][0];
+                            auto v2 = ring[ring_idx][1];
+                            auto v3 = ring[ring_idx][2];
+                            auto v4 = ring[ring_idx][3];
+
+                            // sketches
+                            auto s1 = filterer.get_sketch(v1, ring_idx);
+                            auto s2 = filterer.get_sketch(v2, ring_idx);
+                            auto s3 = filterer.get_sketch(v3, ring_idx);
+                            auto s4 = filterer.get_sketch(v4, ring_idx);
+
+                            // Whether they pass the filtering step
+                            auto p1 = buffers.sketches.passes_filter(s1, ring_idx);
+                            auto p2 = buffers.sketches.passes_filter(s2, ring_idx);
+                            auto p3 = buffers.sketches.passes_filter(s3, ring_idx);
+                            auto p4 = buffers.sketches.passes_filter(s4, ring_idx);
+
+                            passing_filter[num_passing_filter] = v1;
+                            num_passing_filter += p1;
+                            passing_filter[num_passing_filter] = v2;
+                            num_passing_filter += p2;
+                            passing_filter[num_passing_filter] = v3;
+                            num_passing_filter += p3;
+                            passing_filter[num_passing_filter] = v4;
+                            num_passing_filter += p4;
+
+                            // Put new query into the last slot
+                            missing_ring_vals += (range_idx >= buffers.num_ranges);
+                            auto& range = buffers.ranges[range_idx];
+                            ring[ring_idx] = range.first;
+                            range.first += 4;
+                            range_idx += (range.first == range.second);
+                        }
+                        g_performance_metrics.add_candidates(RING_SIZE*4);
+                        probes += RING_SIZE * 4;
+                    }
+                    // Consider rest of values in ring when it isn't full.
+                    // Can again add up to 4*RING_SIZE values to the buffer.
+                    for (int_fast32_t ring_idx=RING_SIZE-1-missing_ring_vals; ring_idx >= 0; ring_idx--) {
+                        auto prefetch_ring_idx = (ring_idx+PREFETCH_DIST)&(RING_SIZE-1);
+                        auto prefetch_segment = ring[prefetch_ring_idx];
+
+                        filterer.prefetch(prefetch_segment[0], prefetch_ring_idx);
+                        filterer.prefetch(prefetch_segment[1], prefetch_ring_idx);
+                        filterer.prefetch(prefetch_segment[2], prefetch_ring_idx);
+                        filterer.prefetch(prefetch_segment[3], prefetch_ring_idx);
+
+                        auto prereq_prefetch_segment =
+                            ring[(ring_idx+PREREQ_PREFETCH_DIST)&(RING_SIZE-1)];
+                        prefetch_addr(&prereq_prefetch_segment[0]);
+                        prefetch_addr(&prereq_prefetch_segment[1]);
+                        prefetch_addr(&prereq_prefetch_segment[2]);
+                        prefetch_addr(&prereq_prefetch_segment[3]);
+
+                        auto v1 = ring[ring_idx][0];
+                        auto v2 = ring[ring_idx][1];
+                        auto v3 = ring[ring_idx][2];
+                        auto v4 = ring[ring_idx][3];
+
+                        auto p1 = buffers.sketches.passes_filter(v1, ring_idx);
+                        auto p2 = buffers.sketches.passes_filter(v2, ring_idx);
+                        auto p3 = buffers.sketches.passes_filter(v3, ring_idx);
+                        auto p4 = buffers.sketches.passes_filter(v4, ring_idx);
+
+                        passing_filter[num_passing_filter] = v1;
+                        num_passing_filter += p1;
+                        passing_filter[num_passing_filter] = v2;
+                        num_passing_filter += p2;
+                        passing_filter[num_passing_filter] = v3;
+                        num_passing_filter += p3;
+                        passing_filter[num_passing_filter] = v4;
+                        num_passing_filter += p4;
+                    }
+                    g_performance_metrics.add_candidates(4*(RING_SIZE-missing_ring_vals));
+                    probes += (RING_SIZE - missing_ring_vals) * 4;
+
+                    // Empty buffer
+                    g_performance_metrics.store_time(Computation::Filtering);
+                    g_performance_metrics.start_timer(Computation::Consider);
+                    for (
+                        uint_fast32_t passed_idx=0;
+                        passed_idx < num_passing_filter;
+                        passed_idx++
+                    ) {
+                        auto idx = passing_filter[passed_idx];
+                        auto dist = TSim::compute_similarity(
+                            query,
+                            dataset[idx],
+                            dataset.get_description());
+                        maxbuffer.insert(idx, dist);
+                    }
+                    g_performance_metrics.add_distance_computations(num_passing_filter);
+                    num_passing_filter = 0;
+                    auto kth_similarity = maxbuffer.smallest_value();
+                    buffers.sketches.max_sketch_diff = filterer.get_max_sketch_diff(kth_similarity);
+                    g_performance_metrics.store_time(Computation::Consider);
+
+                    if (probes > max_probes) {
+                        g_performance_metrics.set_hash_length(depth);
                         return;
                     }
                     g_performance_metrics.start_timer(Computation::Filtering);
