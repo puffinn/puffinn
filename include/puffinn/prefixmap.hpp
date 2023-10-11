@@ -68,9 +68,11 @@ namespace puffinn {
         // Number of bits to precompute locations in the stored vector for.
         const static int PREFIX_INDEX_BITS = 13;
 
+      public:
         // contents
         std::vector<uint32_t> indices;
         std::vector<LshDatatype> hashes;
+      private:
         // Scratch space for use when rebuilding. The length and capacity is set to 0 otherwise.
         std::vector<HashedVecIdx> rebuilding_data;
 
@@ -276,6 +278,10 @@ namespace puffinn {
                 query.prefix_mask <<= 1;
                 return std::make_pair(&indices[start_idx], &indices[end_idx]);
             }
+        }
+
+        std::pair<const uint32_t*, const uint32_t*> get_segment(size_t left, size_t right) {
+            return std::make_pair(&indices[left], &indices[right]);
         }
 
         static uint64_t memory_usage(size_t size, uint64_t function_size) {

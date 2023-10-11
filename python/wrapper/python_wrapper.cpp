@@ -38,6 +38,11 @@ struct AbstractIndex {
         float recall,
         FilterType filter_type
     ) = 0;
+    virtual std::vector<std::pair<uint32_t, uint32_t>> closest_pairs(
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) = 0;
     virtual void serialize(std::ostream& out) = 0;
     virtual std::string metric() = 0;
     virtual std::string hash_function() = 0;
@@ -92,6 +97,14 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> closest_pairs(
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) {
+        return table.closest_pairs(k, recall, filter_type);
     }
 
     std::vector<uint32_t> search_from_index(
@@ -181,6 +194,14 @@ public:
         FilterType filter_type
     ) {
         return table.search(vec, k, recall, filter_type);
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> closest_pairs(
+        unsigned int k,
+        float recall,
+        FilterType filter_type
+    ) {
+        return table.closest_pairs(k, recall, filter_type);
     }
 
     std::vector<uint32_t> search_from_index(
@@ -319,6 +340,19 @@ public:
         } else {
             auto vec = list.cast<std::vector<unsigned int>>();
             return set_table->search(vec, k, recall, filter_type);
+        }
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> closest_pairs(
+        unsigned int k,
+        float recall,
+        std::string filter_name
+    ) {
+        auto filter_type = get_filter_type(filter_name);
+        if (real_table) {
+            return real_table->closest_pairs(k, recall, filter_type);
+        } else {
+            return set_table->closest_pairs(k, recall, filter_type);
         }
     }
 
@@ -526,6 +560,10 @@ PYBIND11_MODULE(puffinn, m) {
          )
         .def("search_from_index", &Index::search_from_index,
             py::arg("index"), py::arg("k"), py::arg("recall"),
+            py::arg("filter_type") = "default"
+        )
+        .def("closest_pairs", &Index::closest_pairs,
+            py::arg("k"), py::arg("recall"),
             py::arg("filter_type") = "default"
         )
         .def("get", &Index::get)
