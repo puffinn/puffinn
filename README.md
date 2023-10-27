@@ -2,6 +2,7 @@
 
 # PUFFINN - Parameterless and Universal Fast FInding of Nearest Neighbors
 PUFFINN is an easily configurable library for finding the approximate nearest neighbors of arbitrary points.
+It also supports the identification of the closest pairs in the dataset.
 The only necessary parameters are the allowed space usage and the recall.
 Each near neighbor is guaranteed to be found with the probability given by the recall, regardless of the difficulty of the query. 
 
@@ -78,6 +79,10 @@ closest_pairs = index.closest_pairs(k, 0.8)
 
 PUFFINN provides fast query times with considerable space usage. It's reliable (see bottom right plot) and doesn't require parameter tuning. 
 ![Benchmark](https://user-images.githubusercontent.com/6311646/61288829-40903080-a7c8-11e9-9eb0-effc6beb808e.png)
+
+The following benchmark summarizes running times for finding the (globally) $k$-closest pairs in the dataset. 
+
+![Closest Pairs Benchmark](https://github.com/Cecca/puffinn/assets/6311646/b9d96135-0d55-4c01-b00b-60d702312fc3>)
 
 # Authors
 
