@@ -16,7 +16,7 @@ More details are available in the [documentation](https://puffinn.readthedocs.io
 
 ## C++
 PUFFINN is a header-only library. In most cases, including `puffinn.hpp` is sufficient.
-To use the library, use the `insert`, `rebuild` and `search` methods on `puffinn::Index` as shown in the below example. 
+To use the library, use the `insert`, `rebuild`  and `search` methods on `puffinn::Index` as shown in the below example. 
 Note that points inserted after the last call to `rebuild` cannot be found.
 
 ```cpp
@@ -37,6 +37,10 @@ int main() {
     // Find the approximate 10 nearest neighbors.
     // Each of the true 10 nearest neighbors has at least an 80% chance of being found.
     std::vector<uint32_t> result = index.search(query, 10, 0.8); 
+    
+    // Find the approximate 10 closest pairs in the dataset.
+    // Each of the true 10 closest pairs has at least an 80% chance of being found. 
+    std::vector<std::pair<uint32_t, uint32_t>> result = index.closest_pairs(10, 0.8); 
 }
 ```
 
@@ -64,14 +68,16 @@ query = ...
 # Find the approximate 10 nearest neighbors.
 # Each of the true 10 nearest neighbors has at least an 80% chance of being found.
 result = index.search(query, 10, 0.8) 
+
+# Find the approximate 10 closest pairs in the dataset.
+# Each of the true 10 closest pairs has at least an 80% chance of being found.
+closest_pairs = index.closest_pairs(k, 0.8)
 ```
 
 # Benchmark
 
 PUFFINN provides fast query times with considerable space usage. It's reliable (see bottom right plot) and doesn't require parameter tuning. 
 ![Benchmark](https://user-images.githubusercontent.com/6311646/61288829-40903080-a7c8-11e9-9eb0-effc6beb808e.png)
-
-We plan to integrate PUFFINN into https://github.com/erikbern/ann-benchmarks soon. 
 
 # Authors
 
@@ -80,4 +86,10 @@ PUFFINN is mainly developed by Michael Vesterli. It grew out of a research proje
 > PUFFINN: Parameterless and Universal Fast FInding of Nearest Neighbors, M. Aumüller, T. Christiani, R. Pagh, and M. Vesterli. ESA 2019.
 
 An extended version of the paper is available at https://arxiv.org/abs/1906.12211.
+
+The closest pair functionality was developed by Martin Aumüller and Matteo Ceccarello. Details of the method are available in the following publication
+
+> Solving $k$-Closest Pairs in High-Dimensional Data, M. Aumüller, M. Ceccarello, SISAP 2023. [Link](https://link.springer.com/chapter/10.1007/978-3-031-46994-7_17)
+
+The experimental setup to reproduce the results from the paper is available in the following repository: <https://github.com/Cecca/puffinn>
 
