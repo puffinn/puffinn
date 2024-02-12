@@ -184,7 +184,7 @@ namespace puffinn {
         }
 
         // Hash the given vector
-        LshDatatype operator()(int16_t* vec) const {
+        LshDatatype operator()(const int16_t* const vec) const {
             float rotated_vec[1 << log_dimensions];
 
             // Reset rotation vec
@@ -353,7 +353,7 @@ namespace puffinn {
             out.write(reinterpret_cast<const char*>(random_matrix.get()), matrix_len*sizeof(int16_t));
         }
 
-        LshDatatype operator()(int16_t* vec) const {
+        LshDatatype operator()(const int16_t* const vec) const {
             LshDatatype res = 0;
             uint16_t max_abs_dot = 0;
             for (unsigned int i=0; i<(1u << ceil_log(dimensions)); i++) {

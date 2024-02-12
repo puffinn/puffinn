@@ -110,9 +110,7 @@ namespace puffinn {
         }
 
         void hash_repetitions(
-            // TODO: Make this argument const. Currently it does not compile if we make it 
-            // const because the hash function accepts a mutable pointer
-            typename T::Sim::Format::Type * input,
+            const typename T::Sim::Format::Type * const input,
             std::vector<LshDatatype> & output
         ) const {
             // In order to avoid allocating a new vector to hold the tensored data
