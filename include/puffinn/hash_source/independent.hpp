@@ -3,9 +3,6 @@
 #include "puffinn/dataset.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
 
-#include <memory>
-#include <vector>
-
 namespace puffinn {
     template <typename T>
     class IndependentHasher;
@@ -20,6 +17,7 @@ namespace puffinn {
     class IndependentHashSource : public HashSource<T> {
         T hash_family;
         std::vector<typename T::Function> hash_functions;
+        unsigned int num_hashers;
         unsigned int functions_per_hasher;
         uint_fast8_t bits_per_function;
         unsigned int next_function = 0;
@@ -34,7 +32,7 @@ namespace puffinn {
             // Number of bits per hasher.
             unsigned int num_bits
         ) 
-          : hash_family(desc, args)
+          : hash_family(desc, args), num_hashers(num_hashers)
         {
             bits_per_function = hash_family.bits_per_function();
             functions_per_hasher =
@@ -56,6 +54,7 @@ namespace puffinn {
             for (size_t i=0; i < funcs_len; i++) {
                 hash_functions.push_back(typename T::Function(in));
             }
+            in.read(reinterpret_cast<char*>(&num_hashers), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&functions_per_hasher), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&bits_per_function), sizeof(uint_fast8_t));
             in.read(reinterpret_cast<char*>(&next_function), sizeof(unsigned int));
@@ -69,10 +68,31 @@ namespace puffinn {
             for (auto& h : hash_functions) {
                 h.serialize(out);
             }
+            out.write(reinterpret_cast<const char*>(&num_hashers), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&functions_per_hasher), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&bits_per_function), sizeof(uint_fast8_t));
             out.write(reinterpret_cast<const char*>(&next_function), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(unsigned int));
+        }
+
+        void hash_repetitions(
+            // TODO: Make this argument const. Currently it does not compile if we make it 
+            // const because the hash function accepts a mutable pointer
+            typename T::Sim::Format::Type * input,
+            std::vector<LshDatatype> & output
+        ) const {
+            output.resize(num_hashers);
+            // Iterate through all the functions, accumulating bits
+            for (size_t rep = 0; rep < num_hashers; rep++) {
+                size_t offset = rep * functions_per_hasher;
+                LshDatatype res = 0;
+                for (unsigned int i=0; i < functions_per_hasher; i++) {
+                    res <<= bits_per_function;
+                    res |= hash_functions[offset+i](input);
+                }
+                res >>= bits_to_cut;
+                output[rep] = res;
+            }
         }
 
         uint64_t hash(
@@ -84,12 +104,12 @@ namespace puffinn {
                 res <<= bits_per_function;
                 res |= hash_functions[first_hash+i](hashed_vec);
             }
-            return (res >> bits_to_cut);
+            return res >> bits_to_cut;
         }
 
         std::unique_ptr<HashSourceState> reset(
                 typename T::Sim::Format::Type* vec,
-                bool parallelize
+                bool /*parallelize*/
         ) const {
             auto state = std::make_unique<IndependentHashSourceState<T>>();
             state->hashed_vec = vec;
@@ -116,6 +136,10 @@ namespace puffinn {
             uint_fast8_t num_bits
         ) const {
             return hash_family.collision_probability(similarity, num_bits);
+        }
+
+        float icollision_probability(float p) const {
+            return hash_family.icollision_probability(p);
         }
 
         float failure_probability(

@@ -42,3 +42,5 @@ cmake_install.cmake
 *.pdf
 *.aux
 *.log
+PUFFINN.egg-info
+build
