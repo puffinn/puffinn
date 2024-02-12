@@ -88,12 +88,14 @@ namespace puffinn {
             const Dataset<typename T::Sim::Format>& dataset,
             uint32_t first_index
         ) {
-            sketches.reserve(dataset.get_size()*NUM_SKETCHES);
+            sketches.resize(dataset.get_size()*NUM_SKETCHES);
 
+            #pragma omp parallel for schedule(dynamic)
             for (size_t idx = first_index; idx < dataset.get_size(); idx++) {
                 auto state = hash_source->reset(dataset[idx], true);
+                size_t offset = idx * NUM_SKETCHES;
                 for (size_t sketch_index = 0; sketch_index < NUM_SKETCHES; sketch_index++) {
-                    sketches.push_back((*hash_functions[sketch_index])(state.get()));
+                    sketches[offset + sketch_index] = (*hash_functions[sketch_index])(state.get());
                 }
             }
         }
