@@ -44,3 +44,4 @@ cmake_install.cmake
 *.log
 PUFFINN.egg-info
 build
+dist

@@ -4,7 +4,9 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/typedefs.hpp"
 #include "puffinn/performance.hpp"
+#include "puffinn/sorthash.hpp"
 
+#include "omp.h"
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -64,21 +66,19 @@ namespace puffinn {
     template <typename T>
     class PrefixMap {
         using HashedVecIdx = std::pair<uint32_t, LshDatatype>;
-
         // Number of bits to precompute locations in the stored vector for.
         const static int PREFIX_INDEX_BITS = 13;
 
-      public:
+    public: // TODO private
         // contents
         std::vector<uint32_t> indices;
         std::vector<LshDatatype> hashes;
-      private:
         // Scratch space for use when rebuilding. The length and capacity is set to 0 otherwise.
-        std::vector<HashedVecIdx> rebuilding_data;
+        // std::vector<HashedVecIdx> rebuilding_data;
+        std::vector<std::vector<HashedVecIdx>> parallel_rebuilding_data;
 
         // Length of the hash values used.
         unsigned int hash_length;
-        std::unique_ptr<Hash> hash_function;
 
         // index of the first value with each prefix.
         // If there is no such value, it is the first higher prefix instead.
@@ -87,15 +87,16 @@ namespace puffinn {
 
     public:
         // Construct a new prefix map over the specified dataset using the given hash functions.
-        PrefixMap(std::unique_ptr<Hash> hash, unsigned int hash_length)
-          : hash_length(hash_length),
-            hash_function(std::move(hash))
+        PrefixMap(unsigned int hash_length)
+          : hash_length(hash_length)
         {
             // Ensure that the map can be queried even if nothing is inserted.
             rebuild();
+            auto max_threads = omp_get_max_threads();
+            parallel_rebuilding_data.resize(max_threads);
         }
 
-        PrefixMap(std::istream& in, HashSource<T>& source) {
+        PrefixMap(std::istream& in) {
             size_t len;
             in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
             indices.resize(len);
@@ -105,17 +106,19 @@ namespace puffinn {
                 in.read(reinterpret_cast<char*>(&hashes[0]), len*sizeof(LshDatatype));
             }
 
+            // TODO Handle serialization
             size_t rebuilding_len;
             in.read(reinterpret_cast<char*>(&rebuilding_len), sizeof(size_t));
-            rebuilding_data.resize(rebuilding_len);
+            // rebuilding_data.resize(rebuilding_len);
             if (rebuilding_len != 0) {
-                in.read(
-                    reinterpret_cast<char*>(&rebuilding_data[0]), 
-                    rebuilding_len*sizeof(HashedVecIdx));
+                for (size_t i=0; i<rebuilding_len; i++) {
+                    HashedVecIdx v;
+                    in.read(reinterpret_cast<char*>(&v), sizeof(HashedVecIdx));
+                    parallel_rebuilding_data[0].push_back(v);
+                }
             }
 
             in.read(reinterpret_cast<char*>(&hash_length), sizeof(unsigned int));
-            hash_function = source.deserialize_hash(in);
 
             in.read(
                 reinterpret_cast<char*>(&prefix_index[0]),
@@ -130,34 +133,36 @@ namespace puffinn {
                 out.write(reinterpret_cast<const char*>(&hashes[0]), len*sizeof(LshDatatype));
             }
 
-            size_t rebuilding_len = rebuilding_data.size();
+            size_t rebuilding_len = 0;
+            for (auto & rd : parallel_rebuilding_data) {
+                rebuilding_len += rd.size();
+            }
             out.write(reinterpret_cast<const char*>(&rebuilding_len), sizeof(size_t));
             if (rebuilding_len != 0) {
-                out.write(
-                    reinterpret_cast<const char*>(&rebuilding_data[0]),
-                    rebuilding_len*sizeof(HashedVecIdx));
+                for (auto & rd : parallel_rebuilding_data) {
+                    for (size_t i = 0; i <rd.size(); i++) {
+                        out.write(reinterpret_cast<const char*>(&rd[i]), sizeof(HashedVecIdx));
+                    }
+                }
             }
 
             out.write(reinterpret_cast<const char*>(&hash_length), sizeof(unsigned int));
-            hash_function->serialize(out);
 
             out.write(reinterpret_cast<const char*>(
                 &prefix_index),
                 ((1 << PREFIX_INDEX_BITS)+1)*sizeof(uint32_t));
         }
 
-        // Add a vector to be included next time rebuild is called. 
-        // Expects that the hash source was last reset with that vector.
-        void insert(uint32_t idx, HashSourceState* hash_state) {
-            rebuilding_data.push_back({ idx, (*hash_function)(hash_state) });
+        // Add a hash value, and associated index, to be included next time rebuild is called. 
+        void insert(int tid, uint32_t idx, LshDatatype hash_value) {
+            parallel_rebuilding_data[tid].push_back({ idx, hash_value });
         }
 
         // Reserve the correct amount of memory before inserting.
         void reserve(size_t size) {
-            if (hashes.size() == 0) {
-                rebuilding_data.reserve(size);
-            } else {
-                rebuilding_data.reserve(size-(hashes.size()-2*SEGMENT_SIZE));
+            // TODO Divide equally across the vectors
+            for (auto & rd : parallel_rebuilding_data) {
+                rd.reserve(size);
             }
         }
 
@@ -166,65 +171,84 @@ namespace puffinn {
             // hash bits are used.
             static const LshDatatype IMPOSSIBLE_PREFIX = 0xffffffff;
 
-            rebuilding_data.reserve(hashes.size()+rebuilding_data.size());
+            size_t rebuilding_data_size = 0;
+            for (auto & rd : parallel_rebuilding_data) {
+                rebuilding_data_size += rd.size();
+            }
+
+            std::vector<LshDatatype> tmp_hashes;
+            std::vector<uint32_t> tmp_indices;
+            std::vector<LshDatatype> out_hashes;
+            std::vector<uint32_t> out_indices;
+            tmp_hashes.reserve(hashes.size() + rebuilding_data_size);
+            tmp_indices.reserve(hashes.size() + rebuilding_data_size);
+            out_hashes.reserve(hashes.size() + rebuilding_data_size);
+            out_indices.reserve(hashes.size() + rebuilding_data_size);
+
             if (hashes.size() != 0) {
                 // Move data to temporary vector for sorting.
                 for (size_t i=SEGMENT_SIZE; i < hashes.size()-SEGMENT_SIZE; i++) {
-                    rebuilding_data.push_back({ indices[i], hashes[i] });
+                    tmp_hashes.push_back(hashes[i]);
+                    tmp_indices.push_back(indices[i]);
+                }
+            }
+            for (auto & rebuilding_data : parallel_rebuilding_data) {
+                for (auto pair : rebuilding_data) {
+                    tmp_indices.push_back(pair.first);
+                    tmp_hashes.push_back(pair.second);
                 }
             }
             
-            std::sort(
-                rebuilding_data.begin(),
-                rebuilding_data.end(),
-                [](HashedVecIdx& a, HashedVecIdx& b) {
-                    return a.second < b.second;
-                }
+            puffinn::sort_hashes_pairs_24(
+                tmp_hashes,
+                out_hashes,
+                tmp_indices,
+                out_indices
             );
-            std::vector<LshDatatype> new_hashes;
-            new_hashes.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
-            std::vector<uint32_t> new_indices;
-            new_indices.reserve(rebuilding_data.size()+2*SEGMENT_SIZE);
 
             // Pad with SEGMENT_SIZE values on each size to remove need for bounds check.
+            hashes.clear();
+            hashes.reserve(out_hashes.size() + 2*SEGMENT_SIZE);
+            indices.clear();
+            indices.reserve(out_hashes.size() + 2*SEGMENT_SIZE);
+
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                new_hashes.push_back(IMPOSSIBLE_PREFIX);
-                new_indices.push_back(0);
+                hashes.push_back(IMPOSSIBLE_PREFIX);
+                indices.push_back(0);
             }
-            for (auto v : rebuilding_data) {
-                new_indices.push_back(v.first);
-                new_hashes.push_back(v.second);
+            for (size_t i = 0; i < out_hashes.size(); i++) {
+                indices.push_back(out_indices[i]);
+                hashes.push_back(out_hashes[i]);
             }
             for (int i=0; i < SEGMENT_SIZE; i++) {
-                new_hashes.push_back(IMPOSSIBLE_PREFIX);
-                new_indices.push_back(0);
+                hashes.push_back(IMPOSSIBLE_PREFIX);
+                indices.push_back(0);
             }
-            hashes = std::move(new_hashes);
-            indices = std::move(new_indices);
 
             // Build prefix_index data structure.
             // Index of the first occurence of the prefix
             uint32_t idx = 0;
             for (unsigned int prefix=0; prefix < (1u << PREFIX_INDEX_BITS); prefix++) {
                 while (
-                    idx < rebuilding_data.size() &&
+                    idx < rebuilding_data_size &&
                     (hashes[SEGMENT_SIZE+idx] >> (hash_length-PREFIX_INDEX_BITS)) < prefix
                 ) {
                     idx++;
                 }
                 prefix_index[prefix] = SEGMENT_SIZE+idx;
             }
-            prefix_index[1 << PREFIX_INDEX_BITS] = SEGMENT_SIZE+rebuilding_data.size();
+            prefix_index[1 << PREFIX_INDEX_BITS] = SEGMENT_SIZE+rebuilding_data_size;
 
-            rebuilding_data.clear();
-            rebuilding_data.shrink_to_fit();
+            for (auto & rd : parallel_rebuilding_data) {
+                rd.clear();
+                rd.shrink_to_fit();
+            }
+
         }
 
         // Construct a query object to search for the nearest neighbors of the given vector.
-        PrefixMapQuery create_query(HashSourceState* hash_state) const {
-            g_performance_metrics.start_timer(Computation::Hashing);
-            auto hash = (*hash_function)(hash_state);
-            g_performance_metrics.store_time(Computation::Hashing);
+        PrefixMapQuery create_query(LshDatatype hash) const {
+        // PrefixMapQuery create_query(HashSourceState* hash_state) const {
             g_performance_metrics.start_timer(Computation::CreateQuery);
             auto prefix = hash >> (hash_length-PREFIX_INDEX_BITS);
             PrefixMapQuery res(
