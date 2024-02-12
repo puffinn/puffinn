@@ -31,7 +31,7 @@ namespace puffinn {
         // Compute the LSH values for all tables supported by this pool for the given input vector.
         // Writes the results to the given output array, which can be reused
         virtual void hash_repetitions(
-            typename T::Sim::Format::Type * input,
+            const typename T::Sim::Format::Type * const input,
             std::vector<LshDatatype> & output
         ) const = 0;
 
