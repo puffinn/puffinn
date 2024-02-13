@@ -108,7 +108,13 @@ namespace puffinn {
             }
         }
 
+        void sketch(typename T::Sim::Format::Type* vec, QuerySketches & output) const {
+            hash_source->hash_repetitions(vec, output.query_sketches);
+            output.max_sketch_diff = NUM_FILTER_HASHBITS;
+        }
+
         QuerySketches reset(typename T::Sim::Format::Type* vec) const {
+            /* throw "stop!"; */
             auto state = hash_source->reset(vec, false);
 
             QuerySketches res;

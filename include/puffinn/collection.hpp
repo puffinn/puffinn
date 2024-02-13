@@ -103,6 +103,17 @@ namespace puffinn {
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
 
+        // A buffer to hold the hash values of queries, to be reused across
+        // different queries.
+        // NOTE: This is not thread safe: i.e. we assume that no queries
+        // are evaluated in parallel.
+        std::vector<uint64_t> query_hashes;
+        // A buffer to hold the sketch values of queries, to be reused across
+        // different queries.
+        // NOTE: This is not thread safe: i.e. we assume that no queries
+        // are evaluated in parallel.
+        QuerySketches query_sketches;
+
     public:
         /// Construct an empty index.
         ///
@@ -331,7 +342,7 @@ namespace puffinn {
             unsigned int k,
             float recall,
             FilterType filter_type = FilterType::Default
-        ) const {
+        ) {
             auto desc = dataset.get_description();
             auto stored_query = to_stored_type<typename TSim::Format>(query, desc);
             return search_formatted_query(stored_query.get(), k, recall, filter_type);
@@ -347,7 +358,7 @@ namespace puffinn {
             unsigned int k,
             float recall,
             FilterType filter_type = FilterType::Default
-        ) const {
+        ) {
             // search for one more as the query will be part of the result set.
             auto res = search_formatted_query(dataset[idx], k+1, recall, filter_type);
             if (res.size() != 0 && res[0] == idx) {
@@ -548,7 +559,7 @@ namespace puffinn {
             unsigned int k,
             float recall,
             FilterType filter_type
-        ) const {
+        ) {
             if (dataset.get_size() < 100) {
                 // Due to optimizations values near the edges in prefixmaps are discarded.
                 // When there are fewer total values than SEGMENT_SIZE, all values will be skipped.
@@ -560,13 +571,11 @@ namespace puffinn {
 
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
-            // FIXME: re-use this allocation!
-            std::vector<uint64_t> query_hashes;
-            hash_source->hash_repetitions(query, query_hashes);
+            hash_source->hash_repetitions(query, this->query_hashes);
             g_performance_metrics.store_time(Computation::Hashing);
 
             g_performance_metrics.start_timer(Computation::Sketching);
-            auto sketches = filterer.reset(query);
+            filterer.sketch(query, this->query_sketches);
             g_performance_metrics.store_time(Computation::Sketching);
 
             g_performance_metrics.start_timer(Computation::Search);
@@ -576,19 +585,25 @@ namespace puffinn {
                         query,
                         maxbuffer,
                         recall,
-                        sketches,
-                        query_hashes);
+                        this->query_sketches,
+                        this->query_hashes);
                     break;
                 case FilterType::Simple:
                     search_maps_simple_filter(
                         query,
                         maxbuffer,
                         recall,
-                        sketches,
-                        query_hashes);
+                        this->query_sketches,
+                        this->query_hashes);
                     break;
                 default:
-                    search_maps(query, maxbuffer, recall, sketches, query_hashes);
+                    search_maps(
+                        query, 
+                        maxbuffer, 
+                        recall, 
+                        this->query_sketches, 
+                        this->query_hashes
+                    );
             }
             g_performance_metrics.store_time(Computation::Search);
 
