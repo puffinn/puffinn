@@ -111,7 +111,7 @@ namespace puffinn {
 
         void hash_repetitions(
             const typename T::Sim::Format::Type * const input,
-            std::vector<LshDatatype> & output
+            std::vector<uint64_t> & output
         ) const {
             // In order to avoid allocating a new vector to hold the tensored data
             // every time we hash something, we make the output vector a little bit larger:
