@@ -286,7 +286,7 @@ namespace puffinn {
 
             // Compute hashes for the new vectors in order, so that caching works.
             // Hash a vector in all the different ways needed.
-            std::vector<std::vector<LshDatatype>> tl_hash_values;
+            std::vector<std::vector<uint64_t>> tl_hash_values;
             tl_hash_values.resize(omp_get_max_threads());
             for (size_t i=0; i < tl_hash_values.size(); i++) {
                 tl_hash_values[i].resize(lsh_maps.size());
@@ -561,7 +561,7 @@ namespace puffinn {
             MaxBuffer maxbuffer(k);
             g_performance_metrics.start_timer(Computation::Hashing);
             // FIXME: re-use this allocation!
-            std::vector<LshDatatype> query_hashes;
+            std::vector<uint64_t> query_hashes;
             hash_source->hash_repetitions(query, query_hashes);
             g_performance_metrics.store_time(Computation::Hashing);
 
@@ -625,7 +625,7 @@ namespace puffinn {
             SearchBuffers(
                 const std::vector<PrefixMap<THash>>& maps,
                 QuerySketches sketches,
-                std::vector<LshDatatype> & hashes
+                std::vector<uint64_t> & hashes
             )
               : sketches(sketches)
             {
@@ -670,7 +670,7 @@ namespace puffinn {
             MaxBuffer& maxbuffer,
             float recall,
             QuerySketches sketches,
-            std::vector<LshDatatype> & query_hashes
+            std::vector<uint64_t> & query_hashes
         ) const {
             SearchBuffers buffers(lsh_maps, sketches, query_hashes);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
@@ -716,7 +716,7 @@ namespace puffinn {
             float recall,
             QuerySketches sketches,
             // TODO make const
-            std::vector<LshDatatype> & query_hashes
+            std::vector<uint64_t> & query_hashes
         ) const {
             SearchBuffers buffers(lsh_maps, sketches, query_hashes);
             for (uint_fast8_t depth=MAX_HASHBITS; depth > 0; depth--) {
@@ -768,7 +768,7 @@ namespace puffinn {
             float recall,
             QuerySketches sketches,
             // TODO Make const
-            std::vector<LshDatatype> & query_hashes
+            std::vector<uint64_t> & query_hashes
         ) const {
             const size_t FILTER_BUFFER_SIZE = 128;
 

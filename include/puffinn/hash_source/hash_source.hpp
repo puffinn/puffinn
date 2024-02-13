@@ -32,7 +32,7 @@ namespace puffinn {
         // Writes the results to the given output array, which can be reused
         virtual void hash_repetitions(
             const typename T::Sim::Format::Type * const input,
-            std::vector<LshDatatype> & output
+            std::vector<uint64_t> & output
         ) const = 0;
 
         // Initialize the state necessary to compute the hashes of the given vector.

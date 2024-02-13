@@ -77,13 +77,13 @@ namespace puffinn {
 
         void hash_repetitions(
             const typename T::Sim::Format::Type * const input,
-            std::vector<LshDatatype> & output
+            std::vector<uint64_t> & output
         ) const {
             output.resize(num_hashers);
             // Iterate through all the functions, accumulating bits
             for (size_t rep = 0; rep < num_hashers; rep++) {
                 size_t offset = rep * functions_per_hasher;
-                LshDatatype res = 0;
+                uint64_t res = 0;
                 for (unsigned int i=0; i < functions_per_hasher; i++) {
                     res <<= bits_per_function;
                     res |= hash_functions[offset+i](input);

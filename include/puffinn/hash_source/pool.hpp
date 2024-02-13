@@ -144,12 +144,12 @@ namespace puffinn {
 
         void hash_repetitions(
             const typename T::Sim::Format::Type * const input,
-            std::vector<LshDatatype> & output
+            std::vector<uint64_t> & output
         ) const {
             output.clear();
 
             // TODO: remove this allocation and reuse the scratch space
-            std::vector<LshDatatype> pool;
+            std::vector<uint64_t> pool;
             pool.reserve(hash_functions.size());
 
             for (size_t i = 0; i < hash_functions.size(); i++) {

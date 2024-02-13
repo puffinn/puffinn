@@ -6,6 +6,7 @@
 #include "puffinn/hash_source/hash_source.hpp"
 #include "puffinn/performance.hpp"
 
+#include "omp.h"
 #include <cmath>
 #include <cstring>
 #include <immintrin.h>
@@ -90,12 +91,19 @@ namespace puffinn {
         ) {
             sketches.resize(dataset.get_size()*NUM_SKETCHES);
 
-            #pragma omp parallel for schedule(dynamic)
+            std::vector<std::vector<uint64_t>> tl_sketch_values;
+            tl_sketch_values.resize(omp_get_max_threads());
+            for (size_t i=0; i < tl_sketch_values.size(); i++) {
+                tl_sketch_values[i].resize(NUM_SKETCHES);
+            }
+            #pragma omp parallel for
             for (size_t idx = first_index; idx < dataset.get_size(); idx++) {
-                auto state = hash_source->reset(dataset[idx], true);
+                auto tid = omp_get_thread_num();
+                auto & sketch_values = tl_sketch_values[tid];
+                hash_source->hash_repetitions(dataset[idx], sketch_values);
                 size_t offset = idx * NUM_SKETCHES;
                 for (size_t sketch_index = 0; sketch_index < NUM_SKETCHES; sketch_index++) {
-                    sketches[offset + sketch_index] = (*hash_functions[sketch_index])(state.get());
+                    sketches[offset + sketch_index] = sketch_values[sketch_index];// (*hash_functions[sketch_index])(state.get());
                 }
             }
         }
