@@ -108,22 +108,9 @@ namespace puffinn {
             }
         }
 
-        void sketch(typename T::Sim::Format::Type* vec, QuerySketches & output) const {
+        void sketch(const typename T::Sim::Format::Type* const vec, QuerySketches & output) const {
             hash_source->hash_repetitions(vec, output.query_sketches);
             output.max_sketch_diff = NUM_FILTER_HASHBITS;
-        }
-
-        QuerySketches reset(typename T::Sim::Format::Type* vec) const {
-            /* throw "stop!"; */
-            auto state = hash_source->reset(vec, false);
-
-            QuerySketches res;
-            res.query_sketches.reserve(NUM_SKETCHES);
-            for (size_t sketch_index=0; sketch_index<NUM_SKETCHES; sketch_index++) {
-                res.query_sketches.push_back((*hash_functions[sketch_index])(state.get()));
-            }
-            res.max_sketch_diff = NUM_FILTER_HASHBITS;
-            return res;
         }
 
         void prefetch(uint32_t idx, int_fast32_t sketch_idx) const {

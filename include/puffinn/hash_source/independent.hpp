@@ -105,15 +105,6 @@ namespace puffinn {
             return res >> bits_to_cut;
         }
 
-        std::unique_ptr<HashSourceState> reset(
-                typename T::Sim::Format::Type* vec,
-                bool /*parallelize*/
-        ) const {
-            auto state = std::make_unique<IndependentHashSourceState<T>>();
-            state->hashed_vec = vec;
-            return state;
-        }
-
         // Retrieve the number of functions this source can create.
         size_t get_size() const {
             return hash_functions.size()/functions_per_hasher;

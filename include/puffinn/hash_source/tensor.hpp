@@ -150,46 +150,6 @@ namespace puffinn {
             output.resize(num_hashers);
         }
 
-        std::unique_ptr<HashSourceState> reset(
-                typename T::Sim::Format::Type* vec,
-                bool parallelize
-        ) const {
-            auto inner_state = independent_hash_source.reset(vec, parallelize);
-
-            std::vector<uint64_t> hashes;
-            hashes.resize(hashers.size());
-            // Store the hashes so that the final hash can be created by simply bitwise or-ing them together.
-            if (parallelize) {
-                #pragma omp parallel for
-                for (unsigned int i=0; i < hashers.size(); i++) {
-                    hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
-                }
-            } else {
-                for (unsigned int i=0; i < hashers.size(); i++) {
-                    hashes[i] = intersperse_zero((*hashers[i])(inner_state.get()));
-                }
-            }
-
-            // Store hashes shifted by one, so that lhs hashes and rhs hashes
-            // do not overlap.
-            // Ensure that the lhs hashes are longer or equal to the length of the rhs hashes.
-            if (num_bits%2 == 0) {
-                // Shift lhs hashes
-                for (unsigned int i=0; i < hashers.size()/2; i++) {
-                    hashes[i] <<= 1;
-                }
-            } else {
-                // Shift rhs hashes the other way to reduce the size as we rounded up before.
-                for (unsigned int i=hashers.size()/2; i < hashers.size(); i++) {
-                    hashes[i] >>= 1;
-                }
-            }
-
-            auto state = std::make_unique<TensoredHashState>();
-            state->hashes = std::move(hashes);
-            return state;
-        }
-
         uint64_t hash(unsigned int lhs_idx, unsigned int rhs_idx, TensoredHashState* state) const {
             return state->hashes[lhs_idx] | state->hashes[state->hashes.size()/2+rhs_idx];
         }

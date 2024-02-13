@@ -158,36 +158,13 @@ namespace puffinn {
 
             for (size_t rep = 0; rep < num_tables; rep++) {
                 // Concatenate the hashes
-                uint32_t res = 0;
+                uint64_t res = 0;
                 for (auto idx : indices[rep]) {
                     res <<= bits_per_function;
                     res |= pool[idx];
                 }
                 output.push_back(res >> bits_to_cut);
             }
-        }
-
-        // Recompute hashes for a new vector.
-        std::unique_ptr<HashSourceState> reset(
-                typename T::Sim::Format::Type* vec,
-                bool parallelize
-        ) const {
-            auto hashes = std::unique_ptr<LshDatatype>(new LshDatatype[hash_functions.size()]);
-                
-            if (parallelize) {
-                #pragma omp parallel for
-                for (size_t i=0; i<hash_functions.size(); i++) {
-                    hashes.get()[i] = hash_functions[i](vec);
-                }
-            } else {
-                for (size_t i=0; i<hash_functions.size(); i++) {
-                    hashes.get()[i] = hash_functions[i](vec);
-                }
-            }
-
-            auto state = std::make_unique<HashPoolState>();
-            state->hashes = std::move(hashes);
-            return state;
         }
 
         float icollision_probability(float p) const {
