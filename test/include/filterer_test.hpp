@@ -21,7 +21,8 @@ namespace filterer_test {
 
         std::vector<float> query({1, 0});
         auto stored = to_stored_type<UnitVectorFormat>(query, dataset.get_description());
-        auto sketches = filterer.reset(stored.get());
+        QuerySketches sketches;
+        filterer.sketch(stored.get(), sketches);
 
         // Anything initially passes
         for (size_t i=0; i < NUM_SKETCHES; i++) {
