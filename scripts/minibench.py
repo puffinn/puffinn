@@ -2,13 +2,20 @@
 # a simple database. Useful to detect performance regressions.
 #
 import puffinn
+import os
 import time
 import h5py
 import sqlite3
 import subprocess as sp
+from urllib.request import urlretrieve
 from datetime import datetime
 
 MB = 1024 * 1024
+
+def download(source_url: str, destination_path: str) -> None:
+    if not os.path.exists(destination_path):
+        print(f"downloading {source_url} -> {destination_path}...")
+        urlretrieve(source_url, destination_path)
 
 
 def run(data_path):
@@ -85,9 +92,9 @@ def already_run(db, git_info, data_path):
     params = dict(git_info)
     params["data_path"] = data_path
     (res,) = db.execute(
-        """SELECT COUNT(*) FROM knn_queries 
-           WHERE git_commit=:git_commit 
-           AND git_diff=:git_diff 
+        """SELECT COUNT(*) FROM knn_queries
+           WHERE git_commit=:git_commit
+           AND git_diff=:git_diff
            AND data_path=:data_path""",
         params,
     ).fetchone()
@@ -96,6 +103,7 @@ def already_run(db, git_info, data_path):
 
 if __name__ == "__main__":
     path = "glove-100-angular.hdf5"
+    download("http://ann-benchmarks.com/glove-100-angular.hdf5", path)
     git_info = get_git_info()
     with get_db() as db:
         if already_run(db, git_info, path):
