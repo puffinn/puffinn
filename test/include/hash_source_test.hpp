@@ -18,10 +18,6 @@ namespace hash_source {
         unsigned int hash_length
     ) {
         std::vector<int> bit_occurences(hash_length, 0);
-        std::vector<std::unique_ptr<Hash>> hash_functions;
-        for (unsigned int i=0; i < num_hashes; i++) {
-            hash_functions.push_back(source->sample());
-        }
 
         // Test with a couple of different vectors since the limited range of some hash functions
         // (such as FHTCrossPolytope) can lead to some bits unused.

@@ -110,12 +110,6 @@ namespace puffinn {
             return hash_functions.size()/functions_per_hasher;
         }
 
-        std::unique_ptr<Hash> sample() {
-            auto res = std::make_unique<IndependentHasher<T>>(this, next_function);
-            next_function += functions_per_hasher;
-            return res;
-        }
-
         uint_fast8_t get_bits_per_function() const {
             return bits_per_function;
         }
