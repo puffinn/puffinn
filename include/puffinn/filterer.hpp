@@ -34,8 +34,6 @@ namespace puffinn {
     template <typename T>
     class Filterer {
         std::unique_ptr<HashSource<T>> hash_source;
-        // Filter hash functions
-        std::vector<std::unique_ptr<Hash>> hash_functions;
 
         // Filters are stored with sketches for the same value adjacent.
         std::vector<FilterLshDatatype> sketches;
@@ -50,18 +48,11 @@ namespace puffinn {
                     NUM_FILTER_HASHBITS)),
             sketch_args(args.copy())
         {
-            for (size_t i=0; i<NUM_SKETCHES; i++) {
-                hash_functions.push_back(hash_source->sample());
-            }
         }
 
         Filterer(std::istream& in) {
             sketch_args = deserialize_hash_args<T>(in);
             hash_source = sketch_args->deserialize_source(in);
-            hash_functions.reserve(NUM_SKETCHES);
-            for (size_t i=0; i < NUM_SKETCHES; i++) {
-                hash_functions.push_back(hash_source->deserialize_hash(in));
-            }
             size_t len;
             in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
             sketches.resize(len);
@@ -71,9 +62,6 @@ namespace puffinn {
         void serialize(std::ostream& out) const {
             sketch_args->serialize(out);
             hash_source->serialize(out);
-            for (auto& h : hash_functions) {
-                h->serialize(out);
-            }
             size_t len = sketches.size();
             out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
             out.write(reinterpret_cast<const char*>(sketches.data()), len*sizeof(FilterLshDatatype));

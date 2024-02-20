@@ -45,7 +45,6 @@ namespace puffinn {
     template <typename T>
     class TensoredHashSource : public HashSource<T> {
         IndependentHashSource<T> independent_hash_source;
-        std::vector<std::unique_ptr<Hash>> hashers;
         unsigned int num_hashers;
         unsigned int next_hash_idx = 0;
         unsigned int num_bits;
@@ -67,22 +66,11 @@ namespace puffinn {
             num_hashers(num_hashers),
             num_bits(num_bits)
         {
-            for (unsigned int i=0; i < independent_hash_source.get_size(); i++) {
-                hashers.push_back(independent_hash_source.sample());
-            }
         }
 
         TensoredHashSource(std::istream& in)
           : independent_hash_source(in)
         {
-            size_t len;
-            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
-            hashers.reserve(len);
-            for (size_t i=0; i < len; i++) {
-                // these functions only use the args for dispatch, so
-                // it does not matter that it is not the 'correct' arguments.
-                hashers.push_back(independent_hash_source.deserialize_hash(in));
-            }
             in.read(reinterpret_cast<char*>(&num_hashers), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&next_hash_idx), sizeof(unsigned int));
             in.read(reinterpret_cast<char*>(&num_bits), sizeof(unsigned int));
@@ -90,23 +78,9 @@ namespace puffinn {
 
         void serialize(std::ostream& out) const {
             independent_hash_source.serialize(out);
-            size_t len = hashers.size();
-            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
-            for (auto& h : hashers) {
-                h->serialize(out);
-            }
             out.write(reinterpret_cast<const char*>(&num_hashers), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&next_hash_idx), sizeof(unsigned int));
             out.write(reinterpret_cast<const char*>(&num_bits), sizeof(unsigned int));
-        }
-
-        std::unique_ptr<Hash> sample() {
-            auto index_pair = get_minimal_index_pair(next_hash_idx);
-            next_hash_idx++;
-            return std::make_unique<TensoredHasher<T>>(
-                this,
-                index_pair.first,
-                index_pair.second);
         }
 
         void hash_repetitions(

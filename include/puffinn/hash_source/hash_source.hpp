@@ -25,9 +25,6 @@ namespace puffinn {
     public:
         virtual ~HashSource() {}
 
-        // Sample a random hash function from this source.
-        virtual std::unique_ptr<Hash> sample() = 0;
-
         // Compute the LSH values for all tables supported by this pool for the given input vector.
         // Writes the results to the given output array, which can be reused
         virtual void hash_repetitions(

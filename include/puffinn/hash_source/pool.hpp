@@ -114,10 +114,6 @@ namespace puffinn {
             out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(unsigned int));
         }
 
-        std::unique_ptr<Hash> sample() {
-            return std::make_unique<PooledHasher<T>>(this, indices[current_sampling_rep++]);
-        }
-
         uint64_t concatenate_hash(
             const std::vector<unsigned int>& indices,
             const LshDatatype* hashes
