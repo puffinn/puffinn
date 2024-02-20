@@ -4,14 +4,6 @@
 #include "puffinn/hash_source/hash_source.hpp"
 
 namespace puffinn {
-    template <typename T>
-    class IndependentHasher;
-
-    template <typename T>
-    struct IndependentHashSourceState : HashSourceState {
-        typename T::Sim::Format::Type* hashed_vec = nullptr;
-    };
-
     // A source of completely independent hash functions.
     template <typename T>
     class IndependentHashSource : public HashSource<T> {
@@ -93,18 +85,6 @@ namespace puffinn {
             }
         }
 
-        uint64_t hash(
-            unsigned int first_hash, 
-            typename T::Sim::Format::Type* hashed_vec
-        ) const {
-            uint64_t res = 0;
-            for (unsigned int i=0; i < functions_per_hasher; i++) {
-                res <<= bits_per_function;
-                res |= hash_functions[first_hash+i](hashed_vec);
-            }
-            return res >> bits_to_cut;
-        }
-
         // Retrieve the number of functions this source can create.
         size_t get_size() const {
             return hash_functions.size()/functions_per_hasher;
@@ -136,42 +116,6 @@ namespace puffinn {
             float last_prob =
                 this->concatenated_collision_probability(hash_length+1, kth_similarity);
             return std::pow(1.0-col_prob, tables)*std::pow(1-last_prob, max_tables-tables);
-        }
-
-        bool precomputed_hashes() const {
-            return false;
-        }
-
-        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
-            return std::make_unique<IndependentHasher<T>>(in, this);
-        }
-    };
-
-    template <typename T>
-    class IndependentHasher : public Hash {
-        const IndependentHashSource<T>* source;
-        unsigned int first_function;
-
-    public:
-        IndependentHasher(const IndependentHashSource<T>* source, unsigned int first_function)
-          : source(source),
-            first_function(first_function)
-        {
-        }
-
-        IndependentHasher(std::istream& in, const IndependentHashSource<T>* source)
-          : source(source)
-        {
-            in.read(reinterpret_cast<char*>(&first_function), sizeof(unsigned int));
-        }
-
-        void serialize(std::ostream& out) const {
-            out.write(reinterpret_cast<const char*>(&first_function), sizeof(unsigned int));
-        }
-
-        uint64_t operator()(HashSourceState* state) const {
-            auto independent_state = static_cast<IndependentHashSourceState<T>*>(state); 
-            return source->hash(first_function, independent_state->hashed_vec);
         }
     };
 
@@ -230,7 +174,7 @@ namespace puffinn {
             DatasetDescription<typename T::Sim::Format>,
             unsigned int /*num_bits*/
         ) const {
-            return sizeof(IndependentHasher<T>);
+            return 0; // We no longer use hash functions sampled from pools
         }
 
         std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {

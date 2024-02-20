@@ -248,7 +248,6 @@ namespace puffinn {
 
         // Construct a query object to search for the nearest neighbors of the given vector.
         PrefixMapQuery create_query(LshDatatype hash) const {
-        // PrefixMapQuery create_query(HashSourceState* hash_state) const {
             g_performance_metrics.start_timer(Computation::CreateQuery);
             auto prefix = hash >> (hash_length-PREFIX_INDEX_BITS);
             PrefixMapQuery res(
