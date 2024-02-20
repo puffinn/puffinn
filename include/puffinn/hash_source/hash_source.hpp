@@ -3,10 +3,6 @@
 #include <ostream>
 
 namespace puffinn {
-    class Hash;
-
-    class HashSourceState {};
-
     enum class HashSourceType {
         Independent,
         Pool,
@@ -60,24 +56,8 @@ namespace puffinn {
             return std::pow(whole_hashes_prob, whole_hashes)*remaining_prob;
         }
 
-        // Whether hashes are computed when calling reset.
-        virtual bool precomputed_hashes() const = 0;
-
         virtual void serialize(std::ostream&) const = 0;
 
-        virtual std::unique_ptr<Hash> deserialize_hash(std::istream& in) const = 0;
-    };
-
-    // A hash function sampled from a HashSource.
-    class Hash {
-    public:
-        virtual ~Hash() {}
-        // Compute the hash of the vector that the source was last reset with.
-        //
-        // It can be assumed that the state is created by the same source as the hash.
-        virtual uint64_t operator()(HashSourceState*) const = 0;
-
-        virtual void serialize(std::ostream&) const = 0;
     };
 
     /// Arguments that can be supplied with data from the ``LSHTable`` to construct a HashSource.

@@ -32,13 +32,6 @@ namespace puffinn {
         }
     }
 
-    template <typename T>
-    class TensoredHasher;
-
-    struct TensoredHashState : HashSourceState {
-        std::vector<uint64_t> hashes;
-    };
-
     // Contains two sets of hashfunctions. Hash values are constructed by interleaving one hash
     // from the first set with one from the second set. The used hash values are chosen so as
     // to avoid using the same combination twice.
@@ -124,10 +117,6 @@ namespace puffinn {
             output.resize(num_hashers);
         }
 
-        uint64_t hash(unsigned int lhs_idx, unsigned int rhs_idx, TensoredHashState* state) const {
-            return state->hashes[lhs_idx] | state->hashes[state->hashes.size()/2+rhs_idx];
-        }
-
         float collision_probability(
             float similarity,
             uint_fast8_t num_bits
@@ -175,46 +164,6 @@ namespace puffinn {
 
         uint_fast8_t get_bits_per_function() const {
             return independent_hash_source.get_bits_per_function();
-        }
-
-        bool precomputed_hashes() const {
-            return true;
-        }
-
-        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
-            return std::make_unique<TensoredHasher<T>>(in, this);
-        }
-    };
-
-    template <typename T>
-    class TensoredHasher : public Hash {
-        const TensoredHashSource<T>* source;
-        unsigned int lhs_idx;
-        unsigned int rhs_idx;
-
-    public:
-        TensoredHasher(TensoredHashSource<T>* source, unsigned int lhs_idx, unsigned int rhs_idx)
-          : source(source),
-            lhs_idx(lhs_idx),
-            rhs_idx(rhs_idx)
-        {
-        }
-
-        TensoredHasher(std::istream& in, const TensoredHashSource<T>* source)
-          : source(source)
-        {
-            in.read(reinterpret_cast<char*>(&lhs_idx), sizeof(unsigned int));
-            in.read(reinterpret_cast<char*>(&rhs_idx), sizeof(unsigned int));
-        }
-
-        void serialize(std::ostream& out) const {
-            out.write(reinterpret_cast<const char*>(&lhs_idx), sizeof(unsigned int));
-            out.write(reinterpret_cast<const char*>(&rhs_idx), sizeof(unsigned int));
-        }
-
-        uint64_t operator()(HashSourceState* state) const {
-            auto tensored_state = static_cast<TensoredHashState*>(state);
-            return source->hash(lhs_idx, rhs_idx, tensored_state);
         }
     };
 
@@ -272,7 +221,7 @@ namespace puffinn {
             DatasetDescription<typename T::Sim::Format>,
             unsigned int /*num_bits*/
         ) const {
-            return sizeof(TensoredHasher<T>);
+            return 0; // we no longer use hash functions sampled from hash_sources
         }
 
         std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {

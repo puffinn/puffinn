@@ -4,13 +4,6 @@
 #include "puffinn/hash_source/hash_source.hpp"
 
 namespace puffinn {
-    template<typename T>
-    class PooledHasher;
-
-    struct HashPoolState : HashSourceState {
-        std::unique_ptr<LshDatatype> hashes;
-    };
-
     // A pool of hash functions that can be shared.
     // These functions can be mixed to produce different hashes, which means that fewer hash
     // computations are needed. However if the pool contains too few hash functions, it will
@@ -189,56 +182,6 @@ namespace puffinn {
             return std::pow(1.0-col_prob, tables)*std::pow(1-last_prob, max_tables-tables);
         }
 
-        bool precomputed_hashes() const {
-            return true;
-        }
-
-        std::unique_ptr<Hash> deserialize_hash(std::istream& in) const {
-            return std::make_unique<PooledHasher<T>>(in, this);
-        }
-    };
-
-    // A hash function that selects some hashfunctions from a pool and reuses their values.
-    template <typename T>
-    class PooledHasher : public Hash {
-        // The pool always outlives the hasher.
-        const HashPool<T> *pool;
-        std::vector<unsigned int> indices;
-        int bits_to_cut;
-
-    public:
-        // Create a hash function reusing the given pool.
-        // The resulting hash consists of exactly the given number of bits.
-        PooledHasher(const HashPool<T> *pool, std::vector<unsigned int> & indices)
-          : pool(pool), indices(indices)
-        {
-            bits_to_cut = pool->get_bits_per_function()*indices.size()-pool->get_bits_per_hasher();
-        }
-
-        PooledHasher(std::istream& in, const HashPool<T>* pool)
-          : pool(pool)
-        {
-            size_t len;
-            in.read(reinterpret_cast<char*>(&len), sizeof(size_t));
-            indices.resize(len);
-            in.read(reinterpret_cast<char*>(&indices[0]), len*sizeof(unsigned int));
-            in.read(reinterpret_cast<char*>(&bits_to_cut), sizeof(int));
-
-        }
-
-        void serialize(std::ostream& out) const {
-            size_t len = indices.size();
-            out.write(reinterpret_cast<char*>(&len), sizeof(size_t));
-            out.write(reinterpret_cast<const char*>(&indices[0]), len*sizeof(unsigned int));
-            out.write(reinterpret_cast<const char*>(&bits_to_cut), sizeof(int));
-        }
-
-        // It is assumed that the vector to hash has already been hashed in the pool, so no
-        // argument is needed.
-        uint64_t operator()(HashSourceState* state) const {
-            auto pool_state = static_cast<HashPoolState*>(state);
-            return (pool->concatenate_hash(indices, pool_state->hashes.get())) >> bits_to_cut;
-        }
     };
 
     /// Describes a hash source which precomputes a pool of a given size.
@@ -312,7 +255,7 @@ namespace puffinn {
             typename T::Args args_copy(args);
             args_copy.set_no_preprocessing();
             auto bits = T(dataset, args_copy).bits_per_function();
-            return sizeof(PooledHasher<T>)+(num_bits+bits-1)/bits*sizeof(unsigned int);
+            return (num_bits+bits-1)/bits*sizeof(unsigned int);
         }
 
         std::unique_ptr<HashSource<T>> deserialize_source(std::istream& in) const {
