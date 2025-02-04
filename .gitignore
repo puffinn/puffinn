@@ -46,3 +46,5 @@ PUFFINN.egg-info
 build
 dist
 .vscode
+.direnv
+.venv
