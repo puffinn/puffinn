@@ -15,12 +15,18 @@
         });
   in {
     devShells = forEachSupportedSystem ({pkgs}: {
-      default = pkgs.mkShell {
+      default =(pkgs.mkShell.override { stdenv = pkgs.clangStdenv; }) {
         venvDir = ".venv";
+        
         packages = with pkgs; [
+          clang-tools
           python310
           sqlite-interactive
           cmake
+          just
+          bear # To generate compile_commands.json files
+          llvmPackages.openmp
+          llvmPackages.libcxx
         ] ++ ( with python310Packages; [
           setuptools
           wheel
