@@ -14,11 +14,10 @@ namespace puffinn {
     // The hash_pool concatenates hashes into a type twice as large to avoid overflow errors.
     using LshDatatype = uint32_t;
 
-    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
-
-    // Retrieve the default random engine, seeded once by the system clock.
-    std::default_random_engine& get_default_random_generator() {
-        return generator;
+    static std::mt19937_64 get_random_generator(uint64_t seed) {
+        std::mt19937_64 rng;
+        rng.seed(seed);
+        return rng;
     }
 
     #if defined(__GNUC__)

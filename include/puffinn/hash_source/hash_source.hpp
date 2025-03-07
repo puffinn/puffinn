@@ -1,6 +1,9 @@
 #pragma once
 
+#include "puffinn/format/generic.hpp"
+#include <cstdint>
 #include <ostream>
+#include <random>
 
 namespace puffinn {
     enum class HashSourceType {
@@ -69,7 +72,8 @@ namespace puffinn {
         virtual std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
-            unsigned int num_bits
+            unsigned int num_bits,
+            std::mt19937_64 &rng
         ) const = 0;
 
         virtual std::unique_ptr<HashSourceArgs<T>> copy() const = 0;

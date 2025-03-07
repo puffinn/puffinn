@@ -7,6 +7,7 @@
 
 #include <istream>
 #include <ostream>
+#include <random>
 
 namespace puffinn {
     class SimHashFunction {
@@ -14,11 +15,11 @@ namespace puffinn {
         unsigned int dimensions;
 
     public:
-        SimHashFunction(DatasetDescription<UnitVectorFormat> dataset)
+        SimHashFunction(DatasetDescription<UnitVectorFormat> dataset, std::mt19937_64 &rng)
           : hash_vec(allocate_storage<UnitVectorFormat>(1, dataset.storage_len)),
             dimensions(dataset.storage_len)
         {
-            auto vec = UnitVectorFormat::generate_random(dataset.args);
+            auto vec = UnitVectorFormat::generate_random(dataset.args, rng);
             UnitVectorFormat::store(vec, hash_vec.get(), dataset);
         }
 
@@ -85,8 +86,8 @@ namespace puffinn {
             dataset.serialize(out);
         }
 
-        SimHashFunction sample() {
-            return SimHashFunction(dataset);
+        SimHashFunction sample(std::mt19937_64 &rng) {
+            return SimHashFunction(dataset, rng);
         }
 
         unsigned int bits_per_function() {

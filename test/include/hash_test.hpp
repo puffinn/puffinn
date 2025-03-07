@@ -9,6 +9,7 @@
 #include "puffinn/similarity_measure/jaccard.hpp"
 
 #include <cstdlib>
+#include <random>
 
 using namespace puffinn;
 
@@ -16,12 +17,13 @@ namespace hash {
     template <typename T>
     void test_hash_even_distribution(unsigned int dimensions) {
         const float ACCEPTED_DEVIATION = 0.03;
+        std::mt19937_64 rng;
 
         Dataset<typename T::Sim::Format> dataset(dimensions);
 
         typename T::Args args;
         auto family = T(dataset.get_description(), args);
-        typename T::Function hasher = family.sample();
+        typename T::Function hasher = family.sample(rng);
 
         auto hash_bits = family.bits_per_function();
         REQUIRE(hash_bits > 0);
@@ -33,7 +35,6 @@ namespace hash {
 
         // Fill in random distribution
         std::vector<int> uniform_distribution(possible_hashes);
-        auto& rng = get_default_random_generator();
         std::uniform_int_distribution<int> distribution(0, possible_hashes-1);
         for (unsigned int i=0; i < num_samples; i++) {
             uniform_distribution[distribution(rng)]++;
@@ -42,7 +43,7 @@ namespace hash {
 
         // Compute distribution for hashes
         for (unsigned int i=0; i < num_samples; i++) {
-            auto vec = T::Sim::Format::generate_random(dimensions);
+            auto vec = T::Sim::Format::generate_random(dimensions, rng);
             auto stored_vec = to_stored_type<typename T::Sim::Format>(vec, dataset.get_description());
             auto hash = hasher(stored_vec.get());
             REQUIRE(hash < possible_hashes);
@@ -68,6 +69,7 @@ namespace hash {
         typename T::Args args = typename T::Args()
     ) {
         const float ACCEPTED_DEVIATION = 0.02;
+        std::mt19937_64 rng;
 
         Dataset<typename T::Sim::Format> dataset(dimensions);
 
@@ -77,9 +79,9 @@ namespace hash {
         float prob_sum = 0;
         float actual_sum = 0;
         for (unsigned int i=0; i < num_samples; i++) {
-            auto hasher = family.sample();
-            auto vec_a = T::Sim::Format::generate_random(dimensions);
-            auto vec_b = T::Sim::Format::generate_random(dimensions);
+            auto hasher = family.sample(rng);
+            auto vec_a = T::Sim::Format::generate_random(dimensions, rng);
+            auto vec_b = T::Sim::Format::generate_random(dimensions, rng);
 
             auto stored_a = to_stored_type<typename T::Sim::Format>(
                 vec_a, dataset.get_description());
@@ -162,6 +164,8 @@ namespace hash {
         unsigned int dimensions = 100;
         Dataset<SetFormat> dataset(dimensions);
 
+        std::mt19937_64 rng;
+
         MinHashArgs args;
         auto family = MinHash1Bit(dataset.get_description(), args);
 
@@ -174,7 +178,7 @@ namespace hash {
         int samples = 1000;
         float collisions = 0;
         for (int i=0; i < samples; i++) {
-            auto h = family.sample();
+            auto h = family.sample(rng);
             if (h(a.get()) == h(b.get())) { collisions++; }
         }
         float expected = samples*family.collision_probability(sim, 1);

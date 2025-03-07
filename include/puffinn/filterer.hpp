@@ -11,6 +11,7 @@
 #include <cstring>
 #include <immintrin.h>
 #include <memory>
+#include <random>
 
 namespace puffinn {
     const size_t NUM_SKETCHES = 32;
@@ -40,12 +41,14 @@ namespace puffinn {
         std::unique_ptr<HashSourceArgs<T>> sketch_args;
 
     public:
-        Filterer(const HashSourceArgs<T>& args, DatasetDescription<typename T::Sim::Format> dataset)
+        Filterer(const HashSourceArgs<T>& args, DatasetDescription<typename T::Sim::Format> dataset, std::mt19937_64 &rng)
           : hash_source(
                 args.build(
                     dataset,
                     NUM_SKETCHES,
-                    NUM_FILTER_HASHBITS)),
+                    NUM_FILTER_HASHBITS,
+                    rng)
+            ),
             sketch_args(args.copy())
         {
         }

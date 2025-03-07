@@ -1,9 +1,11 @@
 #pragma once
 
+#include <random>
 #include <vector>
 #include <istream>
 #include <ostream>
 
+#include "puffinn/typedefs.hpp"
 #include "puffinn/format/generic.hpp"
 
 namespace puffinn {
@@ -51,12 +53,11 @@ namespace puffinn {
             vec.~vector();
         }
 
-        static std::vector<uint32_t> generate_random(unsigned int dimensions) {
+        static std::vector<uint32_t> generate_random(unsigned int dimensions, std::mt19937_64 &rng) {
             // Probability of each element to be included in the set.
             const float INCLUSION_PROB = 0.3;
 
             std::uniform_real_distribution<float> dist(0.0, 1.0);
-            auto& rng = get_default_random_generator();
 
             std::vector<uint32_t> res;
             for (uint32_t i=0; i < dimensions; i++) {

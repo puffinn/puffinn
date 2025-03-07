@@ -6,6 +6,7 @@
 #include "puffinn/math.hpp"
 #include "puffinn/format/unit_vector.hpp"
 #include "puffinn/format/real_vector.hpp"
+#include <random>
 
 namespace math {
     using namespace puffinn;
@@ -14,10 +15,11 @@ namespace math {
         unsigned reps = 100;
         unsigned dims = 100;
         Dataset<UnitVectorFormat> dataset(dims);
+        std::mt19937_64 rng;
 
         for (unsigned i=0; i < reps; i++) {
-            auto a = UnitVectorFormat::generate_random(dims);
-            auto b = UnitVectorFormat::generate_random(dims);
+            auto a = UnitVectorFormat::generate_random(dims, rng);
+            auto b = UnitVectorFormat::generate_random(dims, rng);
             auto sa = to_stored_type<UnitVectorFormat>(a, dataset.get_description());
             auto sb = to_stored_type<UnitVectorFormat>(b, dataset.get_description());
 
@@ -33,10 +35,11 @@ namespace math {
         unsigned reps = 100;
         unsigned dims = 100;
         Dataset<RealVectorFormat> dataset(dims);
+        std::mt19937_64 rng;
 
         for (unsigned i=0; i < reps; i++) {
-            auto a = RealVectorFormat::generate_random(dims);
-            auto b = RealVectorFormat::generate_random(dims);
+            auto a = RealVectorFormat::generate_random(dims, rng);
+            auto b = RealVectorFormat::generate_random(dims, rng);
             auto sa = to_stored_type<RealVectorFormat>(a, dataset.get_description());
             auto sb = to_stored_type<RealVectorFormat>(b, dataset.get_description());
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "puffinn/hash_source/independent.hpp"
+#include <random>
 
 namespace puffinn {
     uint64_t intersperse_zero(int64_t val) {
@@ -49,13 +50,16 @@ namespace puffinn {
             // Number of hashers to create.
             unsigned int num_hashers,
             // Number of bits per hasher.
-            unsigned int num_bits
+            unsigned int num_bits,
+            std::mt19937_64 &rng
         ) 
           : independent_hash_source(
                 dimensions,
                 args,
                 2*std::ceil(std::sqrt(static_cast<float>(num_hashers))),
-                (num_bits+1)/2),
+                (num_bits+1)/2,
+                rng
+            ),
             num_hashers(num_hashers),
             num_bits(num_bits)
         {
@@ -191,13 +195,15 @@ namespace puffinn {
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
-            unsigned int num_bits
+            unsigned int num_bits,
+            std::mt19937_64 &rng
         ) const {
             return std::make_unique<TensoredHashSource<T>> (
                 desc,
                 args,
                 num_tables,
-                num_bits
+                num_bits,
+                rng
             );
         }
 

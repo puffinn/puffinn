@@ -12,9 +12,11 @@
 
 #include "omp.h"
 #include <cassert>
+#include <cstdint>
 #include <istream>
 #include <memory>
 #include <ostream>
+#include <random>
 #include <vector>
 
 namespace puffinn {
@@ -103,6 +105,9 @@ namespace puffinn {
         // first rebuild so that we know how many tables are at most used.
         std::unique_ptr<HashSourceArgs<THash>> hash_args;
 
+        // The random number generator
+        std::mt19937_64 rng;
+
         // A buffer to hold the hash values of queries, to be reused across
         // different queries.
         // NOTE: This is not thread safe: i.e. we assume that no queries
@@ -132,13 +137,15 @@ namespace puffinn {
         Index(
             typename TSim::Format::Args dataset_args,
             uint64_t memory_limit,
+            std::mt19937_64 rng,
             const HashSourceArgs<THash>& hash_args = IndependentHashArgs<THash>(),
             const HashSourceArgs<TSketch>& sketch_args = IndependentHashArgs<TSketch>()
         )
           : dataset(Dataset<typename TSim::Format>(dataset_args)),
-            filterer(sketch_args, dataset.get_description()),
+            filterer(sketch_args, dataset.get_description(), rng),
             memory_limit(memory_limit),
-            hash_args(hash_args.copy())
+            hash_args(hash_args.copy()),
+            rng(rng)
         {
             static_assert(
                 std::is_same<TSim, typename THash::Sim>::value
@@ -283,7 +290,9 @@ namespace puffinn {
                 hash_source = hash_args->build(
                     dataset.get_description(),
                     num_tables,
-                    MAX_HASHBITS);
+                    MAX_HASHBITS,
+                    rng
+                );
                 // Construct the prefixmaps.
                 lsh_maps.reserve(num_tables);
                 for (unsigned int repetition=0; repetition < num_tables; repetition++) {

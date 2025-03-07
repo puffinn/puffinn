@@ -30,7 +30,7 @@ def run(data_path):
 
     print("  building index")
     t_start = time.time()
-    index = puffinn.Index("angular", dimensions, 4 * 1024 * MB)
+    index = puffinn.Index("angular", dimensions, 4 * 1024 * MB, 12345)
     for v in train:
         v = list(v)
         index.insert(v)

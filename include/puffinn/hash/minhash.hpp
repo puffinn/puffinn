@@ -2,6 +2,7 @@
 
 #include "puffinn/format/set.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
+#include "puffinn/typedefs.hpp"
 
 #include <istream>
 #include <ostream>
@@ -198,10 +199,7 @@ namespace puffinn {
             out.write(reinterpret_cast<const char*>(&set_size), sizeof(unsigned int));
         }
 
-        Function sample() {
-            std::mt19937_64 rng;
-            rng.seed(get_default_random_generator()());
-
+        Function sample(std::mt19937_64 & rng) {
             BitPermutation perm(rng, set_size, args.randomized_bits);
             return Function(TabulationHash(rng), perm);
         }
@@ -268,8 +266,8 @@ namespace puffinn {
             minhash.serialize(out);
         }
 
-        Function sample() {
-            return Function(minhash.sample());
+        Function sample(std::mt19937_64 & rng) {
+            return Function(minhash.sample(rng));
         }
 
         unsigned int bits_per_function() const {

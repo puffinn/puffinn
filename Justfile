@@ -1,8 +1,15 @@
+install-python:
+    pip uninstall puffinn
+    python setup.py install
+
+build-python:
+    python setup.py build
+
 test: build
     build/Test
 
 build:
-    cmake --build build
+    cmake --build build --config Debug
 
 clean:
     cd build && make clean

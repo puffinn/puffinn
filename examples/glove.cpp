@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <random>
 #include <sstream>
 #include <iostream>
 #include <map>
@@ -54,7 +55,8 @@ int main(int argc, char* argv[]) {
     // and will use at most the specified amount of memory.
     puffinn::Index<puffinn::CosineSimilarity> index(
         dimensions,
-        space_usage
+        space_usage,
+        std::mt19937_64(1234)
     );
     // Insert each vector into the index.
     for (auto word : dataset.words) { index.insert(dataset.vectors[word]); }

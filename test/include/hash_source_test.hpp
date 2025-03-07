@@ -6,6 +6,7 @@
 #include "puffinn/hash_source/tensor.hpp"
 #include "puffinn/hash/simhash.hpp"
 #include "puffinn/hash/crosspolytope.hpp"
+#include <random>
 
 using namespace puffinn;
 
@@ -18,11 +19,12 @@ namespace hash_source {
         unsigned int hash_length
     ) {
         std::vector<int> bit_occurences(hash_length, 0);
+        std::mt19937_64 rng;
 
         // Test with a couple of different vectors since the limited range of some hash functions
         // (such as FHTCrossPolytope) can lead to some bits unused.
         for (int vec_idx = 0; vec_idx < 2; vec_idx++) {
-            auto vec = UnitVectorFormat::generate_random(dimensions.args);
+            auto vec = UnitVectorFormat::generate_random(dimensions.args, rng);
             auto stored = to_stored_type<typename T::Sim::Format>(vec, dimensions);
             std::vector<uint64_t> hashes;
             source->hash_repetitions(stored.get(), hashes);
@@ -45,30 +47,32 @@ namespace hash_source {
     }
 
     TEST_CASE("HashPool hashes") {
+        std::mt19937_64 rng;
         const unsigned int HASH_LENGTH = 24;
         unsigned int samples = 100;
         Dataset<UnitVectorFormat> dataset(100);
         auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(60).build(dimensions, samples, HASH_LENGTH),
+            HashPoolArgs<SimHash>(60).build(dimensions, samples, HASH_LENGTH, rng),
             samples,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, samples, HASH_LENGTH),
+            HashPoolArgs<FHTCrossPolytopeHash>(60).build(dimensions, samples, HASH_LENGTH, rng),
             samples,
             HASH_LENGTH);
     }
 
     TEST_CASE("HashPool sketches") {
+        std::mt19937_64 rng;
         const unsigned int HASH_LENGTH = 64;
         unsigned int samples = 100;
         Dataset<UnitVectorFormat> dataset(100);
         auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            HashPoolArgs<SimHash>(60).build(dimensions, samples, HASH_LENGTH),
+            HashPoolArgs<SimHash>(60).build(dimensions, samples, HASH_LENGTH, rng),
             samples,
             HASH_LENGTH);
     }
@@ -77,17 +81,18 @@ namespace hash_source {
     TEST_CASE("Independent hashes") {
         const unsigned int HASH_LENGTH = 24;
         const unsigned int NUM_HASHES = 100;
+        std::mt19937_64 rng;
 
         Dataset<UnitVectorFormat> dataset(100);
         auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            IndependentHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
+            IndependentHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH, rng),
             NUM_HASHES,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
+            IndependentHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH, rng),
             NUM_HASHES,
             HASH_LENGTH);
     }
@@ -96,17 +101,18 @@ namespace hash_source {
     TEST_CASE("Tensored hashes") {
         const unsigned int HASH_LENGTH = 24;
         const unsigned int NUM_HASHES = 100;
+        std::mt19937_64 rng;
 
         Dataset<UnitVectorFormat> dataset(100);
         auto dimensions = dataset.get_description();
         test_hashes<SimHash>(
             dimensions,
-            TensoredHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
+            TensoredHashArgs<SimHash>().build(dimensions, NUM_HASHES, HASH_LENGTH, rng),
             NUM_HASHES,
             HASH_LENGTH);
         test_hashes<FHTCrossPolytopeHash>(
             dimensions,
-            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH),
+            TensoredHashArgs<FHTCrossPolytopeHash>().build(dimensions, NUM_HASHES, HASH_LENGTH, rng),
             NUM_HASHES,
             HASH_LENGTH);
     }

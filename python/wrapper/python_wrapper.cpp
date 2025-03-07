@@ -4,6 +4,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <random>
 #include <sstream>
 
 namespace puffinn {
@@ -73,8 +74,8 @@ public:
     {
     }
 
-    AngularIndex(unsigned int dimensions, uint64_t memory_limit, const HashSourceArgs<T>& hash_args)
-      : table(dimensions, memory_limit, hash_args)
+    AngularIndex(unsigned int dimensions, uint64_t memory_limit, std::mt19937_64 rng, const HashSourceArgs<T>& hash_args)
+      : table(dimensions, memory_limit, rng, hash_args)
     {
     }
 
@@ -169,9 +170,10 @@ public:
     SetIndex(
         unsigned int dimensions,
         uint64_t memory_limit,
+        std::mt19937_64 rng,
         const HashSourceArgs<T>& hash_args
     ) 
-      : table(dimensions, memory_limit, hash_args) 
+      : table(dimensions, memory_limit, rng, hash_args) 
     {
     }
 
@@ -251,12 +253,15 @@ public:
         std::string metric,
         unsigned int dimensions,
         uint64_t memory_limit,
+        uint64_t seed,
         const py::kwargs& kwargs
     ) {
+        std::mt19937_64 rng;
+        rng.seed(seed);
         if (metric == "angular") {
-            init_angular(dimensions, memory_limit, kwargs);
+            init_angular(dimensions, memory_limit, rng, kwargs);
         } else if (metric == "jaccard") {
-            init_jaccard(dimensions, memory_limit, kwargs);
+            init_jaccard(dimensions, memory_limit, rng, kwargs);
         } else {
             throw std::invalid_argument("metric");
         }
@@ -486,7 +491,7 @@ private:
         }
     }
 
-    void init_angular(unsigned int dimensions, uint64_t memory_limit, const py::kwargs& kwargs) {
+    void init_angular(unsigned int dimensions, uint64_t memory_limit, std::mt19937_64 rng, const py::kwargs& kwargs) {
         std::string hash_function = "fht_crosspolytope";
         if (kwargs.contains("hash_function")) {
             hash_function = py::cast<std::string>(kwargs["hash_function"]);
@@ -495,23 +500,26 @@ private:
             real_table = std::make_unique<AngularIndex<SimHash>>(
                 dimensions,
                 memory_limit,
+                rng,
                 *get_hash_source_args<SimHash>(kwargs));
         } else if (hash_function == "crosspolytope") {
             real_table = std::make_unique<AngularIndex<CrossPolytopeHash>>(
                 dimensions,
                 memory_limit,
+                rng,
                 *get_hash_source_args<CrossPolytopeHash>(kwargs));
         } else if (hash_function == "fht_crosspolytope") {
             real_table = std::make_unique<AngularIndex<FHTCrossPolytopeHash>>(        
                 dimensions,
                 memory_limit,
+                rng,
                 *get_hash_source_args<FHTCrossPolytopeHash>(kwargs));
         } else {
             throw std::invalid_argument("hash_function");
         }
     }
 
-    void init_jaccard(unsigned int dimensions, uint64_t memory_limit, const py::kwargs& kwargs) {
+    void init_jaccard(unsigned int dimensions, uint64_t memory_limit, std::mt19937_64 rng, const py::kwargs& kwargs) {
         std::string hash_function = "minhash";
         if (kwargs.contains("hash_function")) {
             hash_function = py::cast<std::string>(kwargs["hash_function"]);
@@ -520,11 +528,13 @@ private:
             set_table = std::make_unique<SetIndex<MinHash>>(
                 dimensions,
                 memory_limit,
+                rng,
                 *get_hash_source_args<MinHash>(kwargs));
         } else if (hash_function == "1bit_minhash") {
             set_table = std::make_unique<SetIndex<MinHash1Bit>>(
                 dimensions,
                 memory_limit,
+                rng,
                 *get_hash_source_args<MinHash1Bit>(kwargs));
         } else {
             throw std::invalid_argument("hash_function");
@@ -551,7 +561,7 @@ py::tuple Index::reduce() {
 
 PYBIND11_MODULE(puffinn, m) {
     py::class_<Index>(m, "Index")
-        .def(py::init<const std::string&, const unsigned int&, const uint64_t&, const py::kwargs&>())
+        .def(py::init<const std::string&, const unsigned int&, const uint64_t&, const uint64_t&, const py::kwargs&>())
         .def("insert", &Index::insert)
         .def("rebuild", &Index::rebuild)
         .def("search", &Index::search,
