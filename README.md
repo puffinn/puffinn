@@ -46,7 +46,8 @@ int main() {
 ```
 
 ## Python
-To build the library locally using setuptools, run `python3 setup.py build`. 
+To build the library locally using setuptools, run `python3 setup.py build`.
+You will first need to install `pybind11` using `python3 -m pip install pybind11`, potentially `python3 -m pip install pybind11[global]`.
 
 The API of the Python wrapper does not differ significantly from C++ API, except that arguments are passed slightly differently. The Python equivalent to the above example is shown below.
 See the [documentation](https://puffinn.readthedocs.io/en/latest/) for more details.
