@@ -14,6 +14,13 @@ except ImportError:
     sys.stderr.write('Setuptools not found!\n')
     raise
 
+try:
+    import pybind11
+    pybind11_include = pybind11.get_include()
+except:
+    sys.stderr.write('Pybind11 include not found')
+    raise
+
 
 extra_args = ['-std=c++14', '-march=native', '-O3']
 extra_link_args = []
@@ -31,7 +38,7 @@ module = Extension(
     sources=['python/wrapper/python_wrapper.cpp'],
     extra_compile_args=extra_args,
     extra_link_args=extra_link_args,
-    include_dirs=['include', 'libs'])
+    include_dirs=['include', 'libs', pybind11_include])
 
 setup(
     name='PUFFINN',
