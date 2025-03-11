@@ -39,5 +39,5 @@ jobs:
 
     - name: Install and run example
       run: |
-        python3 setup.py install
+        pip3 install .
         python3 examples/random-vectors.py
