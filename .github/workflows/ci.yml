@@ -32,10 +32,10 @@ jobs:
     - uses: actions/checkout@v3 # Pull the repository
 
     - name: Install OS Dependencies
-      run: sudo apt-get update && sudo apt-get install -y libhdf5-dev python3-numpy
+      run: sudo apt-get update && sudo apt-get install -y libhdf5-dev
 
     - name: Install Project Dependencies
-      run: pip3 install --quiet pybind11
+      run: pip3 install numpy pybind11[global]
 
     - name: Install and run example
       run: |
