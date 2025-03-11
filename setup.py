@@ -31,7 +31,7 @@ module = Extension(
     sources=['python/wrapper/python_wrapper.cpp'],
     extra_compile_args=extra_args,
     extra_link_args=extra_link_args,
-    include_dirs=['include', 'external/pybind11/include', 'libs'])
+    include_dirs=['include', 'libs'])
 
 setup(
     name='PUFFINN',

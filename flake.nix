@@ -33,6 +33,7 @@
           venvShellHook
           numpy
           h5py
+          pybind11
         ]);
       };
     });
