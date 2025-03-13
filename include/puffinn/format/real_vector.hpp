@@ -1,7 +1,9 @@
 #pragma once
 
+#include <random>
 #include <vector>
 
+#include "puffinn/typedefs.hpp"
 #include "puffinn/format/generic.hpp"
 
 namespace puffinn {
@@ -33,12 +35,11 @@ namespace puffinn {
 
         static void free(Type&) {}
 
-        static std::vector<float> generate_random(unsigned int dimensions) {
+        static std::vector<float> generate_random(unsigned int dimensions, std::mt19937_64 &rng) {
             std::normal_distribution<float> normal_distribution(0.0, 1.0);
-            auto& generator = get_default_random_generator();
             std::vector<float> values;
             for (unsigned int i=0; i<dimensions; i++) {
-                values.push_back(normal_distribution(generator));
+                values.push_back(normal_distribution(rng));
             }
             return values;
         }

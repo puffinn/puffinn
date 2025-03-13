@@ -2,6 +2,7 @@
 
 #include "puffinn/dataset.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
+#include <random>
 
 namespace puffinn {
     // A source of completely independent hash functions.
@@ -22,7 +23,9 @@ namespace puffinn {
             // Number of hashers to create.
             unsigned int num_hashers,
             // Number of bits per hasher.
-            unsigned int num_bits
+            unsigned int num_bits,
+            // Random number generator for sampling
+            std::mt19937_64 &rng
         ) 
           : hash_family(desc, args), num_hashers(num_hashers)
         {
@@ -33,7 +36,7 @@ namespace puffinn {
             bits_to_cut = bits_per_function*functions_per_hasher-num_bits;
             hash_functions.reserve(num_functions);
             for (unsigned int i=0; i < num_functions; i++) {
-                hash_functions.push_back(hash_family.sample());
+                hash_functions.push_back(hash_family.sample(rng));
             }
         }
 
@@ -141,13 +144,15 @@ namespace puffinn {
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
-            unsigned int num_bits
+            unsigned int num_bits,
+            std::mt19937_64 &rng
         ) const {
             return std::make_unique<IndependentHashSource<T>> (
                 desc,
                 args,
                 num_tables,
-                num_bits
+                num_bits,
+                rng
             );
         }
 

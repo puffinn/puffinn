@@ -5,6 +5,7 @@
 #include "puffinn/format/unit_vector.hpp"
 #include "puffinn/math.hpp"
 #include "puffinn/similarity_measure/cosine.hpp"
+#include <random>
 
 namespace puffinn {
     struct CrossPolytopeCollisionEstimates {
@@ -16,13 +17,14 @@ namespace puffinn {
         CrossPolytopeCollisionEstimates(
             unsigned int dimensions,
             unsigned int num_repetitions,
-            float eps
+            float eps,
+            uint64_t seed 
         )
           : eps(eps)
         {
             // adapted from https://bitbucket.org/tobc/knn_code/src/master/crosspolytopefamily.h
             std::normal_distribution<double> standard_normal(0,1);
-            auto& rng = get_default_random_generator();
+            auto rng = get_random_generator(seed);
 
             auto log_dimensions = ceil_log(dimensions);
             // Number of collisions for each number of used bits
@@ -148,7 +150,8 @@ namespace puffinn {
         // using hadamard transforms.
         FHTCrossPolytopeHashFunction(
             DatasetDescription<UnitVectorFormat> dataset,
-            unsigned int num_rotations
+            unsigned int num_rotations,
+            std::mt19937_64 &generator
         )
           : dimensions(dataset.args),
             num_rotations(num_rotations)
@@ -159,7 +162,6 @@ namespace puffinn {
             random_signs.reserve(random_signs_len);
 
             std::uniform_int_distribution<int_fast32_t> sign_distribution(0, 1);
-            auto& generator = get_default_random_generator();
             for (int i=0; i < random_signs_len; i++) {
                 random_signs.push_back(sign_distribution(generator)*2-1);
             }
@@ -277,7 +279,8 @@ namespace puffinn {
             estimates(
                 (1 << ceil_log(dataset.args)),
                 args.estimation_repetitions,
-                args.estimation_eps)
+                args.estimation_eps,
+                12345)
         {
         }
 
@@ -294,8 +297,8 @@ namespace puffinn {
             estimates.serialize(out);
         }
 
-        FHTCrossPolytopeHashFunction sample() {
-            return FHTCrossPolytopeHashFunction(dataset, args.num_rotations);
+        FHTCrossPolytopeHashFunction sample(std::mt19937_64 &rng) {
+            return FHTCrossPolytopeHashFunction(dataset, args.num_rotations, rng);
         }
 
         unsigned int bits_per_function() {
@@ -316,7 +319,7 @@ namespace puffinn {
         AlignedStorage<UnitVectorFormat> random_matrix;
 
     public:
-        CrossPolytopeHashFunction(DatasetDescription<UnitVectorFormat> dataset)
+        CrossPolytopeHashFunction(DatasetDescription<UnitVectorFormat> dataset, std::mt19937_64 &rng)
           : dimensions(dataset.args),
             padded_dimensions(dataset.storage_len),
             random_matrix(
@@ -327,7 +330,7 @@ namespace puffinn {
             unsigned int matrix_size = (1 << ceil_log(dimensions));
 
             for (unsigned int dim=0; dim < matrix_size; dim++) {
-                auto vec = UnitVectorFormat::generate_random(dimensions);
+                auto vec = UnitVectorFormat::generate_random(dimensions, rng);
                 UnitVectorFormat::store(
                     vec,
                     &random_matrix.get()[dim*padded_dimensions],
@@ -435,7 +438,8 @@ namespace puffinn {
             estimates(
                 (1 << ceil_log(dataset.args)),
                 args.estimation_repetitions,
-                args.estimation_eps)
+                args.estimation_eps,
+                12345)
         {
         }
 
@@ -452,8 +456,8 @@ namespace puffinn {
             estimates.serialize(out);
         }
 
-        CrossPolytopeHashFunction sample() {
-            return CrossPolytopeHashFunction(dataset);
+        CrossPolytopeHashFunction sample(std::mt19937_64 &rng) {
+            return CrossPolytopeHashFunction(dataset, rng);
         }
 
         unsigned int bits_per_function() {

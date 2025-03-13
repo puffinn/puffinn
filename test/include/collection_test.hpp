@@ -10,6 +10,7 @@
 #include "puffinn/similarity_measure/cosine.hpp"
 #include "puffinn/similarity_measure/jaccard.hpp"
 
+#include <random>
 #include <sstream>
 
 namespace collection {
@@ -18,7 +19,7 @@ namespace collection {
     const unsigned int MB = 1024*1024;
 
     TEST_CASE("get unit vector") {
-        Index<CosineSimilarity> index(2, 1*MB);
+        Index<CosineSimilarity> index(2, 1*MB, std::mt19937_64(1234));
         index.insert(std::vector<float>({1, 0}));
         index.insert(std::vector<float>({0, 1}));
         REQUIRE(index.get<std::vector<float>>(1)[0] == 0.0);
@@ -26,7 +27,7 @@ namespace collection {
     }
 
     TEST_CASE("get set") {
-        Index<JaccardSimilarity> index(5, 1*MB);
+        Index<JaccardSimilarity> index(5, 1*MB, std::mt19937_64(1234));
         index.insert(std::vector<uint32_t>{1, 0, 4});
         index.insert(std::vector<uint32_t>{2, 3});
         REQUIRE(index.get<std::vector<uint32_t>>(0) == std::vector<uint32_t>{0, 1, 4});
@@ -44,7 +45,7 @@ namespace collection {
             std::vector<float>({1, -0.1}),
         };
 
-        Index<CosineSimilarity> table(DIMENSIONS, 1*MB);
+        Index<CosineSimilarity> table(DIMENSIONS, 1*MB, std::mt19937_64(1234));
         for (auto &vec : inserted) {
             table.insert(vec);
         }
@@ -92,17 +93,19 @@ namespace collection {
     ) {
         const int NUM_SAMPLES = 100;
 
+        std::mt19937_64 rng(1234);
+
         std::vector<float> recalls = {0.2, 0.5, 0.95};
         std::vector<unsigned int> ks = {1, 10};
 
         std::vector<std::vector<float>> inserted;
         for (int i=0; i<n; i++) {
-            inserted.push_back(UnitVectorFormat::generate_random(dimensions));
+            inserted.push_back(UnitVectorFormat::generate_random(dimensions, rng));
         }
 
-        Index<CosineSimilarity, T, U> table(dimensions, 100*MB);
+        Index<CosineSimilarity, T, U> table(dimensions, 100*MB, rng);
         if (hash_source) {
-            table = Index<CosineSimilarity, T, U>(dimensions, 100*MB, *hash_source);
+            table = Index<CosineSimilarity, T, U>(dimensions, 100*MB, rng, *hash_source);
         }
         for (auto &vec : inserted) {
             table.insert(vec);
@@ -116,7 +119,7 @@ namespace collection {
                 
                 float expected_correct = recall*adjusted_k*NUM_SAMPLES;
                 for (int sample=0; sample < NUM_SAMPLES; sample++) {
-                    auto query = UnitVectorFormat::generate_random(dimensions);
+                    auto query = UnitVectorFormat::generate_random(dimensions, rng);
                     auto exact = table.search_bf(query, k);
                     auto res = table.search(query, k, recall);
 
@@ -183,17 +186,19 @@ namespace collection {
     ) {
         const int NUM_SAMPLES = 500;
 
+        std::mt19937_64 rng(13245);
+
         std::vector<float> recalls = {0.2, 0.5, 0.95};
         std::vector<unsigned int> ks = {1, 10};
 
         std::vector<std::vector<uint32_t>> inserted;
         for (int i=0; i<n; i++) {
-            inserted.push_back(SetFormat::generate_random(dimensions));
+            inserted.push_back(SetFormat::generate_random(dimensions, rng));
         }
 
-        Index<JaccardSimilarity> table(dimensions, 100*MB);
+        Index<JaccardSimilarity> table(dimensions, 100*MB, rng);
         if (hash_source) {
-            table = Index<JaccardSimilarity>(dimensions, 100*MB, *hash_source);
+            table = Index<JaccardSimilarity>(dimensions, 100*MB, rng, *hash_source);
         }
         for (auto &vec : inserted) {
             table.insert(vec);
@@ -206,7 +211,7 @@ namespace collection {
                 auto adjusted_k = std::min(k, table.get_size());
                 float expected_correct = recall*adjusted_k*NUM_SAMPLES;
                 for (int sample=0; sample < NUM_SAMPLES; sample++) {
-                    auto query = SetFormat::generate_random(dimensions);
+                    auto query = SetFormat::generate_random(dimensions, rng);
                     auto exact = table.search_bf(query, k);
                     auto res = table.search(query, k, recall, FilterType::None);
 
@@ -242,14 +247,14 @@ namespace collection {
     }
 
     TEST_CASE("Insert unit vector of wrong dimensionality") {
-        Index<CosineSimilarity> index(2, 1*1024*1024);
+        Index<CosineSimilarity> index(2, 1*1024*1024, std::mt19937_64());
         REQUIRE_THROWS(index.insert(std::vector<float>{1}));
         REQUIRE_NOTHROW(index.insert(std::vector<float>{1, 0}));
         REQUIRE_THROWS(index.insert(std::vector<float>{0, 1, 0}));
     }
 
     TEST_CASE("Insert set containing token outside range") {
-        Index<JaccardSimilarity> index(5, 1*1024*1024);
+        Index<JaccardSimilarity> index(5, 1*1024*1024, std::mt19937_64());
         REQUIRE_NOTHROW(index.insert(std::vector<unsigned int>{}));
         REQUIRE_NOTHROW(index.insert(std::vector<unsigned int>{0, 4}));
         REQUIRE_THROWS(index.insert(std::vector<unsigned int>{5}));
@@ -262,17 +267,19 @@ namespace collection {
         int k = 10;
         int samples = 100;
 
-        Index<CosineSimilarity> index(dims, 512*MB);
+        std::mt19937_64 rng;
+
+        Index<CosineSimilarity> index(dims, 512*MB, rng);
         for (int rebuilds = 0; rebuilds < 3; rebuilds++) {
             for (int i=0; i < n; i++) {
-                index.insert(UnitVectorFormat::generate_random(dims));
+                index.insert(UnitVectorFormat::generate_random(dims, rng));
             }
             index.rebuild();
 
             int num_correct = 0;
             float expected_correct = recall*k*samples;
             for (int sample=0; sample < samples; sample++) {
-                auto query = UnitVectorFormat::generate_random(dims);
+                auto query = UnitVectorFormat::generate_random(dims, rng);
                 auto exact = index.search_bf(query, k);
                 auto res = index.search(query, k, recall);
 
@@ -295,14 +302,15 @@ namespace collection {
         const HashSourceArgs<S>& sketch_args
     ) {
         int k = 50;
+        std::mt19937_64 rng;
 
-        Index<T, H, S> index(args, 50*MB, hash_args, sketch_args);
+        Index<T, H, S> index(args, 50*MB, rng, hash_args, sketch_args);
         for (int i=0; i < 1000; i++) {
-            index.insert(T::Format::generate_random(args));
+            index.insert(T::Format::generate_random(args, rng));
         }
         index.rebuild();
 
-        auto query = T::Format::generate_random(args);
+        auto query = T::Format::generate_random(args, rng);
         auto res1 = index.search(query, k, 0.5);
 
         std::stringstream s;
@@ -337,9 +345,11 @@ namespace collection {
 
     TEST_CASE("Serialize chunked") {
         int dims = 100;
-        Index<CosineSimilarity> index(dims, 50*MB);
+        std::mt19937_64 rng;
+
+        Index<CosineSimilarity> index(dims, 50*MB, rng);
         for (int i=0; i < 1000; i++) {
-            index.insert(UnitVectorFormat::generate_random(dims));
+            index.insert(UnitVectorFormat::generate_random(dims, rng));
         }
         index.rebuild();
 
@@ -366,9 +376,10 @@ namespace collection {
 
     TEST_CASE("Serialize no rebuild") {
         int dims = 100;
-        Index<CosineSimilarity> index(dims, 50*MB);
+        std::mt19937_64 rng;
+        Index<CosineSimilarity> index(dims, 50*MB, rng);
         for (int i=0; i < 1000; i++) {
-            index.insert(UnitVectorFormat::generate_random(dims));
+            index.insert(UnitVectorFormat::generate_random(dims, rng));
         }
         std::stringstream s1;
         index.serialize(s1);
@@ -384,12 +395,13 @@ namespace collection {
         int n = 5000;
         int k = 10;
         float recall = 0.7;
+        std::mt19937_64 rng;
 
-        Index<CosineSimilarity> index(dims, 100*MB);
+        Index<CosineSimilarity> index(dims, 100*MB, rng);
         for (int i=0; i < 5000; i++) {
-            index.insert(UnitVectorFormat::generate_random(dims));
+            index.insert(UnitVectorFormat::generate_random(dims, rng));
         }
-        auto query = UnitVectorFormat::generate_random(dims);
+        auto query = UnitVectorFormat::generate_random(dims, rng);
         index.insert(query);
         index.rebuild();
 

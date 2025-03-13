@@ -26,7 +26,7 @@ ground_truth = [
 # Construct the search index.
 # Here we use angular distance aka cosine similarity
 # with the default hash functions and 500MB memory.
-index = Index('angular', dimensions, 500*MB)
+index = Index('angular', dimensions, 500*MB, 12345)
 print('Building index')
 for v in dataset:
     index.insert(v)

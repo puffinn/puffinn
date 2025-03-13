@@ -2,6 +2,7 @@
 
 #include "puffinn/dataset.hpp"
 #include "puffinn/hash_source/hash_source.hpp"
+#include <random>
 
 namespace puffinn {
     // A pool of hash functions that can be shared.
@@ -25,7 +26,8 @@ namespace puffinn {
             typename T::Args args,
             unsigned int num_functions,
             unsigned int num_tables,
-            unsigned int bits_per_hasher
+            unsigned int bits_per_hasher,
+            std::mt19937_64 &rand_gen
         )
           : hash_family(desc, args),
             num_tables(num_tables),
@@ -35,10 +37,9 @@ namespace puffinn {
             num_functions /= hash_family.bits_per_function();
             hash_functions.reserve(num_functions);
             for (unsigned int i=0; i < num_functions; i++) {
-                hash_functions.push_back(hash_family.sample());
+                hash_functions.push_back(hash_family.sample(rand_gen));
             }
 
-            auto& rand_gen = get_default_random_generator();
             std::uniform_int_distribution<unsigned int> random_idx(0, num_functions-1);
             
             indices.reserve(num_tables);
@@ -221,14 +222,16 @@ namespace puffinn {
         std::unique_ptr<HashSource<T>> build(
             DatasetDescription<typename T::Sim::Format> desc,
             unsigned int num_tables,
-            unsigned int num_bits_per_function
+            unsigned int num_bits_per_function,
+            std::mt19937_64 &rng
         ) const {
             return std::make_unique<HashPool<T>> (
                 desc,
                 args,
                 pool_size,
                 num_tables,
-                num_bits_per_function
+                num_bits_per_function,
+                rng
             );
         }
 

@@ -6,6 +6,7 @@
 #include "puffinn/format/unit_vector.hpp"
 
 #include <cstring>
+#include <random>
 
 namespace dataset {
     using namespace puffinn;
@@ -31,6 +32,7 @@ namespace dataset {
     }
 
     TEST_CASE("Dynamic resizing") {
+        std::mt19937_64 rng;
         const unsigned int DIMENSIONS = 120;
         const unsigned int SIZE = 10000;
 
@@ -40,7 +42,7 @@ namespace dataset {
         vec[1] = 1.0;
         dataset.insert(vec);
         for (unsigned int i=0; i < SIZE; i++) {
-            dataset.insert(UnitVectorFormat::generate_random(DIMENSIONS));
+            dataset.insert(UnitVectorFormat::generate_random(DIMENSIONS, rng));
         }
 
         REQUIRE(dataset.get_size() == SIZE+1);
